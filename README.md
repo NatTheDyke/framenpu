@@ -1,0 +1,189 @@
+# FrameNPU
+
+**Experimental custom DSP jobs and HMX inference for Steam Frame.**
+
+FrameNPU provides a Python host API, a freestanding Hexagon v75 C SDK, and a
+small data-only model format. Real-device research has verified custom C jobs,
+tiled HMX matrix multiplication, DSP accumulation/activations, and a saved XOR
+network loaded from disk.
+
+This is an alpha research library. It supports one exact firmware profile,
+does not isolate native jobs, and is not yet suitable for real-time hand
+tracking. Read [compatibility](#compatibility-and-limits) before device use.
+
+## Install from a checkout
+
+From the repository root on a development workstation:
+
+~~~sh
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install -e ".[dev]"
+~~~
+
+Python 3.11+ is required. The library has no external Python runtime
+dependencies. LLVM is needed only to rebuild or compile kernels. Installing,
+inspecting models, and running offline tests require no headset or root access.
+
+For a wheel you have built or downloaded, install that wheel in your virtual
+environment with python -m pip install /path/to/framenpu-0.1.0-py3-none-any.whl.
+A source checkout does not assume that ignored build/release files exist.
+
+## Create and inspect a model without hardware
+
+~~~sh
+python examples/make_xor.py
+framenpu inspect-model examples/xor.fnpu --batch-size 4
+framenpu inspect-ncnn examples/dense.param
+~~~
+
+The synthetic examples are included. Model inspection and ncnn graph inventory
+do not execute DSP code. The ncnn command is an inventory tool, not an importer.
+
+Supported model layers are Dense, ReLU and Clip:
+
+~~~python
+from framenpu import Dense, Model
+
+Model(
+    2,
+    [
+        Dense([[1, -1], [-1, 1]], activation="relu"),
+        Dense([[1], [1]]),
+    ],
+    name="xor",
+).save("xor.fnpu")
+~~~
+
+Weights are FP16 [input_features, output_features]; biases and outputs are FP32.
+The loader checks supported operators, dimensions, byte lengths and SHA256.
+FNPU files contain declarative data, not executable kernels or pickle.
+
+## Run on a supported Frame
+
+Install the package in a virtual environment on the headset. Use the
+interpreter from that environment when requesting root for HMX setup:
+
+~~~sh
+.venv/bin/python -m framenpu info
+sudo .venv/bin/python examples/run_xor.py
+.venv/bin/python examples/run_custom.py
+~~~
+
+The examples locate their bundled files relative to the scripts, not the
+working directory. Override them with --model or --job if needed.
+
+Plain custom DSP jobs use the existing steamos service access. HMX setup needs
+root access to /dev/mem. Unknown firmware is rejected before job writes.
+
+~~~python
+from framenpu import Device, Model
+
+model = Model.load("xor.fnpu")
+with Device() as npu:
+    output = model.run(npu, [[0, 0], [0, 1], [1, 0], [1, 1]])
+print(output)  # [[0.0], [1.0], [1.0], [0.0]]
+~~~
+
+## Matrix and custom-kernel APIs
+
+~~~python
+from framenpu import Device
+
+with Device() as npu:
+    product = npu.matmul([[1, 2, 3]], [[1], [2], [3]])  # [[14.0]]
+    clipped = npu.elementwise([[-2, 3, 9]], activation="clip", maximum=6)
+    summed = npu.add([[1, 2], [3, 4]], [[10, 20]])  # row broadcast
+~~~
+
+Implement [the C job ABI](src/framenpu/sdk/include/framenpu.h), as demonstrated
+by [vector_add.c](examples/vector_add.c), and compile on your workstation:
+
+~~~sh
+framenpu build-job examples/vector_add.c --output build/vector_add.fjob
+~~~
+
+Copy the FJOB to your Frame and submit it:
+
+~~~python
+import struct
+from framenpu import Device, Job
+
+job = Job.load("vector_add.fjob")
+with Device() as npu:
+    result = npu.submit(
+        job, struct.pack("<8f", 1, 2, 3, 4, 5, 6, 7, 8), output_size=16, params=(4,)
+    )
+print(struct.unpack("<4f", result.output))  # (6, 8, 10, 12)
+~~~
+
+The compiler needs Hexagon-capable clang, ld.lld and llvm-objcopy. LLVM 23.1.4
+produced the included payloads. Select executable paths with CLANG, LD_LLD and
+LLVM_OBJCOPY; a standard-library/compiler runtime is not linked into the job.
+The wheel includes SDK sources, the header, entry wrapper and linker script.
+
+Native jobs are trusted supervisor code, not sandboxed model data. See
+[ABI.md](docs/ABI.md) and [SECURITY.md](SECURITY.md).
+
+## Compatibility and limits
+
+| Item | Current support |
+|---|---|
+| Hardware | SM8650 / Hexagon v75 Steam Frame |
+| Tested firmware | SteamOS 0.5.8, CDSP ABI 9; exact hashes in [profile.py](src/framenpu/profile.py) |
+| Models | Sequential Dense, ReLU and Clip |
+| Kernels | At most 4 KiB native code; 128 KiB job arena |
+| HMX scratch | First 8 KiB of VTCM, saved/restored |
+| Matrix dimensions | Up to 256, scheduled in bounded depth/output-32 tiles |
+| Arithmetic | FP16 depth-32 products, FP32 DSP accumulation across depth tiles |
+
+Each submission still invokes a roughly 13 ms stock FLOPS benchmark and scopes
+HMX power to that job. This is unsuitable for real-time hand tracking.
+
+The stock dispatcher releases its completion/ownership window after roughly
+50 ms even without acknowledgment; the host timeout is capped at 40 ms.
+OS scheduling and other clients are not isolated. On RecoveryRequired, stop
+using the session: possibly active payload/power are retained and deliberate
+DSP/power recovery is required. The library never automatically restarts
+tracking services. See the [failure contract](docs/ABI.md).
+
+No proprietary firmware or hand-model weights are bundled. Power sequencing
+is recovered from the exact firmware already installed on the device.
+
+## Tests and reproducible builds
+
+~~~sh
+python -m unittest discover -s tests -p 'test_*.py' -v
+ruff check .
+ruff format --check .
+python tools/check_repository.py
+python tools/build_kernels.py --check
+python -m build
+python -m twine check dist/*
+python tools/check_distribution.py --dist dist
+~~~
+
+Only the kernel rebuild/check step needs LLVM. The distribution check rebuilds
+from the source archive, installs the wheel in a fresh environment, and checks
+the CLI, models, SDK resources and examples without a headset.
+
+The separate hardware test is opt-in and is never run by ordinary CI:
+
+~~~sh
+sudo .venv/bin/python tests/hardware_smoke.py --run-on-device
+~~~
+
+Configured CI covers Python 3.11–3.14. [Validation notes](docs/VALIDATION.md)
+distinguish actual test results from configured future CI runs.
+
+## Hand tracking and contributions
+
+The full FrameTop v20a graph is not implemented. Use inspect-ncnn with your
+own hand.ncnn.param file to inventory it. The next work is a direct cooperative
+dispatcher, persistent tensor/weight ownership, convolution and HVX depthwise
+kernels, then a validated ncnn converter. See [HAND_TRACKING.md](docs/HAND_TRACKING.md).
+
+[CONTRIBUTING.md](CONTRIBUTING.md) explains development and kernel changes.
+The project is [MIT-licensed](LICENSE); see
+[third-party provenance](THIRD_PARTY_NOTICES.md). This independent research
+project is not endorsed by Valve or Qualcomm.

@@ -1,0 +1,38 @@
+{
+  "format": "framenpu-kernel",
+  "abi": 1,
+  "target": "hexagonv75",
+  "bytes": 2972,
+  "sha256": "068cadcad806f1ac76f9f46c72f284ba89759c1e7990bb0e2ba9dda4c928c1df",
+  "compiler_flags": [
+    "--target=hexagon",
+    "-mcpu=hexagonv75",
+    "-mhvx",
+    "-mhvx-length=128b",
+    "-Os",
+    "-ffreestanding",
+    "-fno-builtin",
+    "-fno-stack-protector",
+    "-fno-unwind-tables",
+    "-fno-asynchronous-unwind-tables",
+    "-ffp-contract=off",
+    "-mllvm",
+    "-spill-func-threshold=100",
+    "-mllvm",
+    "-spill-func-threshold-Os=100",
+    "-G0"
+  ],
+  "toolchain": {
+    "clang": "clang version 23.1.4",
+    "linker": "LLD 23.1.4 (compatible with GNU linkers)",
+    "objcopy": "llvm-objcopy, compatible with GNU objcopy"
+  },
+  "source_sha256": {
+    "compiler.py": "de1d65126b5b8bb0e8bccc35aa077922a6dbfa4dae371f4cdb6c0f0d53dc5ccf",
+    "sdk/entry.S": "f348664488f9f31776e2a33291a1607ca685b389f539d67a50555be73f387c0f",
+    "sdk/hmx.S": "ca725000e846c220cdf709a82ce61d223dd0862d66687fa968e41be18f262fb6",
+    "sdk/link.ld": "c0b7dd53a7e254de549280ead79f303db3ab657e13e8565e5be3852c29a08e82",
+    "sdk/include/framenpu.h": "aa2757202517a92ca2701c04a0ca9ac73558db0a0d9b8c67aec9def09d33d0dc",
+    "sdk/runtime.c": "41a16d0ad7cf5331041825269a37db8d83b904bd6370160958c6cb9530cff65c"
+  }
+}

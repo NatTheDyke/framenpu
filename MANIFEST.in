@@ -1,0 +1,12 @@
+include README.md LICENSE THIRD_PARTY_NOTICES.md
+include CONTRIBUTING.md SECURITY.md CHANGELOG.md
+recursive-include docs *.md
+recursive-include tools *.py
+recursive-include examples *.py *.c *.param *.fjob *.fnpu
+recursive-include tests *.py
+recursive-include src/framenpu/data *.bin *.json
+recursive-include src/framenpu/sdk *.h *.S *.c *.ld
+include evidence/validation.json
+global-exclude *.pyc
+include .gitignore .gitattributes
+recursive-include .github *.yml

@@ -1,0 +1,25 @@
+name: Bug report
+description: Report a reproducible host or supported-device problem.
+body:
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and observed behavior
+      description: Include a minimal reproducer and sanitized error text.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Package and Python versions
+    validations:
+      required: true
+  - type: textarea
+    id: device
+    attributes:
+      label: Device testing, if applicable
+      description: Omit credentials, raw captures and firmware dumps.
+  - type: textarea
+    id: validation
+    attributes:
+      label: Checks already run
