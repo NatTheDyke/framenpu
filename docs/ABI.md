@@ -10,6 +10,13 @@ Implement fnpu_u32 frame_job(const fnpu_context *ctx). Return zero or an error. 
 
 The wrapper accepts workers0/1/2 and runs developer code only on worker0. It saves/restores callee-saved registers, SSR and exception-vector base. HMX jobs temporarily enable SSR.XE2 and back up/restore8KiB VTCM. A handler records selected synchronous faults; it is not a complete exception subsystem or arbitrary pipeline-stall recovery. Each worker publishes completion in the same instruction packet as its final return; the host waits for all three.
 
+The new opt-in [direct dispatcher](DISPATCH.md) enters the wrapper on context 4
+only to wake workers in callback-only mode and join their returns. HMX/HVX
+and `frame_job` remain on worker 0. Direct-compatible FJOBs declare the optional
+`supports_direct=true` field; old files need rebuilding for that backend.
+Status words 10..13 hold the low/high words of worker-0 reference start/end
+counters. They cover `frame_job`, excluding entry/exit save and restore work.
+
 The context consists of16 little-endian uint32 words:
 
 | Word | Field |
@@ -17,7 +24,7 @@ The context consists of16 little-endian uint32 words:
 | 0 | nonzero unique sequence |
 | 1 | magic0x55504e46 (FNPU) |
 | 2 | ABI1 |
-| 3 | flags: bit0 HMX |
+| 3 | flags: bit0 HMX, bit1 direct dispatch |
 | 4 | used arena bytes |
 | 5,6 | input offset and length |
 | 7,8 | output offset and length |
@@ -40,10 +47,23 @@ FNPU models are bounded ZIP archives with model.json and declared weight members
 
 The stock master has a roughly50ms acknowledgment budget. Firmware at0x870006bc materializes0x02faf080 (50million units in its nanosecond conversion); expiry at0x87000750..758 resets state/ownership to1. It does not wait indefinitely for custom callbacks.
 
-Built-ins schedule one output/depth32 tile per HMX submission and use separate DSP addition for depth accumulation. Host timeout is capped at40ms. Custom kernels must obey this budget. This is not hard-real-time scheduling: a delayed host can still lose the stock lease.
+By default, built-ins schedule one output/depth32 tile per HMX submission and
+use separate DSP addition for depth accumulation. Opt-in
+[two-tile mode](MULTITILE.md) combines two depth products for one output tile
+and continues from an optional FP32 seed; opcode 6 requires the HMX and direct
+flags. Host timeout is capped at40ms. Custom kernels must obey this budget.
+This is not hard-real-time scheduling: a delayed host can still lose the stock lease.
 
 On normal completion, the host clears the callback, powers HMX down, checks register/program restoration, restores all uploaded spans and acknowledges the stock command. Worker errors are raised after cleanup. Preflight validation failures write no device memory.
 
 RecoveryRequired marks the session unusable and preserves potentially active payload/power. The stock gate can expire independently. Closing Python descriptors does not cancel DSP work. Do not overwrite a live payload or power off a possibly active engine. Deliberate power/config recovery and DSP reset must establish idle state before reuse; there is no automatic restart.
 
-A production backend needs a cooperative dispatcher/driver protocol, explicit ownership, persistent model arenas and cancellation. This release exposes a version-pinned research interface.
+Direct mode joins workers before the master publishes stock completion. Its
+40 ms host timeout and the roughly 50 ms acknowledgment window remain; it does
+not add native-job cancellation. A poisoned direct session retains its firmware
+edit, and a later process rejects that modified window until deliberate recovery.
+Partial firmware edits are checked before helper acknowledgment.
+
+A production backend still needs persistent model arenas, explicit tensor/power
+ownership and cooperative cancellation. This release exposes a version-pinned
+research interface.

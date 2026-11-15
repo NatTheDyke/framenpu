@@ -1,0 +1,276 @@
+{
+  "format": "framenpu-readback-validation",
+  "version": 1,
+  "date": "2026-11-14",
+  "firmware_profile": "Steam Frame / SteamOS 0.5.8 / CDSP ABI 9 / Hexagon v75",
+  "runtime": {
+    "bytes": 3672,
+    "sha256": "93b242ba9d7f7bc41462a85f77ad0a6e95ecaee413bcaf0b87795098cf877fe8"
+  },
+  "readback_probe": {
+    "bytes": 2944,
+    "sha256": "f67d171aafdeeac685db27694515d9c7a30fdfb5f0b96759e39cd28a4da8b46a",
+    "source": "tests/readback_probe.c",
+    "fixture_only": true
+  },
+  "behavior": {
+    "conversion": "HVX integer operations extract row lanes and construct exact FP32 bit patterns; no HVX floating-point arithmetic",
+    "accumulation": "Existing scalar FP32 additions, in depth-tile order; bias and ReLU stay after reduction",
+    "rows_and_columns": "All valid built-in output shapes from 1 through 32, including odd rows and partial columns",
+    "scratch": {
+      "address": "0x31001900",
+      "bytes": 128,
+      "ownership": "Inside the existing 8192-byte saved/restored VTCM span"
+    },
+    "abi_and_budget_unchanged": true
+  },
+  "correctness": {
+    "conversion_cases": 64,
+    "conversion_patterns": 65536,
+    "accumulation_cases": 71,
+    "gemm_shapes": [
+      [
+        1,
+        32,
+        32
+      ],
+      [
+        31,
+        64,
+        32
+      ],
+      [
+        32,
+        64,
+        31
+      ],
+      [
+        32,
+        128,
+        32
+      ],
+      [
+        33,
+        65,
+        35
+      ]
+    ],
+    "tile_budgets": [
+      1,
+      2
+    ],
+    "audits": {
+      "restored_jobs": 263,
+      "restored_hmx_jobs": 105
+    },
+    "worker_ssr": [
+      "0x81840200",
+      "0x89840200",
+      "0x91840200"
+    ],
+    "health": {
+      "state": {
+        "abi": 9,
+        "control": [
+          1,
+          0,
+          1
+        ],
+        "callback": 0,
+        "poisoned": false
+      },
+      "firmware_code_prefix_bytes": 114688,
+      "firmware_code_prefix_sha256": "55679e13486357627ea22e494b25342acd9d24d73450f3f28eb1113b82c71b95",
+      "power_configuration_sha256": "2405bda200a51fd0bd699568e8415e53ba7b631cbaa9d4812c656b7240159bbd",
+      "power_restored": true
+    }
+  },
+  "regression": {
+    "single_tile": "Both dispatch backends passed five padded/tiled GEMMs, activations, the saved XOR model and custom C job",
+    "multitile": "Six shapes through K=256, ordered FP32 accumulation, FP32 seed range, final bias/ReLU, six native rejections and successful reuse",
+    "packing": "136 packing cases, 53 copy cases and six mixed-path GEMMs passed with the new runtime",
+    "restoration_audits": {
+      "readback": {
+        "restored_jobs": 263,
+        "restored_hmx_jobs": 105
+      },
+      "single_tile": {
+        "restored_jobs": 78,
+        "restored_hmx_jobs": 39
+      },
+      "multitile": {
+        "restored_jobs": 34,
+        "restored_hmx_jobs": 30
+      },
+      "packing": {
+        "restored_jobs": 198,
+        "restored_hmx_jobs": 6
+      },
+      "total_jobs": 573,
+      "total_hmx_marked_jobs": 180
+    }
+  },
+  "warm_measurements": [
+    {
+      "runtime": "scalar_readback",
+      "sha256": "315a3eff8b851e3a8b31cf43477aeeace9a3f26dd4a57155491c2d3e5f33027b",
+      "gemm_32x32x32": {
+        "first_call_wall_ms": 17.8072,
+        "warm_wall_ms": {
+          "p50": 19.346232,
+          "p95": 25.129139,
+          "p99": 27.606069
+        },
+        "warm_publish_to_completion_ms": {
+          "p50": 10.98863699917274,
+          "p95": 11.15983100135054,
+          "p99": 11.216654000236304
+        },
+        "frame_job_reference_ticks": {
+          "p50": 199592,
+          "p95": 201513,
+          "p99": 201806
+        },
+        "iterations": 100
+      },
+      "gemm_32x64x32": {
+        "first_call_wall_ms": 24.787739,
+        "warm_wall_ms": {
+          "p50": 24.569774,
+          "p95": 31.363338,
+          "p99": 35.570651
+        },
+        "warm_publish_to_completion_ms": {
+          "p50": 15.81770799930382,
+          "p95": 16.151972000443493,
+          "p99": 16.189470999961486
+        },
+        "frame_job_reference_ticks": {
+          "p50": 291803,
+          "p95": 294892,
+          "p99": 295628
+        },
+        "iterations": 100
+      }
+    },
+    {
+      "runtime": "hvx_readback",
+      "sha256": "93b242ba9d7f7bc41462a85f77ad0a6e95ecaee413bcaf0b87795098cf877fe8",
+      "gemm_32x32x32": {
+        "first_call_wall_ms": 17.057319,
+        "warm_wall_ms": {
+          "p50": 12.601313,
+          "p95": 17.649442,
+          "p99": 18.172869
+        },
+        "warm_publish_to_completion_ms": {
+          "p50": 5.4785369993624045,
+          "p95": 5.612754001049325,
+          "p99": 6.032015999153373
+        },
+        "frame_job_reference_ticks": {
+          "p50": 93474,
+          "p95": 94168,
+          "p99": 94356
+        },
+        "iterations": 100
+      },
+      "gemm_32x64x32": {
+        "first_call_wall_ms": 18.270368,
+        "warm_wall_ms": {
+          "p50": 14.181803,
+          "p95": 19.0478,
+          "p99": 28.370428
+        },
+        "warm_publish_to_completion_ms": {
+          "p50": 6.988195000303676,
+          "p95": 7.086006000463385,
+          "p99": 7.13199399979203
+        },
+        "frame_job_reference_ticks": {
+          "p50": 122377,
+          "p95": 123108,
+          "p99": 123315
+        },
+        "iterations": 100
+      }
+    }
+  ],
+  "timing_method": {
+    "dispatch": "direct",
+    "iterations_per_case": 100,
+    "first_call_excluded": true,
+    "dispatcher_installed_before_both": true,
+    "restoration_audits_disabled": true,
+    "comparison_order": [
+      "scalar_readback",
+      "hvx_readback"
+    ],
+    "input": "Same wire requests as the previous packing comparison: shifted identity times quarter-step B, zero bias",
+    "wall_ms": "Complete Device.submit, including upload, HMX power setup/teardown and cleanup; excludes Python matrix serialization",
+    "publication_ms": "After power setup through observed completion",
+    "kernel_ticks": "Raw c31:30 around frame_job; includes packing, HMX, readback, accumulation and bias; not isolated HMX throughput"
+  },
+  "execution_limit": {
+    "host_timeout_ms": 40,
+    "depth_tiles": 2,
+    "code_reservation_bytes": 4096,
+    "vtcm_scratch_bytes": 8192,
+    "arena_bytes": 131072
+  },
+  "final_worker_ssr": [
+    "0x81840200",
+    "0x89840200",
+    "0x91840200"
+  ],
+  "initial_health": {
+    "state": {
+      "abi": 9,
+      "control": [
+        1,
+        0,
+        1
+      ],
+      "callback": 0,
+      "poisoned": false
+    },
+    "firmware_code_prefix_bytes": 114688,
+    "firmware_code_prefix_sha256": "55679e13486357627ea22e494b25342acd9d24d73450f3f28eb1113b82c71b95",
+    "power_configuration_sha256": "2405bda200a51fd0bd699568e8415e53ba7b631cbaa9d4812c656b7240159bbd",
+    "power_restored": true
+  },
+  "final_health": {
+    "state": {
+      "abi": 9,
+      "control": [
+        1,
+        0,
+        1
+      ],
+      "callback": 0,
+      "poisoned": false
+    },
+    "firmware_code_prefix_bytes": 114688,
+    "firmware_code_prefix_sha256": "55679e13486357627ea22e494b25342acd9d24d73450f3f28eb1113b82c71b95",
+    "power_configuration_sha256": "2405bda200a51fd0bd699568e8415e53ba7b631cbaa9d4812c656b7240159bbd",
+    "power_restored": true
+  },
+  "service_pid_unchanged": true,
+  "service_restarts": 0,
+  "offline_tests": 49,
+  "limitations": [
+    "FP32 accumulator addition, initialization and final bias/ReLU remain scalar",
+    "Bit conversion was checked for every FP16 pattern, including signaling NaNs, payloads, infinities and subnormals; this does not establish HMX arithmetic for every exceptional input",
+    "Seeded accumulation was compared bit-for-bit against the previous scalar implementation on the same DSP; finite cases also passed an independent host FP32 reference",
+    "The row buffer is within the existing VTCM backup/restore span; no memory allocation or job-budget expansion",
+    "Sequential 100-sample comparison on one device; no randomized sustained workload",
+    "No persistent model memory, sustained tracking coexistence, accuracy or thermal qualification"
+  ],
+  "evidence_ids": {
+    "disassembly": "ev_e16e0c089cf88fafa353d8faeef51f03064a4b03d47a2de80594e4dbd056a265",
+    "qualification": "ev_d84ec6c3de56047ee3cb194c3c51bfa2d07e375b4029437c2b82e1ddd3188932",
+    "single_tile_regression": "ev_98298c61aa9d544d5ebcdb0033c6ef3626d3c56f0b4d3e353696b2af2cafd9bc",
+    "multitile_regression": "ev_866a3a3e328bcb4181f35e8e7cf0b35660f7a8dbba4d69bc22e5312f35dd2e86",
+    "packing_regression": "ev_1f45e4ef60a62eac811bec190d19fbdc7058e3023eb35bc0fd128b9bc24af24c"
+  }
+}

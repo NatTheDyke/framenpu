@@ -2,8 +2,8 @@
   "format": "framenpu-kernel",
   "abi": 1,
   "target": "hexagonv75",
-  "bytes": 2972,
-  "sha256": "068cadcad806f1ac76f9f46c72f284ba89759c1e7990bb0e2ba9dda4c928c1df",
+  "bytes": 3672,
+  "sha256": "93b242ba9d7f7bc41462a85f77ad0a6e95ecaee413bcaf0b87795098cf877fe8",
   "compiler_flags": [
     "--target=hexagon",
     "-mcpu=hexagonv75",
@@ -28,11 +28,26 @@
     "objcopy": "llvm-objcopy, compatible with GNU objcopy"
   },
   "source_sha256": {
-    "compiler.py": "de1d65126b5b8bb0e8bccc35aa077922a6dbfa4dae371f4cdb6c0f0d53dc5ccf",
-    "sdk/entry.S": "f348664488f9f31776e2a33291a1607ca685b389f539d67a50555be73f387c0f",
+    "compiler.py": "a922a94d2328ecff84a6947883653f8b15f0dd249f4ff09afa8f26a5b6e47c8e",
+    "sdk/entry.S": "34a70594e19182d653b825a42417b00120e91001303c77de94e7a82c21cb02d3",
     "sdk/hmx.S": "ca725000e846c220cdf709a82ce61d223dd0862d66687fa968e41be18f262fb6",
     "sdk/link.ld": "c0b7dd53a7e254de549280ead79f303db3ab657e13e8565e5be3852c29a08e82",
-    "sdk/include/framenpu.h": "aa2757202517a92ca2701c04a0ca9ac73558db0a0d9b8c67aec9def09d33d0dc",
-    "sdk/runtime.c": "41a16d0ad7cf5331041825269a37db8d83b904bd6370160958c6cb9530cff65c"
+    "sdk/include/framenpu.h": "4e65f4b8fb82586428a810714d91540685cc4895810ad5bb753b178e1db62754",
+    "sdk/include/fnpu_readback.h": "4c5fd740bcc9269a64d7923d51cedd11bda2a1b4ed5430dcd796332e20a8f820",
+    "sdk/runtime.c": "ab0109990fb03ed16d2dde9c66ff1e4863caee4d02ad2bb2da4a6e7d91ab3893",
+    "sdk/dispatch.S": "73042064e808b6fd5802b073095daea089847510f73e4b1395db9381f27dca75",
+    "sdk/dispatch.ld": "98cb13354342a46c65fab68aebd75192d3123958a66b7078fcaad12922b8b61e",
+    "sdk/dispatch_patch.c": "7510f5a1886682acc6c9592421b2edae549614649a6c2666f55cfa47a4762326"
+  },
+  "supports_direct": true,
+  "additional_payloads": {
+    "dispatch.bin": {
+      "bytes": 96,
+      "sha256": "d329a9ea5ddb7540c977cea989248da0a794544baa1bab5765b646fda3c34700"
+    },
+    "dispatch_patch.bin": {
+      "bytes": 2232,
+      "sha256": "3a40d87515e5b2cd7ec357a2c371383a799903db27cb2888752ed00778c90e5a"
+    }
   }
 }

@@ -1,6 +1,7 @@
 """Rebuild SDK payloads, or verify them without modifying checked-in output."""
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import sys
@@ -9,7 +10,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 from framenpu import Job
-from framenpu.compiler import SDK, Toolchain, build_job
+from framenpu.compiler import SDK, Toolchain, build_job, build_dispatch
 from framenpu.provenance import kernel_manifest, verify_kernel
 
 
@@ -41,6 +42,11 @@ def main(argv=None):
         custom = build_job(
             ROOT / "examples/vector_add.c", build_dir=Path(directory) / "custom", toolchain=tools
         )
+        dispatch = build_dispatch(Path(directory) / "dispatch", toolchain=tools)
+        patcher = build_job(
+            SDK / "dispatch_patch.c", build_dir=Path(directory) / "patcher", toolchain=tools
+        )
+    extra = {"dispatch.bin": dispatch, "dispatch_patch.bin": patcher.code}
     data = ROOT / "src/framenpu/data"
     if args.check:
         manifest = verify_kernel()
@@ -50,13 +56,22 @@ def main(argv=None):
             )
         if custom != Job.load(ROOT / "examples/vector_add.fjob"):
             parser.exit(1, "custom example differs; regenerate and validate it\n")
+        for name, code in extra.items():
+            if (data / name).read_bytes() != code:
+                parser.exit(1, f"{name} differs; regenerate and validate it\n")
         print(f"Verified runtime ({manifest['bytes']} bytes) and custom example")
     else:
         data.mkdir(parents=True, exist_ok=True)
         (data / "runtime.bin").write_bytes(runtime.code)
-        (data / "runtime.json").write_text(
-            json.dumps(kernel_manifest(runtime.code, tools), indent=2) + "\n"
-        )
+        manifest = kernel_manifest(runtime.code, tools)
+        manifest["supports_direct"] = True
+        manifest["additional_payloads"] = {
+            name: {"bytes": len(code), "sha256": hashlib.sha256(code).hexdigest()}
+            for name, code in extra.items()
+        }
+        for name, code in extra.items():
+            (data / name).write_bytes(code)
+        (data / "runtime.json").write_text(json.dumps(manifest, indent=2) + "\n")
         custom.save(ROOT / "examples/vector_add.fjob")
         print(
             f"Built runtime ({len(runtime.code)} bytes) and custom example ({len(custom.code)} bytes)"

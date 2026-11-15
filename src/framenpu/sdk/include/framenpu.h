@@ -10,6 +10,7 @@ typedef struct {
 #define FNPU_MAGIC 0x55504e46u
 #define FNPU_ABI 1u
 #define FNPU_FLAG_HMX 1u
+#define FNPU_FLAG_DIRECT 2u
 #define FNPU_OK 0u
 #define FNPU_BAD_ARGUMENT 1u
 #define FNPU_EXCEPTION 2u
@@ -22,7 +23,11 @@ static inline const void *fnpu_input(const fnpu_context *ctx) {
 static inline void *fnpu_output(const fnpu_context *ctx) {
     return FNPU_ARENA + ctx->output_offset;
 }
-/* Implement this function. The SDK entry point calls only on worker 0.
+/* Implement this function. The SDK calls frame_job only on worker 0. On
+ * direct requests, context 4 runs only the scheduling/join wrapper; no HMX/HVX
+ * instructions execute there. Raw reference start/end counters use status
+ * words 10..13. Native jobs built with older entry wrappers need rebuilding
+ * before direct dispatch; FNPU model files retain their existing format.
  * Return an error code; do not publish completion or change shared control.
  * All offsets are relative to the bounded arena. Trusted native code has
  * supervisor access: this ABI is not a sandbox for untrusted code.

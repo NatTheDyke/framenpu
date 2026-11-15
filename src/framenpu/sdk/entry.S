@@ -9,6 +9,8 @@ custom_job:
  { memd(r29+#32) = r25:24 }
  { memd(r29+#40) = r27:26 }
  { r0 = htid }
+ { p0 = cmp.eq(r0,#4) }
+ { if (p0) jump direct_master }
  { p0 = cmp.gtu(r0,#2) }
  { if (p0) jump skip }
  { r16 = ##0xf0a93400 }
@@ -46,11 +48,15 @@ backup_loop:
  { ssr = r0 }
  { isync }
 execute:
+ { r1:0 = c31:30 }
+ { memd(r16+#40) = r1:0 }
  { r0 = r19 }
  { call frame_job }
  { memw(r16+#8) = r0 }
 recover:
  { r16 = ##0xf0a93400 }
+ { r1:0 = c31:30 }
+ { memd(r16+#48) = r1:0 }
  { r29 = memw(r16+#24) }
  { r17 = memw(r16+#28) }
  { r18 = memw(r16+#32) }
@@ -86,6 +92,39 @@ finish:
  { r27:26 = memd(r29+#40) }
  { deallocframe }
  { memw(r0+#0) = r1; jumpr r31 }
+/* The patched CPU-request case calls here on context 4. Keep HVX/HMX on
+ * worker 0: the master only wakes workers in the callback-only mode and joins
+ * their final return packets before publishing stock completion. Never return
+ * just because the host went away or a deadline elapsed while work is active.
+ */
+direct_master:
+ { r16 = ##0xf0b12000 }
+ { r17 = ##0xf0a93400 }
+ { r18 = ##0xf0a93000 }
+ { r19 = memw(r18+#0) }
+ { r0 = memw(r16+#24) }
+ { r0 = clrbit(r0,#0) }
+ { memw(r16+#24) = r0 }
+ { memw(r16+#0) = #6 }
+ { barrier }
+ { r0 = #7 }
+ { resume(r0) }
+direct_join:
+ { r0 = memw(r17+#0) }
+ { p0 = cmp.eq(r0,r19) }
+ { if (!p0) jump direct_pause }
+ { r0 = memw(r17+#64) }
+ { p0 = cmp.eq(r0,r19) }
+ { if (!p0) jump direct_pause }
+ { r0 = memw(r17+#128) }
+ { p0 = cmp.eq(r0,r19) }
+ { if (!p0) jump direct_pause }
+ { barrier }
+ { memw(r16+#0) = #3 }
+ { jump skip }
+direct_pause:
+ { pause(#64) }
+ { jump direct_join }
 skip:
  { r17:16 = memd(r29+#0) }
  { r19:18 = memd(r29+#8) }

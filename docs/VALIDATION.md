@@ -18,10 +18,108 @@ The final hardware suite passed:
 These exact inputs do not establish every FP16 rounding/exceptional-value case.
 Sustained eye-tracking accuracy, latency and thermals were not measured.
 
-The hardware-tested runtime is 2,972 bytes, SHA256
+The baseline-tested runtime was 2,972 bytes, SHA256
 068cadcad806f1ac76f9f46c72f284ba89759c1e7990bb0e2ba9dda4c928c1df.
-The included custom C job is 1,844 bytes. Both are built from included source
-without proprietary SDK/runtime libraries.
+The baseline custom C job was 1,844 bytes. The working tree now includes
+regenerated dispatch-aware payloads and an opt-in direct dispatcher. They are
+built from included source without proprietary SDK/runtime libraries. The CPU
+and HMX qualification below covers these new payloads.
+
+## Direct dispatch CPU validation — 2026-11-14
+
+The 3,344-byte runtime, 96-byte dispatcher and 2,232-byte patch helper passed
+device tests on the same exact firmware profile. The sanitized
+[dispatch summary](../evidence/dispatch-validation.json) records their hashes,
+100 warm samples per CPU probe/backend, numerical and ownership checks, and
+final firmware/service state. Median empty-job wall time was 4.294 ms with the
+benchmark path and 0.734 ms with direct dispatch.
+
+Custom C vector addition, DSP activations/broadcast addition, expected-error
+cleanup, metadata compatibility, installer exclusion, legacy-client access
+and restoration passed. The DSP service retained its PID with zero restarts;
+the first 112 KiB of firmware code matched the installed image afterward.
+The host wait now accepts worker returns preceding master completion state 3.
+All 42 offline tests pass, including that transition.
+
+## Direct dispatch HMX qualification — 2026-11-14
+
+The same 3,344-byte runtime passed all five padded/tiled GEMMs, activations and
+the serialized/reloaded XOR model through both dispatch backends. Every
+reported output exactly matched the deterministic tile-precision CPU reference.
+This does not establish all FP16 rounding or exceptional-value behavior.
+
+The qualification harness audited 78 correctness submissions, including 39 HMX
+jobs. Before acknowledgment, borrowed DDR buffers, callback and HMX configuration
+matched the values captured under that job's operation gate. A separate timing
+comparison ran 100 warm samples per backend, without the audit overhead.
+Complete 32x32 GEMM submission wall-time p50/p99 was 29.340/39.095 ms on the
+benchmark path and 25.359/37.309 ms on the direct path. These times include
+uploads, power setup/teardown, packing and cleanup.
+
+Final workers returned baseline SSR values; firmware code, dispatch window and
+HMX clock/program configuration were restored. Control was `(1,0,1)`, callback
+zero, and the DSP service retained its PID with zero restarts. See the sanitized
+[HMX summary](../evidence/hmx-dispatch-validation.json) and opt-in
+[qualification harness](../tests/hardware_hmx.py).
+
+Sustained gaze coexistence, tracking accuracy and thermals remain unmeasured;
+the direct path remains opt-in.
+
+## Two-tile execution qualification — 2026-11-14
+
+The subsequent 3,380-byte runtime adds opt-in two-depth-tile jobs on direct
+dispatch. It passed the complete single-tile numerical suites on both backends
+and new padded/seeded matrix cases through K=256. Tests include ordered FP32
+rounding, an accumulator above FP16 range, final bias/ReLU and six native
+argument rejections followed by successful reuse.
+
+The new correctness run audited 34 submissions (30 HMX-marked). Firmware,
+borrowed DDR, worker SSR and power configuration restored with zero service
+restarts. A separate 100-sample comparison measured 32x64x32 median wall time
+of 60.886 ms versus 38.288 ms, with submissions reduced from four to one and
+HMX power cycles from two to one. Maximum measured two-tile job publication
+to completion was 26.013 ms; the 40 ms timeout is unchanged.
+
+See [the implementation/measurement notes](MULTITILE.md) and
+[sanitized summary](../evidence/multitile-validation.json). All 49 offline tests
+pass. HVX packing and persistent model memory are outside this change.
+
+## HVX packing qualification — 2026-11-14
+
+The 3,520-byte runtime adds vector packing for aligned full tiles and aligned
+bulk copy, retaining scalar padding/tails. Native probes passed 136 packing
+cases, including every halfword bit pattern, and 53 copy cases. Six mixed-path
+GEMMs and both existing single-/multi-tile numerical suites passed exactly.
+Across these correctness runs, 310 submissions passed restoration audits;
+firmware, worker state and power configuration restored with zero service
+restarts.
+
+An identical-request comparison against the previous 3,380-byte runtime used
+100 warm samples on direct dispatch. Publication-to-completion p50 fell from
+8.861 to 0.640 ms for a 4 KiB copy, 14.611 to 10.997 ms for 32x32x32 GEMM,
+and 25.281 to 15.789 ms for a two-depth-tile 32x64x32 GEMM. These are job
+intervals rather than full Python matrix API call times. See
+[HVX notes](HVX.md) and the [sanitized summary](../evidence/hvx-validation.json)
+for timing boundaries, percentiles, reproduction and limitations. All 49 offline
+tests pass. Output readback remains scalar; persistent model memory and
+sustained tracking coexistence remain unvalidated.
+
+## HVX output readback qualification — 2026-11-14
+
+The 3,672-byte runtime unpacks HMX output and converts FP16 to FP32 with HVX
+integer operations, retaining scalar FP32 accumulation in reduction order.
+Every FP16 bit pattern converted exactly; 71 seeded accumulation cases matched
+the old scalar implementation, with guarded edge layouts preserved. Existing
+HMX, multi-tile and packing/copy suites passed. Across the four correctness
+runs, 573 submissions passed restoration audits with zero service restarts.
+
+Against the 3,520-byte input-packing runtime, 100 warm samples per case reduced
+publication-to-completion p50 from 10.989 to 5.479 ms for 32x32x32 and 15.818
+to 6.988 ms for 32x64x32. Complete submission p50 for the latter fell from
+24.570 to 14.182 ms. These exclude Python matrix serialization and do not
+establish sustained tracking latency. See [readback notes](READBACK.md) and
+the [sanitized summary](../evidence/readback-validation.json). All 49 offline
+tests pass; budgets, power policy and memory reservations are unchanged.
 
 ## Completion-window finding
 
@@ -42,8 +140,8 @@ source provenance, offline validation, packaging checks and CI. Raw captures,
 machine paths, credentials and proprietary firmware are excluded from the
 public source; the numerical summary is intentionally sanitized.
 
-The publication suite passes 29 offline tests. Local verification uses
-Python 3.14.9 and LLVM 23.1.4. The GitHub Actions
+The initial publication suite passed 29 offline tests; the current suite passes
+49. Local verification uses Python 3.14.9 and LLVM 23.1.4. The GitHub Actions
 matrix is configured for Python 3.11–3.14; it has not run on GitHub before upload.
 Offline power tests use an emulator, not live fault injection.
 

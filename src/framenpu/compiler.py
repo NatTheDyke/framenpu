@@ -103,8 +103,25 @@ def build_job(source, output=None, *, requires_hmx=False, build_dir=None, toolch
     _run([tools.linker, "-T", str(SDK / "link.ld"), *objects, "-o", str(elf)])
     binary = directory / "kernel.bin"
     _run([tools.objcopy, "-O", "binary", "--only-section=.payload", str(elf), str(binary)])
-    job = Job(binary.read_bytes(), source.stem, requires_hmx)
+    job = Job(binary.read_bytes(), source.stem, requires_hmx, supports_direct=True)
     if output is not None:
         Path(output).parent.mkdir(parents=True, exist_ok=True)
         job.save(output)
     return job
+
+
+def build_dispatch(directory, *, toolchain=None):
+    """Compile the fixed ABI 9 dispatch window, without opening a device."""
+    tools = toolchain or Toolchain.discover()
+    directory = Path(directory)
+    directory.mkdir(parents=True, exist_ok=True)
+    obj, elf, binary = (directory / name for name in ("dispatch.o", "dispatch.elf", "dispatch.bin"))
+    _run([tools.clang, *BUILD_FLAGS, "-c", str(SDK / "dispatch.S"), "-o", str(obj)])
+    _run([tools.linker, "-T", str(SDK / "dispatch.ld"), str(obj), "-o", str(elf)])
+    _run([tools.objcopy, "-O", "binary", "--only-section=.text", str(elf), str(binary)])
+    from .profile import PROFILE
+
+    code = binary.read_bytes()
+    if len(code) != PROFILE.dispatch_size:
+        raise CompilerError("dispatcher does not fit the verified firmware window")
+    return code

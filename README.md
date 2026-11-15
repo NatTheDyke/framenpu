@@ -96,6 +96,22 @@ with Device() as npu:
     summed = npu.add([[1, 2], [3, 4]], [[10, 20]])  # row broadcast
 ~~~
 
+Direct dispatch also supports `npu.matmul(a, b, tiles_per_job=2)`, combining
+two depth tiles per submission and preserving FP32 accumulation between
+chunks. In a 32x64x32 device test, median wall time fell from 60.89 ms to
+38.29 ms, with four submissions reduced to one. This option keeps the 40 ms
+execution timeout and is opt-in; see [MULTITILE.md](docs/MULTITILE.md).
+
+Full aligned tiles now use HVX packing automatically. A same-request comparison
+reduced two-depth-tile 32x64x32 job publication-to-completion p50 from 25.28 ms
+to 15.79 ms. Padded edges retain scalar packing. See [HVX.md](docs/HVX.md) for
+correctness checks, timing boundaries and reproduction.
+
+HVX output unpacking/conversion now applies to every supported GEMM tile shape,
+while retaining the existing scalar FP32 accumulation. A subsequent comparison
+reduced the same two-depth-tile job interval from 15.82 ms to 6.99 ms; see
+[READBACK.md](docs/READBACK.md).
+
 Implement [the C job ABI](src/framenpu/sdk/include/framenpu.h), as demonstrated
 by [vector_add.c](examples/vector_add.c), and compile on your workstation:
 
@@ -137,8 +153,18 @@ Native jobs are trusted supervisor code, not sandboxed model data. See
 | Matrix dimensions | Up to 256, scheduled in bounded depth/output-32 tiles |
 | Arithmetic | FP16 depth-32 products, FP32 DSP accumulation across depth tiles |
 
-Each submission still invokes a roughly 13 ms stock FLOPS benchmark and scopes
+The default backend executes a stock FLOPS benchmark per submission and scopes
 HMX power to that job. This is unsuitable for real-time hand tracking.
+
+An opt-in `Device(dispatch="direct")` prototype bypasses the benchmark using a
+reversible 96-byte runtime dispatch edit. It keeps HMX/HVX on worker 0 and joins
+all workers before completion. CPU/DSP validation passed: median warm empty-job
+wall time fell from 4.29 ms to 0.73 ms across 100 samples per backend.
+Both dispatch paths also pass padded/tiled HMX GEMMs and the saved XOR model;
+median 32x32 GEMM submission wall time was 29.34 ms versus 25.36 ms with direct
+dispatch. **Sustained tracking coexistence remains unvalidated.**
+See [DISPATCH.md](docs/DISPATCH.md) for results, lifecycle, compatibility and
+the explicit hardware comparison commands.
 
 The stock dispatcher releases its completion/ownership window after roughly
 50 ms even without acknowledgment; the host timeout is capped at 40 ms.
@@ -179,9 +205,10 @@ distinguish actual test results from configured future CI runs.
 ## Hand tracking and contributions
 
 The full FrameTop v20a graph is not implemented. Use inspect-ncnn with your
-own hand.ncnn.param file to inventory it. The next work is a direct cooperative
-dispatcher, persistent tensor/weight ownership, convolution and HVX depthwise
-kernels, then a validated ncnn converter. See [HAND_TRACKING.md](docs/HAND_TRACKING.md).
+own hand.ncnn.param file to inventory it. Bounded two-depth-tile jobs are
+implemented with validated HVX input packing and output conversion. Next are persistent
+tensor/weight ownership, convolution and HVX depthwise kernels, then a validated
+ncnn converter. See [HAND_TRACKING.md](docs/HAND_TRACKING.md).
 
 [CONTRIBUTING.md](CONTRIBUTING.md) explains development and kernel changes.
 The project is [MIT-licensed](LICENSE); see

@@ -15,7 +15,11 @@ def source_hashes():
         "sdk/hmx.S",
         "sdk/link.ld",
         "sdk/include/framenpu.h",
+        "sdk/include/fnpu_readback.h",
         "sdk/runtime.c",
+        "sdk/dispatch.S",
+        "sdk/dispatch.ld",
+        "sdk/dispatch_patch.c",
     )
     return {name: hashlib.sha256((package / name).read_bytes()).hexdigest() for name in names}
 
@@ -59,4 +63,9 @@ def verify_kernel(package=None):
         raise ValueError("SDK/compiler sources changed; run python tools/build_kernels.py")
     if manifest.get("compiler_flags") != list(BUILD_FLAGS):
         raise ValueError("compiler flags changed; regenerate the bundled kernel")
+    for name in ("dispatch.bin", "dispatch_patch.bin"):
+        payload = (package / "data" / name).read_bytes()
+        info = manifest.get("additional_payloads", {}).get(name, {})
+        if info != {"bytes": len(payload), "sha256": hashlib.sha256(payload).hexdigest()}:
+            raise ValueError(f"bundled {name} identity does not match runtime.json")
     return manifest

@@ -15,6 +15,8 @@ PUBLIC_DIRS = ("src", "docs", "tools", "tests", "examples", "evidence", ".github
 IGNORED_PARTS = {"__pycache__", ".ruff_cache", ".pytest_cache", "build", "dist"}
 BINARY_FILES = {
     "src/framenpu/data/runtime.bin",
+    "src/framenpu/data/dispatch.bin",
+    "src/framenpu/data/dispatch_patch.bin",
     "examples/vector_add.fjob",
     "examples/xor.fnpu",
 }

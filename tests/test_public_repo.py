@@ -123,15 +123,24 @@ class ToolingTests(unittest.TestCase):
         self.assertEqual(len(set(objects)), 3)
 
     def test_hardware_smoke_requires_explicit_opt_in(self):
-        result = subprocess.run(
-            [sys.executable, str(ROOT / "tests/hardware_smoke.py")],
-            text=True,
-            capture_output=True,
-            cwd=tempfile.gettempdir(),
-            check=False,
-        )
-        self.assertEqual(result.returncode, 2)
-        self.assertIn("--run-on-device is required", result.stderr)
+        for name in (
+            "hardware_smoke.py",
+            "hardware_dispatch.py",
+            "hardware_hmx.py",
+            "hardware_multitile.py",
+            "hardware_hvx.py",
+            "hardware_readback.py",
+        ):
+            with self.subTest(script=name):
+                result = subprocess.run(
+                    [sys.executable, str(ROOT / "tests" / name)],
+                    text=True,
+                    capture_output=True,
+                    cwd=tempfile.gettempdir(),
+                    check=False,
+                )
+                self.assertEqual(result.returncode, 2)
+                self.assertIn("--run-on-device is required", result.stderr)
 
     def test_examples_help_from_unrelated_directory(self):
         for name in ("make_xor.py", "run_xor.py", "run_custom.py"):

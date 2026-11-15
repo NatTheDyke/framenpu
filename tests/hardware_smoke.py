@@ -18,17 +18,21 @@ def half(x):
     return struct.unpack("<e", struct.pack("<e", x))[0]
 
 
+def fp32(x):
+    return struct.unpack("<f", struct.pack("<f", x))[0]
+
+
 def reference(a, b, bias=None, relu=False):
     m, k, n = len(a), len(a[0]), len(b[0])
     out = []
     for i in range(m):
         row = []
         for j in range(n):
-            value = sum(
-                half(sum(half(a[i][q]) * half(b[q][j]) for q in range(t, min(t + 32, k))))
-                for t in range(0, k, 32)
-            )
-            value += 0 if bias is None else bias[j]
+            value = 0.0
+            for t in range(0, k, 32):
+                partial = half(sum(half(a[i][q]) * half(b[q][j]) for q in range(t, min(t + 32, k))))
+                value = fp32(value + partial)
+            value = fp32(value + (0 if bias is None else bias[j]))
             row.append(max(0, value) if relu else value)
         out.append(row)
     return out
@@ -44,9 +48,9 @@ def equal(name, got, expected):
     )
 
 
-def run(custom_only=False):
+def run(custom_only=False, dispatch="benchmark"):
     rng = random.Random(0x46504E55)
-    with Device() as npu:
+    with Device(dispatch=dispatch) as npu:
         print("INITIAL", json.dumps(npu.status()), flush=True)
         job = Job.load(ROOT / "examples/vector_add.fjob")
         data = struct.pack("<8f", 1, 2, 3, 4, 5, 6, 7, 8)
@@ -109,6 +113,7 @@ def run(custom_only=False):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--custom-only", action="store_true")
+    parser.add_argument("--dispatch", choices=("benchmark", "direct"), default="benchmark")
     parser.add_argument(
         "--run-on-device",
         action="store_true",
@@ -117,4 +122,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if not args.run_on_device:
         parser.error("--run-on-device is required; this test changes DSP state")
-    run(args.custom_only)
+    run(args.custom_only, args.dispatch)

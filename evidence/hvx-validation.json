@@ -1,0 +1,299 @@
+{
+  "format": "framenpu-hvx-validation",
+  "version": 1,
+  "date": "2026-11-14",
+  "firmware_profile": "Steam Frame / SteamOS 0.5.8 / CDSP ABI 9 / Hexagon v75",
+  "runtime": {
+    "bytes": 3520,
+    "sha256": "315a3eff8b851e3a8b31cf43477aeeace9a3f26dd4a57155491c2d3e5f33027b"
+  },
+  "packing_probe": {
+    "bytes": 3760,
+    "sha256": "89b223d08c5d18d1816504df5ca997497a6771a14b1f96f89fe1245247be4830",
+    "source": "tests/packing_probe.c",
+    "fixture_only": true
+  },
+  "packing": {
+    "layout_cases": 136,
+    "bit_patterns": "All 65536 uint16 values passed through the stride-32 shuffle; all 65536 values passed across the two stride-64 half selections",
+    "edge_cases": 8,
+    "alignment_fallback": true,
+    "copy_cases": 53,
+    "copy_lengths": [
+      0,
+      1,
+      3,
+      4,
+      127,
+      128,
+      129,
+      255,
+      256,
+      257,
+      4095,
+      4096,
+      4097,
+      65536
+    ],
+    "unaligned_copy_prefix_bytes": [
+      4,
+      64,
+      124
+    ],
+    "exact": true
+  },
+  "numerical": {
+    "gemm_shapes": [
+      [
+        32,
+        32,
+        32
+      ],
+      [
+        32,
+        64,
+        32
+      ],
+      [
+        31,
+        64,
+        32
+      ],
+      [
+        32,
+        64,
+        31
+      ],
+      [
+        31,
+        32,
+        32
+      ],
+      [
+        32,
+        33,
+        32
+      ]
+    ],
+    "all_exact": true,
+    "single_tile_regression": "Both dispatch backends: five padded/tiled GEMMs, activations, saved XOR model and custom C job",
+    "multitile_regression": "Six shapes through K=256, ordered FP32 accumulation, FP32 seed range, final bias/ReLU, six native rejections and post-rejection reuse"
+  },
+  "restoration_audits": {
+    "hvx": {
+      "restored_jobs": 198,
+      "restored_hmx_jobs": 6
+    },
+    "single_tile": {
+      "restored_jobs": 78,
+      "restored_hmx_jobs": 39
+    },
+    "multitile": {
+      "restored_jobs": 34,
+      "restored_hmx_jobs": 30
+    },
+    "total_jobs": 310
+  },
+  "warm_measurements": [
+    {
+      "runtime": "scalar",
+      "sha256": "6a7eaa2a42bb727f6bec3b4036a8d377edc0b77dfd936dea78c3e9245d690ef2",
+      "copy_4k": {
+        "first_call_wall_ms": 23.277426,
+        "warm_wall_ms": {
+          "p50": 9.173077,
+          "p95": 9.365991,
+          "p99": 9.603799
+        },
+        "warm_publish_to_completion_ms": {
+          "p50": 8.861467000315315,
+          "p95": 9.05323499955557,
+          "p99": 9.210315000018454
+        },
+        "frame_job_reference_ticks": {
+          "p50": 160566,
+          "p95": 161449,
+          "p99": 161645
+        },
+        "iterations": 100
+      },
+      "gemm_32x32x32": {
+        "first_call_wall_ms": 28.075732,
+        "warm_wall_ms": {
+          "p50": 23.003993,
+          "p95": 30.097937,
+          "p99": 32.630969
+        },
+        "warm_publish_to_completion_ms": {
+          "p50": 14.610851000725233,
+          "p95": 14.78975400004856,
+          "p99": 14.854909999485244
+        },
+        "frame_job_reference_ticks": {
+          "p50": 268745,
+          "p95": 270786,
+          "p99": 271129
+        },
+        "iterations": 100
+      },
+      "gemm_32x64x32": {
+        "first_call_wall_ms": 33.333405,
+        "warm_wall_ms": {
+          "p50": 35.272591,
+          "p95": 45.427527,
+          "p99": 46.400688
+        },
+        "warm_publish_to_completion_ms": {
+          "p50": 25.28072599943698,
+          "p95": 25.50842999971792,
+          "p99": 25.616969999646244
+        },
+        "frame_job_reference_ticks": {
+          "p50": 473462,
+          "p95": 477412,
+          "p99": 478738
+        },
+        "iterations": 100
+      }
+    },
+    {
+      "runtime": "hvx",
+      "sha256": "315a3eff8b851e3a8b31cf43477aeeace9a3f26dd4a57155491c2d3e5f33027b",
+      "copy_4k": {
+        "first_call_wall_ms": 0.900141,
+        "warm_wall_ms": {
+          "p50": 0.840038,
+          "p95": 0.916443,
+          "p99": 0.988733
+        },
+        "warm_publish_to_completion_ms": {
+          "p50": 0.6399369995051529,
+          "p95": 0.7008740003584535,
+          "p99": 0.7386859997495776
+        },
+        "frame_job_reference_ticks": {
+          "p50": 1252,
+          "p95": 1276,
+          "p99": 1279
+        },
+        "iterations": 100
+      },
+      "gemm_32x32x32": {
+        "first_call_wall_ms": 21.628755,
+        "warm_wall_ms": {
+          "p50": 19.028486,
+          "p95": 25.412182,
+          "p99": 28.416455
+        },
+        "warm_publish_to_completion_ms": {
+          "p50": 10.996639999575564,
+          "p95": 11.146846999508853,
+          "p99": 11.241584000345028
+        },
+        "frame_job_reference_ticks": {
+          "p50": 199238,
+          "p95": 201608,
+          "p99": 202061
+        },
+        "iterations": 100
+      },
+      "gemm_32x64x32": {
+        "first_call_wall_ms": 27.132258,
+        "warm_wall_ms": {
+          "p50": 23.782001,
+          "p95": 30.531004,
+          "p99": 31.252814
+        },
+        "warm_publish_to_completion_ms": {
+          "p50": 15.78947799953312,
+          "p95": 15.97733899961895,
+          "p99": 16.017859000385215
+        },
+        "frame_job_reference_ticks": {
+          "p50": 291505,
+          "p95": 294379,
+          "p99": 294703
+        },
+        "iterations": 100
+      }
+    }
+  ],
+  "timing_method": {
+    "dispatch": "direct",
+    "iterations_per_case": 100,
+    "first_call_excluded": true,
+    "restoration_audits_disabled": true,
+    "comparison_order": [
+      "scalar",
+      "hvx"
+    ],
+    "request": "Same input bytes, output bytes, opcode and parameters for both runtimes",
+    "wall_ms": "Complete Device.submit, including upload, HMX power setup/teardown and cleanup; excludes Python matrix serialization",
+    "publication_ms": "After power setup through observed completion",
+    "kernel_ticks": "Raw c31:30 around frame_job, including packing, HMX and scalar readback; not isolated packing or HMX time",
+    "cold_call_limitation": "The first scalar copy includes dispatcher installation; first calls are not comparable"
+  },
+  "execution_limit": {
+    "host_timeout_ms": 40,
+    "depth_tiles": 2,
+    "code_reservation_bytes": 4096,
+    "vtcm_scratch_bytes": 8192,
+    "arena_bytes": 131072
+  },
+  "final_worker_ssr": [
+    "0x81840200",
+    "0x89840200",
+    "0x91840200"
+  ],
+  "initial_health": {
+    "state": {
+      "abi": 9,
+      "control": [
+        1,
+        0,
+        1
+      ],
+      "callback": 0,
+      "poisoned": false
+    },
+    "firmware_code_prefix_bytes": 114688,
+    "firmware_code_prefix_sha256": "55679e13486357627ea22e494b25342acd9d24d73450f3f28eb1113b82c71b95",
+    "power_configuration_sha256": "2405bda200a51fd0bd699568e8415e53ba7b631cbaa9d4812c656b7240159bbd",
+    "power_restored": true
+  },
+  "final_health": {
+    "state": {
+      "abi": 9,
+      "control": [
+        1,
+        0,
+        1
+      ],
+      "callback": 0,
+      "poisoned": false
+    },
+    "firmware_code_prefix_bytes": 114688,
+    "firmware_code_prefix_sha256": "55679e13486357627ea22e494b25342acd9d24d73450f3f28eb1113b82c71b95",
+    "power_configuration_sha256": "2405bda200a51fd0bd699568e8415e53ba7b631cbaa9d4812c656b7240159bbd",
+    "power_restored": true
+  },
+  "service_pid_unchanged": true,
+  "service_restarts": 0,
+  "offline_tests": 49,
+  "limitations": [
+    "HVX packing requires complete 32x32 operand tiles, a 128-byte-aligned source-row base and row stride 32 or 64 FP16 values; other cases retain scalar packing and zero padding",
+    "Bulk copy vectorizes aligned 128-byte blocks and preserves scalar tails/unaligned fallbacks",
+    "FP16 HMX product rounding and sequential FP32 accumulation are unchanged",
+    "Output unpacking and FP16-to-FP32 conversion remain scalar",
+    "No persistent model allocation, larger job budget or clock-policy change",
+    "Sequential comparison on one device, not a randomized sustained workload",
+    "All bit patterns were checked for packing, not for HMX numerical exceptional-value behavior",
+    "No sustained tracking coexistence, accuracy or thermal qualification"
+  ],
+  "evidence_ids": {
+    "disassembly": "ev_b5a9226e0fa22a0ec35c4b23e2444148b87cb5808b9c5b2ab2abf1efb64ea8db",
+    "qualification": "ev_8a35621d3a008d4eefde5bfa26bef61a0d7ed1902b3dd4b33e527d726a455bca",
+    "single_tile_regression": "ev_ed270bfc7140f6c2a32a6097163a9a75bfc1286ce0bfb0ca57fcc2e28960c370",
+    "multitile_regression": "ev_57e2c5329533cccb33ca7e662ed13053724827130816debdd12e58a90ee77c26"
+  }
+}

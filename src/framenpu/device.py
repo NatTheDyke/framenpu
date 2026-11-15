@@ -9,8 +9,9 @@ import time
 from .errors import JobFailed, RecoveryRequired
 from .job import Job, JobResult
 from .power import HmxPower
-from .profile import PROFILE, JOB_MAGIC, JOB_ABI, HMX
+from .profile import PROFILE, JOB_MAGIC, JOB_ABI, HMX, DIRECT
 from .transport import Transport
+from .dispatch import DirectDispatcher
 
 
 def _matrix(value, *, fp16=True):
@@ -37,8 +38,16 @@ def _fp32(values):
 
 class Device:
     def __init__(
-        self, *, timeout=0.04, claim_timeout=0.5, _transport=None, _power_factory=HmxPower
+        self,
+        *,
+        timeout=0.04,
+        claim_timeout=0.5,
+        dispatch="benchmark",
+        _transport=None,
+        _power_factory=HmxPower,
     ):
+        if dispatch not in ("benchmark", "direct"):
+            raise ValueError("dispatch must be 'benchmark' or 'direct'")
         if not math.isfinite(timeout) or not 0 < timeout <= 0.04:
             raise ValueError(
                 "timeout must be positive and at most 0.04 seconds (stock completion window)"
@@ -49,6 +58,8 @@ class Device:
             )
         self.timeout = timeout
         self.claim_timeout = claim_timeout
+        self.dispatch = dispatch
+        self._direct = None
         self._transport = _transport
         self._power_factory = _power_factory
         self._lock = threading.RLock()
@@ -74,9 +85,18 @@ class Device:
 
     def close(self):
         with self._lock:
-            if self._transport:
-                self._transport.close()
-            self._closed = True
+            if self._closed:
+                return
+            try:
+                if self._direct is not None:
+                    if self._direct.installed and not self._transport.poisoned:
+                        self._direct.remove(self)
+                    else:
+                        self._direct.abandon()
+            finally:
+                if self._transport:
+                    self._transport.close()
+                self._closed = True
 
     def status(self):
         with self._lock:
@@ -96,12 +116,34 @@ class Device:
             or hashlib.sha256(code).hexdigest() != manifest.get("sha256")
         ):
             raise RuntimeError("packaged DSP kernel checksum mismatch; rebuild kernels")
-        return Job(code, "framenpu-runtime", hmx)
+        return Job(code, "framenpu-runtime", hmx, manifest.get("supports_direct", False))
 
     def submit(self, job, input_data=b"", *, output_size=0, opcode=0, params=()):
         """Run one trusted FJOB/C kernel using ABI-relative arena offsets."""
+        return self._submit(
+            job,
+            input_data,
+            output_size=output_size,
+            opcode=opcode,
+            params=params,
+            use_direct=self.dispatch == "direct",
+        )
+
+    def _submit(
+        self,
+        job,
+        input_data=b"",
+        *,
+        output_size=0,
+        opcode=0,
+        params=(),
+        use_direct=False,
+        _completion_validator=None,
+    ):
         if not isinstance(job, Job):
             raise TypeError("job must be a Job")
+        if use_direct and not job.supports_direct:
+            raise ValueError("job lacks the direct master entry; rebuild it with the current SDK")
         input_data = bytes(input_data)
         if type(output_size) is not int or output_size < 0:
             raise ValueError("output_size must be a nonnegative integer")
@@ -117,12 +159,23 @@ class Device:
             raise ValueError("input and output exceed the 128 KiB job arena")
         with self._lock:
             t = self._connect()
+            if use_direct and self._direct is None:
+                candidate = DirectDispatcher()
+                self._direct = candidate
+                try:
+                    candidate.install(self)
+                except BaseException:
+                    if not t.poisoned:
+                        self._direct = None
+                    raise
             t.claim(self.claim_timeout)
             power = None
             backup = []
             published = False
             returned = False
             try:
+                if use_direct:
+                    self._direct.verify(t)
                 spans = [(p.code, p.code_size), (p.header, 256), (p.status, 192), (p.arena, used)]
                 if job.requires_hmx:
                     spans.append((p.backup, 8192))
@@ -133,7 +186,7 @@ class Device:
                     seq,
                     JOB_MAGIC,
                     JOB_ABI,
-                    HMX if job.requires_hmx else 0,
+                    (HMX if job.requires_hmx else 0) | (DIRECT if use_direct else 0),
                     used,
                     0,
                     len(input_data),
@@ -154,7 +207,10 @@ class Device:
                 started = time.monotonic()
                 # Mark before publishing: an interrupted send may already have woken the DSP.
                 published = True
-                t.publish()
+                if use_direct:
+                    t.publish(direct=True)
+                else:
+                    t.publish()
                 t.wait_complete(seq, self.timeout)
                 returned = True
                 statuses = tuple(
@@ -162,6 +218,8 @@ class Device:
                 )
                 output = bytes(t.memory[p.arena + output_offset : p.arena + used])
                 result = JobResult(output, (time.monotonic() - started) * 1000, statuses)
+                if _completion_validator is not None:
+                    _completion_validator(result)
                 t.put(p.callback, 0)
                 if power is not None:
                     power.close()
@@ -197,12 +255,16 @@ class Device:
                 t.release_unsubmitted()
                 raise
 
-    def _matmul_tile(self, a, b, *, bias=None, activation="none"):
+    def _matmul_tile(
+        self, a, b, *, bias=None, activation="none", tiles_per_job=1, accumulator=None
+    ):
         """FP16 tile products accumulated in FP32 on DSP; returns row-major lists."""
         a, b = _matrix(a), _matrix(b)
         m, k, n = len(a), len(a[0]), len(b[0])
         if k != len(b):
             raise ValueError("matmul inner dimensions differ")
+        if m > 32 or n > 32 or k > 32 * tiles_per_job:
+            raise ValueError("GEMM chunk exceeds its tile budget")
         if activation not in ("none", "relu"):
             raise ValueError("supported fused activations: none, relu")
         bias = [0.0] * n if bias is None else list(bias)
@@ -211,12 +273,20 @@ class Device:
         data = struct.pack("<%de" % (m * k), *(v for row in a for v in row))
         data += struct.pack("<%de" % (k * n), *(v for row in b for v in row))
         data = data.ljust((len(data) + 3) & ~3, b"\0") + _fp32(bias)
+        if accumulator is not None:
+            accumulator = _matrix(accumulator, fp16=False)
+            if tiles_per_job != 2 or len(accumulator) != m or len(accumulator[0]) != n:
+                raise ValueError("accumulator must match a multi-tile output")
+            data += _fp32(v for row in accumulator for v in row)
+        params = (m, k, n, int(activation == "relu"))
+        if tiles_per_job == 2:
+            params += (int(accumulator is not None),)
         output = self.submit(
             self.builtin(hmx=True),
             data,
             output_size=m * n * 4,
-            opcode=1,
-            params=(m, k, n, int(activation == "relu")),
+            opcode=6 if tiles_per_job == 2 else 1,
+            params=params,
         ).output
         values = struct.unpack("<%df" % (m * n), output)
         return [list(values[i * n : (i + 1) * n]) for i in range(m)]
@@ -259,8 +329,16 @@ class Device:
         n = len(a[0])
         return [list(vals[i * n : (i + 1) * n]) for i in range(len(a))]
 
-    def matmul(self, a, b, *, bias=None, activation="none"):
-        """Schedule depth-32 HMX products and DSP FP32 accumulation as bounded jobs."""
+    def matmul(self, a, b, *, bias=None, activation="none", tiles_per_job=1):
+        """Multiply using bounded HMX jobs; direct mode can combine two depth tiles.
+
+        tiles_per_job=2 keeps FP32 accumulation on the DSP within each chunk
+        and carries that accumulator between chunks without separate add jobs.
+        """
+        if type(tiles_per_job) is not int or tiles_per_job not in (1, 2):
+            raise ValueError("tiles_per_job must be 1 or 2")
+        if tiles_per_job == 2 and self.dispatch != "direct":
+            raise ValueError("two-tile jobs require dispatch='direct' for the execution budget")
         a, b = _matrix(a), _matrix(b)
         m, k, n = len(a), len(a[0]), len(b[0])
         if k != len(b):
@@ -275,9 +353,21 @@ class Device:
         for mr in range(0, m, 32):
             for nc in range(0, n, 32):
                 acc = None
-                for kb in range(0, k, 32):
-                    aa = [row[kb : kb + 32] for row in a[mr : mr + 32]]
-                    bb = [row[nc : nc + 32] for row in b[kb : kb + 32]]
+                depth = 32 * tiles_per_job
+                for kb in range(0, k, depth):
+                    aa = [row[kb : kb + depth] for row in a[mr : mr + 32]]
+                    bb = [row[nc : nc + 32] for row in b[kb : kb + depth]]
+                    if tiles_per_job == 2:
+                        final = kb + depth >= k
+                        acc = self._matmul_tile(
+                            aa,
+                            bb,
+                            bias=bias[nc : nc + 32] if final else None,
+                            activation=activation if final else "none",
+                            tiles_per_job=2,
+                            accumulator=acc,
+                        )
+                        continue
                     partial = self._matmul_tile(
                         aa,
                         bb,
@@ -285,7 +375,7 @@ class Device:
                         activation=activation if k <= 32 else "none",
                     )
                     acc = partial if acc is None else self.add(acc, partial)
-                if k > 32:
+                if k > 32 and tiles_per_job == 1:
                     acc = self.add(acc, [bias[nc : nc + 32]], activation=activation)
                 for r, row in enumerate(acc):
                     out[mr + r][nc : nc + len(row)] = row

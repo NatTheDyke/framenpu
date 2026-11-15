@@ -61,6 +61,12 @@ def main(argv=None):
             "sdk/runtime.c",
             "sdk/link.ld",
             "sdk/include/framenpu.h",
+            "sdk/include/fnpu_readback.h",
+            "sdk/dispatch.S",
+            "sdk/dispatch.ld",
+            "sdk/dispatch_patch.c",
+            "data/dispatch.bin",
+            "data/dispatch_patch.bin",
             "data/runtime.bin",
             "data/runtime.json",
         ):

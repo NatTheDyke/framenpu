@@ -121,8 +121,8 @@ class Transport:
             self.put(self.profile.control + 8, 1)
             self.owned = False
 
-    def publish(self):
-        self.put(self.profile.callback, self.profile.dsp_base + self.profile.code)
+    def publish(self, *, direct=False):
+        self.put(self.profile.callback, self.profile.dsp_base + self.profile.code + int(direct))
         self.put(self.profile.control + 4, 1)
         self.sock.sendall(b"client_notification\0")
 
@@ -131,10 +131,15 @@ class Transport:
 
         def complete():
             done = all(self.get(p.status + i * 64) == seq for i in range(3))
-            if done and (self.get(p.control) != 3 or self.get(p.control + 8) != 4):
+            if not done:
+                return False
+            state = self.get(p.control)
+            if state not in (2, 3) or self.get(p.control + 8) != 4:
                 self.poisoned = True
                 raise RecoveryRequired("stock completion window expired after DSP completion")
-            return done and self.get(p.control) == 3
+            # Direct mode joins worker returns before the master publishes 3.
+            # Completion while the master still owns state 2 is not an expiry.
+            return state == 3
 
         if not self.wait(complete, timeout):
             self.poisoned = True

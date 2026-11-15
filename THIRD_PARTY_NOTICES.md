@@ -21,6 +21,7 @@ Referenced projects are not redistributed here.
 - [Valve SteamOS issue 2890](https://github.com/ValveSoftware/SteamOS/issues/2890)
 - [Published Hexagon bare-metal driver](https://github.com/evlaV/deckard-linux/blob/sm8650-7.2/drivers/soc/qcom/hexagon-baremetal.c)
 - [Qualcomm-authored HMX encodings in QEMU](https://github.com/qemu/qemu/tree/master/target/hexagon/imported/hmx)
+- [Qualcomm-authored HVX instruction semantics in QEMU](https://github.com/qemu/qemu/blob/master/target/hexagon/imported/mmvec/ext.idef)
 - [Investigated HMX tile/packing reference](https://github.com/haozixu/htp-ops-lib/blob/85eb88edcafd35afff1a43606a4c47eec9a0ca0b/src/dsp/ops/mat_mul.c)
 - [Linux Qualcomm PLL implementation](https://kernel.googlesource.com/pub/scm/linux/kernel/git/torvalds/linux/+/master/drivers/clk/qcom/clk-alpha-pll.c)
 - [ncnn model format](https://github.com/Tencent/ncnn/blob/master/docs/developer-guide/param-and-model-file-structure.md)

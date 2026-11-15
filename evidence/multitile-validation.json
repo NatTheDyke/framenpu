@@ -1,0 +1,176 @@
+{
+  "format": "framenpu-multitile-validation",
+  "version": 1,
+  "date": "2026-11-14",
+  "firmware_profile": "Steam Frame / SteamOS 0.5.8 / CDSP ABI 9 / Hexagon v75",
+  "runtime": {
+    "bytes": 3380,
+    "sha256": "6a7eaa2a42bb727f6bec3b4036a8d377edc0b77dfd936dea78c3e9245d690ef2"
+  },
+  "api": "Device(dispatch='direct').matmul(a, b, tiles_per_job=2)",
+  "execution_limit": {
+    "output_rows": 32,
+    "output_columns": 32,
+    "reduction_features": 64,
+    "depth_tiles": 2,
+    "host_timeout_ms": 40
+  },
+  "numerical_cases": [
+    {
+      "case": "multi_2x33x3",
+      "rows": 2,
+      "cols": 3,
+      "max_abs_error": 0
+    },
+    {
+      "case": "multi_32x64x32",
+      "rows": 32,
+      "cols": 32,
+      "max_abs_error": 0
+    },
+    {
+      "case": "multi_32x128x32",
+      "rows": 32,
+      "cols": 32,
+      "max_abs_error": 0
+    },
+    {
+      "case": "multi_31x63x33",
+      "rows": 31,
+      "cols": 33,
+      "max_abs_error": 0
+    },
+    {
+      "case": "multi_33x65x35",
+      "rows": 33,
+      "cols": 35,
+      "max_abs_error": 0
+    },
+    {
+      "case": "multi_1x256x1",
+      "rows": 1,
+      "cols": 1,
+      "max_abs_error": 0
+    },
+    {
+      "case": "sequential_rounding",
+      "rows": 1,
+      "cols": 1,
+      "max_abs_error": 0
+    },
+    {
+      "case": "fp32_seed_range",
+      "rows": 1,
+      "cols": 1,
+      "max_abs_error": 0
+    },
+    {
+      "case": "final_bias_relu",
+      "rows": 1,
+      "cols": 1,
+      "max_abs_error": 0
+    },
+    {
+      "case": "post_rejection_reuse",
+      "rows": 1,
+      "cols": 1,
+      "max_abs_error": 0
+    }
+  ],
+  "native_rejections": 6,
+  "restoration_audits": {
+    "restored_jobs": 34,
+    "restored_hmx_jobs": 30
+  },
+  "warm_measurements": [
+    {
+      "shape": [
+        32,
+        64,
+        32
+      ],
+      "tiles_per_job": 1,
+      "iterations": 100,
+      "wall_ms": {
+        "p50": 60.885812,
+        "p95": 67.573096,
+        "p99": 70.503621
+      },
+      "max_job_publish_ms": 15.488858000026084,
+      "submissions_per_matmul": 4,
+      "hmx_power_cycles_per_matmul": 2
+    },
+    {
+      "shape": [
+        32,
+        64,
+        32
+      ],
+      "tiles_per_job": 2,
+      "iterations": 100,
+      "wall_ms": {
+        "p50": 38.288478,
+        "p95": 46.862607,
+        "p99": 49.116685
+      },
+      "max_job_publish_ms": 26.01347500058182,
+      "submissions_per_matmul": 1,
+      "hmx_power_cycles_per_matmul": 1
+    }
+  ],
+  "final_worker_ssr": [
+    "0x81840200",
+    "0x89840200",
+    "0x91840200"
+  ],
+  "initial_health": {
+    "state": {
+      "abi": 9,
+      "control": [
+        1,
+        0,
+        1
+      ],
+      "callback": 0,
+      "poisoned": false
+    },
+    "firmware_code_prefix_bytes": 114688,
+    "firmware_code_prefix_sha256": "55679e13486357627ea22e494b25342acd9d24d73450f3f28eb1113b82c71b95",
+    "power_configuration_sha256": "2405bda200a51fd0bd699568e8415e53ba7b631cbaa9d4812c656b7240159bbd",
+    "power_restored": true
+  },
+  "final_health": {
+    "state": {
+      "abi": 9,
+      "control": [
+        1,
+        0,
+        1
+      ],
+      "callback": 0,
+      "poisoned": false
+    },
+    "firmware_code_prefix_bytes": 114688,
+    "firmware_code_prefix_sha256": "55679e13486357627ea22e494b25342acd9d24d73450f3f28eb1113b82c71b95",
+    "power_configuration_sha256": "2405bda200a51fd0bd699568e8415e53ba7b631cbaa9d4812c656b7240159bbd",
+    "power_restored": true
+  },
+  "service_pid_unchanged": true,
+  "service_restarts": 0,
+  "offline_tests": 49,
+  "single_tile_regression": "Both backends passed five padded/tiled GEMMs and the saved XOR model with the new payload; 78 restoration audits, 39 HMX jobs",
+  "limitations": [
+    "Two depth tiles per job only; output rows/columns remain host-tiled in blocks of 32",
+    "The default is one tile per job; multi-tile mode requires direct dispatch",
+    "FP16 depth-32 products are accumulated in FP32 in the original reduction order",
+    "FP32 seeds cross the host between chunks; this does not establish persistent model storage",
+    "Packing and copy kernels are unchanged; no HVX optimization is included",
+    "Full-call timing includes Python serialization, uploads, HMX power and cleanup",
+    "The 40 ms timeout applies to publication through completion, not full-call wall time",
+    "No sustained tracking-coexistence, accuracy or thermal qualification"
+  ],
+  "evidence_ids": {
+    "qualification": "ev_7f7c8092e358972ba78b35b447d3f1d201da026afa49c9e31022fb1d6271f5f3",
+    "single_tile_regression": "ev_575677799c71e071cd79c24c291d6817b51ab62cc23a300890aa8badc8fadb75"
+  }
+}
