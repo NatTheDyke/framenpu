@@ -1,5 +1,11 @@
 # Correct single-owner GEMM baseline
 
+This is the historical **uncached-code** baseline. The subsequent
+[cached-code comparison](HMX_CACHE.md) identifies instruction fetch as the old
+loop's dominant cost and measures a much faster, fully checked resident loop
+without changing clock configuration. The rates below remain valid for this
+specific baseline; they are not the hardware's demonstrated ceiling.
+
 The verified resident load slope is **7.41–7.44 GMAC/s** with worker 0 as the
 only HMX owner. All outputs matched over 400 measured jobs and 16 excluded
 warmups. This replaces unchecked issue estimates with a numerically checked
@@ -161,7 +167,7 @@ kernel checks a 20 ms local budget after each completed transaction. The stock
 40 ms timeout remains unchanged. Any failure stops without recovery.
 
 The baseline establishes a correct resident primitive at about 7.4 GMAC/s.
-The next investigation should compare the shipped firmware's HMX scheduling
-and actual clock configuration against this loop. Packing/conversion and
-fresh-session overhead are separate optimization opportunities; reducing them
-does not by itself raise the resident HMX load ceiling.
+The next investigation was the [cached-code comparison](HMX_CACHE.md), which
+resolved the loop's instruction-fetch bottleneck at unchanged clock settings.
+Resident code/tensor ownership, distinct operand staging and fresh-session
+overhead are now the next implementation priorities.

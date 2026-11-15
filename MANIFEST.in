@@ -18,6 +18,8 @@ include evidence/readback-validation.json
 include evidence/hmx-multi-validation.json
 include evidence/hmx-accumulator-validation.json
 include evidence/hmx-baseline-validation.json
+include evidence/hmx-cache-validation.json
+include evidence/hmx-batch2-validation.json
 global-exclude *.pyc
 include .gitignore .gitattributes
 recursive-include .github *.yml

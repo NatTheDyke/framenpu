@@ -214,6 +214,11 @@ def main(argv=None):
                     )
                     if health(power, initial_power) != report["initial_health"]:
                         raise ValueError("session restoration differs from initial health")
+                    configuration = sample["powered_configuration"]
+                    if "powered_configuration" not in report:
+                        report["powered_configuration"] = configuration
+                    elif configuration != report["powered_configuration"]:
+                        raise ValueError("powered clock configuration changed during comparison")
                     sample.update(
                         matrix_case=matrix_case,
                         case=f"{matrix_case}/{MODES[mode]}",

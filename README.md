@@ -200,7 +200,7 @@ sudo .venv/bin/python tests/hardware_smoke.py --run-on-device
 ~~~
 
 Configured CI covers Python 3.11–3.14. [Validation notes](docs/VALIDATION.md)
-record 74 passing offline tests and distinguish local results from the
+record 81 passing offline tests and distinguish local results from the
 configured CI matrix.
 
 ## Hand tracking and contributions
@@ -217,14 +217,21 @@ transaction under one HMX owner; use HVX workers for other work.
 
 The [correct resident GEMM baseline](docs/HMX_BASELINE.md) matched every output
 across 400 measured jobs and 16 warmups, with a 7.41–7.44 GMAC/s load slope.
-This synthetic within-job result falls below the approximately 13.9 GMAC/s
-pointwise workload target. The next investigation is single-owner instruction
-fetch/load scheduling and verified clock configuration, followed by persistent
-tensor/weight ownership, real convolution and HVX depthwise kernels, and a
-validated ncnn converter. Cached-code and batched-load probes are prepared
-experiments without checked-in hardware results; see
-[HMX_THROUGHPUT.md](docs/HMX_THROUGHPUT.md) and
-[HAND_TRACKING.md](docs/HAND_TRACKING.md).
+That uncached loop was limited by instruction fetch. A subsequent
+[cached-code comparison](docs/HMX_CACHE.md), at unchanged clock configuration,
+passed 800 measured jobs and 32 warmups with exact outputs. For four deep
+resident transactions, HMX p50 fell from 9.51 ms to 56.25 us; the fitted cached
+load slope is 1,264–1,269 GMAC/s. A separate
+[two-block-load diagnostic](docs/HMX_BATCHING.md) passed another 800 measured
+jobs and 32 warmups, with about 2.52x improvement in its uncached loop.
+
+These remain experimental fixtures; the public runtime is unchanged. They
+reuse blocks within a job and do not establish full-model throughput. Cached
+publication/cleanup costs roughly 1.5 ms per job, and fresh sessions still take
+about 33 ms. Next are resident code/tensor/weight ownership, real convolution
+and HVX depthwise kernels, then a validated ncnn converter. See
+[HAND_TRACKING.md](docs/HAND_TRACKING.md) for the roadmap and
+[HMX_THROUGHPUT.md](docs/HMX_THROUGHPUT.md) for research context.
 
 [CONTRIBUTING.md](CONTRIBUTING.md) explains development and kernel changes.
 The project is [MIT-licensed](LICENSE); see

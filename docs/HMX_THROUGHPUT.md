@@ -16,6 +16,11 @@ workers, and each complete clear/load/store transaction must be serialized.
 The subsequent [correct single-owner baseline](HMX_BASELINE.md) measures a
 7.41–7.44 GMAC/s resident load slope with full-output verification and separate
 packing, transfer, conversion and host-session timings.
+The later [cached-code comparison](HMX_CACHE.md) identifies uncached instruction
+fetch as that loop's bottleneck; its fitted resident slope is 1,264–1,269 GMAC/s
+at unchanged clock configuration. A separate [load-batching comparison](HMX_BATCHING.md)
+qualifies about 2.52x improvement in an uncached diagnostic. Both preserve one
+HMX owner and are synthetic within-job results, not model throughput.
 
 ## Previous measurements
 
@@ -138,42 +143,55 @@ Use one HMX owner for complete transactions and investigate HVX overlap for
 packing, depthwise and elementwise work. The persistent DDR arena is documented
 in [MEMMAP.md](MEMMAP.md).
 
-## Prepared diagnostics: hardware results pending
+## Instruction-fetch and load-batching qualification
 
-Two additional fixtures build against the stock worker-0 entry, use the existing
-8 KiB saved/restored VTCM span and leave clock/power policy unchanged. They have
-offline checks and reproducible builds, but no checked-in hardware measurements.
-They do not extend the validated baseline's throughput claim.
+Two additional fixtures use worker 0 and the existing 8 KiB saved/restored VTCM
+span, and leave clock/power policy unchanged. Each passes 800 measured jobs and
+32 checked, excluded warmups on 2026-11-15. Read their separate measurement
+notes and evidence before comparing rates.
 
 - [hmx_cached.c](../tests/hmx_cached.c) and
   [its runner](../tests/hmx_cached_run.py) compare the uncached code alias with
   a cached alias while retaining the baseline's math and full-output checks.
   The wrapper PC records the selected alias; disassembly must also establish
-  that hot helpers use PC-relative calls. The uncached outer wrapper publishes
-  and invalidates cached code inside the SDK guarded window. A fault can bypass
-  its C cleanup, so cache publication and fault handling require qualification
-  before this protocol can enter the public SDK. The runner defaults to the
-  uncached control.
+  that hot helpers use PC-relative calls. Build with the experimental
+  [entry_cached.S](../tests/entry_cached.S), derived from the stock entry. It
+  cleans and invalidates cached code at the uncached recovery label on both
+  normal return and guarded synchronous faults. Worker-0 status words 14/15
+  record cleanup armed/completed; the host checks them before restoring DDR or
+  powering down HMX. Missing confirmation retains resources and requires
+  recovery. The former C-only cleanup could be bypassed by a fault and has been
+  replaced. Three explicitly selected guarded trap checks
+  (`--verify-fault-cleanup`) pass after correcting SP/FP restoration in the
+  experimental entry. It does not recover stalls or faults in cleanup itself.
+  The public SDK is unchanged. The runner defaults to the uncached control.
+  See [HMX_CACHE.md](HMX_CACHE.md) and its
+  [evidence](../evidence/hmx-cache-validation.json).
 - [hmx_batch2.c](../tests/hmx_batch2.c) and
   [its runner](../tests/hmx_batch2_run.py) compare two ordinary load pairs with
   one two-block load packet. To fit the existing scratch span, activation and
   weight bases deliberately alias: each transaction computes
   `groups * (A0 @ A0 + A1 @ A1)`. Both blocks have distinct deterministic values;
   every returned FP16 tile and final FP32 conversion are checked. This is an
-  instruction-batching diagnostic; a gain would still require validation with
-  distinct activation and weight storage. The runner defaults to the ordinary
-  load control.
+  instruction-batching diagnostic; its measured gain still requires validation
+  with distinct activation and weight storage under cached execution. It uses
+  the corrected experimental entry with cache cleanup skipped. The runner
+  defaults to the ordinary load control. See [HMX_BATCHING.md](HMX_BATCHING.md)
+  and its [evidence](../evidence/hmx-batch2-validation.json).
 
 Offline builds:
 
 ~~~sh
-python3 tools/build_kernels.py --source tests/hmx_cached.c \
-    --output build/hmx_cached.fjob --hmx
-python3 tools/build_kernels.py --source tests/hmx_batch2.c \
-    --output build/hmx_batch2.fjob --hmx
+python3 handoff-tools/build_mw.py tests/entry_cached.S tests/hmx_cached.c \
+    build/hmx_cached.fjob build/hmx_cached
+python3 handoff-tools/build_mw.py tests/entry_cached.S tests/hmx_batch2.c \
+    build/hmx_batch2.fjob build/hmx_batch2
 ~~~
 
 Both runners require root and explicit `--run-on-device`, verify all outputs
 and post-session restoration, and stop at the first failure without recovery.
 Start with bounded controls, review the results, and then explicitly select the
 experimental mode. Hold the clock configuration constant when comparing modes.
+Both runners stop if the recorded powered PLL/clock configuration changes.
+Cached-code results from the older stock-entry fixture are incompatible with
+the revised runner's required cleanup markers.

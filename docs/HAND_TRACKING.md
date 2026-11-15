@@ -1,12 +1,13 @@
 # Custom hand tracking on Frame: next milestones
 
-Assessment: 2026-11-14, against FrameNPU 0.1.0 and the pinned FrameTop v20a
+Assessment: 2026-11-15, against FrameNPU 0.1.0 and the pinned FrameTop v20a
 landmark graph described below. Bounded [two-depth-tile execution](MULTITILE.md)
 now passes numerical, timing and restoration checks, as do
 [HVX packing for full aligned tiles](HVX.md) and [HVX output conversion](READBACK.md).
-The next priority is the single-owner HMX throughput investigation, followed by
-owned model memory and a real convolution checked against ncnn. A persistent
-DDR region is verified, but its allocator and executor remain unimplemented.
+The [cached-code investigation](HMX_CACHE.md) identifies uncached instruction
+fetch as the earlier resident loop's bottleneck. The next priority is owned
+resident code/model memory and a real convolution checked against ncnn. A
+persistent DDR region is verified, but its allocator and executor remain unimplemented.
 Full landmark inference and its sustained frame rate
 remain unverified. An opt-in [direct dispatcher](DISPATCH.md) now passes CPU/DSP
 and HMX device tests with a worker join and reversible installation. Median
@@ -247,11 +248,21 @@ aggregate issue estimates are not independent correct-GEMM throughput.
 
 The [correct single-owner baseline](HMX_BASELINE.md) measures a resident load
 slope of 7.41–7.44 GMAC/s, below the approximately 13.9 GMAC/s pointwise target.
-Compare the firmware's HMX loop and verified clock configuration before
-committing to the complete executor. Prepared cached-code and two-block-load
-diagnostics are described in [HMX_THROUGHPUT.md](HMX_THROUGHPUT.md); they have no
-checked-in hardware results. Packing, conversion and session overhead
-are separate measured costs and cannot alone explain the resident HMX gap.
+The subsequent [cached-code comparison](HMX_CACHE.md) resolves this synthetic
+loop bottleneck: 800 measured jobs and 32 warmups pass exactly at the same clock
+configuration, with a fitted 1,264–1,269 GMAC/s resident slope. This establishes
+that the old loop was limited by instruction fetch; it does not qualify a
+distinct-weight model. A separate [two-block-load comparison](HMX_BATCHING.md)
+passes another 800 measured jobs and 32 warmups, with about 2.52x improvement
+in its uncached diagnostic. Preserve the distinction between the two results.
+
+Build a minimal resident executor next. Amortize cached publication/cleanup
+(roughly 1.5 ms per job) and fresh-session overhead (about 33 ms even for the
+cached diagnostic), while preserving bounded ownership and cache publication.
+The experimental entry also fixes nested-C-frame fault unwinding; carry that
+fix into the public SDK with its own payload rebuild and qualification before
+production use. Plan allocations/liveness, then validate distinct operand
+staging and a real convolution against ncnn before completing the graph.
 
 The benchmark-free dispatcher, two-depth-tile GEMM jobs, full-tile HVX packing
 and HVX output unpacking/conversion now have numerical and restoration validation.

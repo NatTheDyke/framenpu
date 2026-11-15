@@ -161,10 +161,44 @@ the public runtime, dispatch, power policy or memory reservations.
 
 The reviewed source hashes match all three research evidence files. Rebuilt
 multi-worker, accumulator and baseline payloads match their measured code hashes.
-The [cached-code and batched-load diagnostics](HMX_THROUGHPUT.md#prepared-diagnostics-hardware-results-pending)
-are explicitly experimental and have no checked-in hardware results. Offline
+The cached-code and batched-load diagnostics were still awaiting hardware
+results at that checkpoint; the subsequent qualification is below. Offline
 tests cover numerical references, report validation, timing units, opt-in
 boundaries and failure behavior; those tests are not device qualification.
+
+## Cached-code and load-batching qualification — 2026-11-15
+
+The [cached-code comparison](HMX_CACHE.md) passes 800 measured jobs and
+32 checked/excluded warmups. Every output matches exactly. Powered clock
+configuration is identical in both modes. The fitted resident load slope is
+1,264–1,269 GMAC/s cached versus 7.076–7.077 GMAC/s uncached. Signed-dense
+D=512/R=4 HMX p50 falls from 9,511.146 to 56.250 us, while fresh-session p50
+remains 32.921 ms. Cached publication/cleanup costs roughly 1.5 ms per job.
+These synthetic resident-block results identify the old loop's instruction
+fetch bottleneck; they do not establish distinct-weight model throughput.
+See [the sanitized evidence](../evidence/hmx-cache-validation.json).
+
+The experimental entry cleans cached code on normal and guarded-fault return,
+and the host checks confirmation before memory/power reclamation. Deliberate
+traps exposed a missing FP restoration when abandoning nested C frames. The
+experimental entry fixes it; three final traps return exception code 2, pass
+DDR/power restoration audits, and are followed by correct GEMMs. Earlier fault
+diagnostics are excluded from timing qualification. The public SDK/runtime
+remain unchanged and need separate qualification of that unwind fix.
+
+The [load-batching comparison](HMX_BATCHING.md) passes another 800 measured
+jobs and 32 warmups using the corrected entry, with uncached code in both
+modes. The fitted resident slopes are 4.933–4.939 GMAC/s for the diagnostic
+control and 12.461–12.469 GMAC/s for batch2. Maximum-depth HMX p50 improves by
+about 2.52x. Activation and weight storage deliberately alias, and the control
+includes diagnostic helper overhead; this is separate from the cached-code
+fast path. See [the sanitized evidence](../evidence/hmx-batch2-validation.json).
+
+Across both measured suites, 6,553,600 FP16 and 1,638,400 FP32 values match
+exactly. All sessions restore state, with zero service restarts. Maximum
+worker spans are 10.323 ms and 14.335 ms, respectively, within the unchanged
+40 ms host limit. Sustained tracking, thermals and full-model accuracy remain
+unqualified.
 
 ## Publication audit
 
@@ -174,7 +208,12 @@ machine paths, credentials and proprietary firmware are excluded from the
 public source; the numerical summary is intentionally sanitized.
 
 The initial publication suite passed 29 offline tests; the current suite passes
-74. Local verification uses Python 3.14.9 and LLVM 23.1.4. The GitHub Actions
+81. Seven cache-diagnostic tests additionally cover alias identity, every output,
+cleanup confirmation before resource reclamation, confirmed-fault restoration,
+clock drift and timeout behavior. These host tests do not establish that the
+experimental DSP cache cleanup works on hardware.
+
+Local verification uses Python 3.14.9 and LLVM 23.1.4. The GitHub Actions
 matrix is configured for Python 3.11–3.14; this local run does not establish
 results for every configured version. Offline power tests use an emulator,
 not live fault injection.

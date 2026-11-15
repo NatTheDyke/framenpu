@@ -67,3 +67,11 @@ Partial firmware edits are checked before helper acknowledgment.
 A production backend still needs persistent model arenas, explicit tensor/power
 ownership and cooperative cancellation. This release exposes a version-pinned
 research interface.
+
+The [cached-code fault experiment](HMX_CACHE.md#publication-cleanup-and-fault-return)
+also exposed a nested-C-frame unwind limitation in the original public entry:
+it restores SP but not FP before `deallocframe`. The experimental entry restores
+both and passes guarded trap/restoration checks. Public payloads are unchanged;
+their nested-frame exception recovery needs a separate rebuild/qualification.
+Captured native exceptions must not be taken as proof of safe public-session
+reuse under this limitation.

@@ -2,9 +2,18 @@
 
 ## Unreleased
 
-- Checkpointed portable HMX research fixtures, runners and sanitized evidence.
-  Cached-code and two-block-load diagnostics are included as experiments with
-  offline checks only; no hardware performance result is claimed for them.
+- Qualified cached-code HMX execution at unchanged clock configuration:
+  800 measured jobs and 32 warmups match exactly. Deep resident HMX p50 falls
+  from 9.51 ms to 56.25 us; fitted load slopes are 1,264–1,269 GMAC/s. Fresh
+  sessions still take about 33 ms; this is not full-model throughput.
+- Qualified two-block loads in a separate uncached diagnostic: another
+  800 measured jobs and 32 warmups pass, with about 2.52x deep-loop improvement.
+  Activation/weight storage aliases; distinct-weight model execution is pending.
+- Experimental entry cleans cached code on normal and guarded-fault return,
+  with confirmation checked before host reclamation. Fixed its nested-C-frame
+  unwind by restoring FP as well as SP; three audited cached traps pass.
+  Public SDK/runtime are unchanged. Added portable fixtures, sanitized evidence
+  and clock-drift checks; public nested-frame fault recovery needs follow-up.
 - Documented the verified 5.87 MiB persistent DDR region. Resident allocation
   and graph execution remain future work. Publication checks exclude local
   handoff/recovery files and scan the portable multi-worker builder in source
