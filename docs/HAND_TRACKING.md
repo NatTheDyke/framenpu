@@ -4,9 +4,10 @@ Assessment: 2026-11-14, against FrameNPU 0.1.0 and the pinned FrameTop v20a
 landmark graph described below. Bounded [two-depth-tile execution](MULTITILE.md)
 now passes numerical, timing and restoration checks, as do
 [HVX packing for full aligned tiles](HVX.md) and [HVX output conversion](READBACK.md).
-The next priorities are owned
-model memory, followed by a real convolution
-checked against ncnn. Full landmark inference and its sustained frame rate
+The next priority is the single-owner HMX throughput investigation, followed by
+owned model memory and a real convolution checked against ncnn. A persistent
+DDR region is verified, but its allocator and executor remain unimplemented.
+Full landmark inference and its sustained frame rate
 remain unverified. An opt-in [direct dispatcher](DISPATCH.md) now passes CPU/DSP
 and HMX device tests with a worker join and reversible installation. Median
 warm empty submission fell from 4.29 ms to 0.73 ms; complete 32x32 HMX GEMM
@@ -235,6 +236,22 @@ workload. Real-time acceptance requires measurements on the intended firmware
 and power setting.
 
 ## Next implementation deliverable
+
+The persistent DDR region is now mapped and canary-checked; see
+[MEMMAP.md](MEMMAP.md). The [HMX accumulator test](HMX_ACCUMULATOR.md) shows that
+the recovered primitives share state across workers: full serialized
+transactions pass, while deferred stores and concurrent transactions lose
+isolation. Use one HMX owner for complete clear/load/store transactions, with
+HVX workers for packing, depthwise and elementwise work. The earlier unchecked
+aggregate issue estimates are not independent correct-GEMM throughput.
+
+The [correct single-owner baseline](HMX_BASELINE.md) measures a resident load
+slope of 7.41–7.44 GMAC/s, below the approximately 13.9 GMAC/s pointwise target.
+Compare the firmware's HMX loop and verified clock configuration before
+committing to the complete executor. Prepared cached-code and two-block-load
+diagnostics are described in [HMX_THROUGHPUT.md](HMX_THROUGHPUT.md); they have no
+checked-in hardware results. Packing, conversion and session overhead
+are separate measured costs and cannot alone explain the resident HMX gap.
 
 The benchmark-free dispatcher, two-depth-tile GEMM jobs, full-tile HVX packing
 and HVX output unpacking/conversion now have numerical and restoration validation.

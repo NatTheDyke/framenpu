@@ -133,6 +133,39 @@ The backend now schedules bounded depth/output-32 HMX jobs and separate DSP
 accumulation with a 40 ms host timeout and expired-lease detection. This does
 not provide hard-real-time or cross-client isolation. See [ABI.md](ABI.md).
 
+## HMX research checkpoint — 2026-11-15
+
+The following hardware findings were measured on 2026-11-14. Checkpoint review
+and offline reproduction on 2026-11-15 did not run new device jobs or change
+the public runtime, dispatch, power policy or memory reservations.
+
+- The [multi-worker probe](HMX_THROUGHPUT.md) returned with one, two and three
+  active workers, but concurrent sentinels differ. Its aggregate issue estimates
+  do not establish independent correct GEMMs or model throughput. See the
+  [sanitized evidence](../evidence/hmx-multi-validation.json).
+- The [accumulator isolation suite](HMX_ACCUMULATOR.md) checked complete output
+  tiles at M=1 and M=32 across all worker pairs and all three workers. All six
+  isolated and eight serialized controls passed; all 24 deferred-store and
+  24 concurrent cases failed numerical isolation. The recovered primitives
+  require one owner for each complete clear/load/store transaction. All sessions
+  restored state without a service restart. See the
+  [sanitized evidence](../evidence/hmx-accumulator-validation.json).
+- The [correct single-owner baseline](HMX_BASELINE.md) passed 400 measured jobs,
+  16 excluded warmups and eight pilot jobs. Every measured FP16 output tile and
+  final FP32 conversion matched exactly: 1,638,400 FP16 and 409,600 FP32 values.
+  Resident load slopes were 7.41–7.44 GMAC/s. Phase timings separate HMX work
+  from packing, transfers, conversion and fresh-session overhead. This reuses
+  identical blocks within one job; it does not establish cross-job residency or
+  distinct-weight model throughput. See the
+  [sanitized evidence](../evidence/hmx-baseline-validation.json).
+
+The reviewed source hashes match all three research evidence files. Rebuilt
+multi-worker, accumulator and baseline payloads match their measured code hashes.
+The [cached-code and batched-load diagnostics](HMX_THROUGHPUT.md#prepared-diagnostics-hardware-results-pending)
+are explicitly experimental and have no checked-in hardware results. Offline
+tests cover numerical references, report validation, timing units, opt-in
+boundaries and failure behavior; those tests are not device qualification.
+
 ## Publication audit
 
 The repository provides an MIT license, self-contained examples, SDK/compiler
@@ -141,9 +174,10 @@ machine paths, credentials and proprietary firmware are excluded from the
 public source; the numerical summary is intentionally sanitized.
 
 The initial publication suite passed 29 offline tests; the current suite passes
-49. Local verification uses Python 3.14.9 and LLVM 23.1.4. The GitHub Actions
-matrix is configured for Python 3.11–3.14; it has not run on GitHub before upload.
-Offline power tests use an emulator, not live fault injection.
+74. Local verification uses Python 3.14.9 and LLVM 23.1.4. The GitHub Actions
+matrix is configured for Python 3.11–3.14; this local run does not establish
+results for every configured version. Offline power tests use an emulator,
+not live fault injection.
 
 The release checks verify a clean exported source tree, wheel/sdist metadata,
 an isolated wheel installation, CLI/model inspection and SDK resources.

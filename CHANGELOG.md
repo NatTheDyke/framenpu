@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- Checkpointed portable HMX research fixtures, runners and sanitized evidence.
+  Cached-code and two-block-load diagnostics are included as experiments with
+  offline checks only; no hardware performance result is claimed for them.
+- Documented the verified 5.87 MiB persistent DDR region. Resident allocation
+  and graph execution remain future work. Publication checks exclude local
+  handoff/recovery files and scan the portable multi-worker builder in source
+  archives.
+- Numerically checked single-owner resident GEMM baseline: all output tiles
+  match across 400 measured jobs and 16 warmups, with a 7.41–7.44 GMAC/s load
+  slope. Added separate HMX, packing, copy, conversion and host-phase timings,
+  repeated latency quantiles, reproducible fixtures and sanitized evidence.
+- Full-tile accumulator isolation tests across workers 0/1/2: all isolated and
+  serialized controls pass; deferred stores and concurrent transactions expose
+  shared HMX state. The recovered clear/load/store sequence must stay under one
+  owner for the complete transaction. Added bounded synchronization, phase
+  timing, exact per-worker references and sanitized hardware evidence.
 - HVX output unpacking and exact FP16-to-FP32 bit conversion for every supported
   GEMM output tile, retaining scalar FP32 accumulation order. The 128-byte row
   buffer stays inside existing VTCM scratch; the runtime is 3,672 bytes.

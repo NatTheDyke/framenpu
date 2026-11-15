@@ -25,3 +25,8 @@ evidence/raw/
 *.pem
 *.key
 .DS_Store
+
+# Local continuation notes and device-specific recovery helpers.
+/HANDOFF.md
+/handoff-tools/*
+!/handoff-tools/build_mw.py

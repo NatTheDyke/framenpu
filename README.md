@@ -200,15 +200,31 @@ sudo .venv/bin/python tests/hardware_smoke.py --run-on-device
 ~~~
 
 Configured CI covers Python 3.11–3.14. [Validation notes](docs/VALIDATION.md)
-distinguish actual test results from configured future CI runs.
+record 74 passing offline tests and distinguish local results from the
+configured CI matrix.
 
 ## Hand tracking and contributions
 
 The full FrameTop v20a graph is not implemented. Use inspect-ncnn with your
 own hand.ncnn.param file to inventory it. Bounded two-depth-tile jobs are
-implemented with validated HVX input packing and output conversion. Next are persistent
-tensor/weight ownership, convolution and HVX depthwise kernels, then a validated
-ncnn converter. See [HAND_TRACKING.md](docs/HAND_TRACKING.md).
+implemented with validated HVX input packing and output conversion.
+
+A [5.87 MiB persistent DDR region](docs/MEMMAP.md) is mapped and canary-checked;
+resident tensor allocation and graph execution remain unimplemented. The
+[accumulator isolation tests](docs/HMX_ACCUMULATOR.md) show shared HMX state
+across workers with the recovered primitives. Keep each complete clear/load/store
+transaction under one HMX owner; use HVX workers for other work.
+
+The [correct resident GEMM baseline](docs/HMX_BASELINE.md) matched every output
+across 400 measured jobs and 16 warmups, with a 7.41–7.44 GMAC/s load slope.
+This synthetic within-job result falls below the approximately 13.9 GMAC/s
+pointwise workload target. The next investigation is single-owner instruction
+fetch/load scheduling and verified clock configuration, followed by persistent
+tensor/weight ownership, real convolution and HVX depthwise kernels, and a
+validated ncnn converter. Cached-code and batched-load probes are prepared
+experiments without checked-in hardware results; see
+[HMX_THROUGHPUT.md](docs/HMX_THROUGHPUT.md) and
+[HAND_TRACKING.md](docs/HAND_TRACKING.md).
 
 [CONTRIBUTING.md](CONTRIBUTING.md) explains development and kernel changes.
 The project is [MIT-licensed](LICENSE); see

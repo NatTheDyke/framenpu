@@ -11,7 +11,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from framenpu import Job, Model, __version__
 from framenpu.provenance import verify_kernel
 
-PUBLIC_DIRS = ("src", "docs", "tools", "tests", "examples", "evidence", ".github")
+PUBLIC_DIRS = ("src", "docs", "tools", "tests", "examples", "evidence", ".github", "handoff-tools")
 IGNORED_PARTS = {"__pycache__", ".ruff_cache", ".pytest_cache", "build", "dist"}
 BINARY_FILES = {
     "src/framenpu/data/runtime.bin",
@@ -68,6 +68,10 @@ def check(root=ROOT):
     files = public_files(root)
     for path in files:
         name = path.relative_to(root).as_posix()
+        if name == "HANDOFF.md" or (
+            name.startswith("handoff-tools/") and name != "handoff-tools/build_mw.py"
+        ):
+            raise ValueError(f"local handoff/recovery helper must not be published: {name}")
         if path.suffix in (".mbn", ".dtb", ".img", ".elf", ".o", ".pcap", ".pcapng"):
             raise ValueError(f"research/firmware artifact must not be published: {name}")
         raw = path.read_bytes()

@@ -13,7 +13,6 @@ observed on readback. Run as steamos.
 import argparse
 import json
 from pathlib import Path
-import struct
 import sys
 import time
 

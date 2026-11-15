@@ -14,9 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 from framenpu import Device, Job
 
-REGISTERS = (
-    "ssr evb cfgbase rev syscfg sp ccr htid stid modectl gp ugp".split()
-)
+REGISTERS = "ssr evb cfgbase rev syscfg sp ccr htid stid modectl gp ugp".split()
 
 
 def decode(index, raw):
