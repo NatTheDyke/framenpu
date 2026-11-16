@@ -50,7 +50,7 @@ fnpu_u32 frame_job(const fnpu_context *c) {
         RG_STATE[28]++;
     } else if(op==4) {
         if(RG_STATE[0]!=3||RG_STATE[19]||RG_STATE[20]||off!=RG_ACT+RG_STATE[27]||
-           !len||len>32768||len>602112-RG_STATE[27]) return rg_finish(c,FNPU_BAD_ARGUMENT);
+           !len||len>RG_INPUT_CHUNK||len>602112-RG_STATE[27]) return rg_finish(c,FNPU_BAD_ARGUMENT);
         rg_accept(c);RG_STATE[27]+=len;
 #ifdef RG_LOADER
     } else if(op==7||op==8) {

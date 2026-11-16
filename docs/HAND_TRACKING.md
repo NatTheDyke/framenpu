@@ -220,9 +220,9 @@ The subsequent [resident cache entry](RESIDENT_CACHE.md) adds opt-in cached
 instructions with checked normal/fault cleanup. Data stays uncached and all
 existing resource, ownership and timeout limits remain in force.
 [Linked operators](RESIDENT_LINK.md) now run from one image in owned DDR with
-cross-layer requests: 1,532–1,567 requests and 48.8–51.4 seconds per frame at
-a 20 ms budget. Depthwise native time (26.4 of 30.8 seconds) is the remaining
-bound on request count.
+cross-layer requests and VTCM working copies: 52 requests and 1.66–1.69
+seconds per frame at a 20 ms budget, .99 seconds of it native. Per-request
+HMX power start and close on the host is the largest remaining cost.
 
 Add direct HVX depthwise kernels for 3x3 and 5x5, including stride 2 and
 asymmetric padding. Add max/global-average pooling, residual add, fused clip,

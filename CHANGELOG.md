@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Linked resident operators now read resident state, layer records and staged
+  tensor rows from saved VTCM instead of word-by-word or unaligned from
+  uncached DDR, keep no HVX register on the stack in per-unit paths, and take
+  the input in one request. A frame falls from 1,532–1,533 requests and
+  48.8–49.0 seconds to 52 requests and 1.66–1.69 seconds at the same 20 ms
+  budget; native time falls from 30.8 to .99 seconds. Four crops keep
+  bit-identical heads under the frozen policy across 1,494 main restoration
+  audits; guarded faults, rejections and the uncached-alias control pass. The
+  eleven-module build is byte-identical. Added a memory-access cost probe and
+  its build tool.
 - Linked the ten resident compute operators into one position-independent
   image in owned DDR, entered from a small slot loader, with requests that
   cross phase and layer boundaries up to a host tick budget or stop point.

@@ -23,8 +23,18 @@ static __attribute__((noinline)) HVX_Vector half_words(HVX_Vector bits) {
     h=Q6_V_vmux_QVV(Q6_Q_vcmp_gt_VuwVuw(mag,Q6_V_vsplat_R(0x7f800000)),nan,h);
     return Q6_V_vor_VV(h,Q6_V_vand_VV(Q6_Vuw_vlsr_VuwR(bits,16),Q6_V_vsplat_R(0x8000)));
 }
+#ifdef RG_LINKED
+/* Same two conversions; the operands wait in VTCM instead of on the stack. */
+static HVX_Vector half_pair(HVX_Vector low,HVX_Vector high) {
+    RG_PARK[0]=high;
+    RG_PARK[1]=half_words(low);
+    HVX_Vector b=half_words(RG_PARK[0]);
+    return Q6_V_vor_VV(RG_PARK[1],Q6_Vw_vasl_VwR(b,16));
+}
+#else
 static HVX_Vector half_pair(HVX_Vector low,HVX_Vector high) {
     HVX_Vector a=half_words(low),b=half_words(high);
     return Q6_V_vor_VV(a,Q6_Vw_vasl_VwR(b,16));
 }
+#endif
 #endif

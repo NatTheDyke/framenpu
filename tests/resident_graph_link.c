@@ -47,6 +47,7 @@ fnpu_u32 rg_batch(const fnpu_context *c) __attribute__((section(".text.rg_entry"
 #undef frame_job
 #undef gather
 fnpu_u32 rg_batch(const fnpu_context *c) {
+    rg_open();
     if(!rg_header(c,RG_BATCH_KIND)) return rg_finish(c,FNPU_BAD_ARGUMENT);
     const volatile fnpu_u32 *d=fnpu_input(c);
     if(d[2]!=5||RG_STATE[0]!=3||RG_STATE[27]!=602112||RG_STATE[19]>=63||RG_STATE[31]!=RG_SEAL||
@@ -56,7 +57,7 @@ fnpu_u32 rg_batch(const fnpu_context *c) {
     if(d[20]!=(kind==8||kind==9||kind==10?RG_STATE[18]:RG_STATE[20])) return rg_finish(c,FNPU_BAD_ARGUMENT);
     fnpu_u32 stop_layer=d[24],stop_phase=d[25];
     rg_begin(c);
-    RG_BATCH_BUDGET=d[23];RG_BATCH_UNITS=d[19];RG_BATCH_START=rg_ticks();
+    RG_BATCH_BUDGET=d[23];RG_BATCH_UNITS=d[19];RG_BATCH_FAULT=d[30];RG_BATCH_START=rg_ticks();
     for(;;) {
         fnpu_u32 result;
         kind=rg_kind();

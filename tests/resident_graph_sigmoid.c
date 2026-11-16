@@ -19,7 +19,7 @@ static float sigmoid(float x) {
 }
 fnpu_u32 frame_job(const fnpu_context *c) {
     if(!rg_run(c,6)) return RG_RETURN(c,FNPU_BAD_ARGUMENT);
-    const volatile fnpu_u32 *r=rg_layer();
+    RG_RECORD(r);
     if(r[7]!=1||r[8]!=1||r[9]!=1||r[18]!=2||RG_STATE[24]!=2) return RG_RETURN(c,FNPU_BAD_ARGUMENT);
     rg_accept(c);
     volatile float *out=(volatile float *)RG_PTR(r[3]);

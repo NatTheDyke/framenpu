@@ -9,16 +9,18 @@ remains the default input; its modules still build to the same bytes.
 
 Arithmetic, tensor layout, weights, the frozen numerical policy, the single HMX
 owner, the 8 KiB VTCM backup, the 128 KiB borrowed job arena and the 40 ms host
-timeout are unchanged. Data stays on its uncached aliases. What changes is
-where operator instructions live, how often they are published, and how many
-units one request may complete.
+timeout are unchanged. Tensors and weights stay in DDR on their uncached
+aliases. What changes is where operator instructions live, how often they are
+published, how many units one request may complete, and, since the
+[working-copy revision](#working-copies-and-staged-data), how the operators
+read that data.
 
 ## Two images
 
 | Image | Where | Size | Contents |
 |---|---|---:|---|
-| Loader | existing 4 KiB code slot, copied per request as before | 3,832 bytes | entry/fault vectors and the admin commands |
-| Operators | owned DDR `0x1ff0000`, 12 KiB reservation | 9,336 bytes | the ten compute operators and `rg_batch` |
+| Loader | existing 4 KiB code slot, copied per request as before | 3,836 bytes | entry/fault vectors and the admin commands |
+| Operators | owned DDR `0x1ff0000`, 12 KiB reservation | 11,476 bytes | the ten compute operators and `rg_batch` |
 
 The reservation lies in previously unused pages between the activation
 high-water mark (`0x1fef000`) and the packed-input page (`0x1ff4000`), with one
@@ -103,11 +105,72 @@ execution uses no stop point and runs each request to its budget.
 is an explicit choice; the completion window is still 40 ms and a missed window
 still poisons the session.
 
+## Working copies and staged data
+
+A [cost probe](#access-costs) showed that the first linked image spent nearly
+all of its 30.8 seconds per frame on three memory patterns, not on arithmetic.
+The linked build now avoids them. None of this changes a tensor byte, a
+weight, the order of any floating-point operation or the per-unit state
+sequence; the eleven-module build compiles the same sources to its previous
+bytes.
+
+- **State and layer record.** `rg_batch` copies the 32 resident state words
+  into the saved VTCM page and operators work on that copy. It is written back
+  to DDR as one vector after every work unit, before every operator return and
+  before a guarded trap, so DDR holds exactly the per-unit values the previous
+  image wrote at each of those points. The current 128-byte layer record is
+  copied once per layer; the program is immutable while a frame runs. The
+  fault flag is read once per request.
+- **Aligned loads.** An unaligned vector is taken from VTCM after copying the
+  two aligned DDR blocks that cover it. Depthwise copies each in-range kernel
+  row of a unit into VTCM with two to four aligned loads and takes every tap
+  from there. Partial vectors, the strided stem gather and the 7×7 average
+  pool read whole vectors and mask or transpose them instead of reading
+  scalars. Bytes read beyond a tensor stay inside the owned arena.
+- **No vector on the stack.** Per-unit paths contain no call, so no HVX
+  register is spilled; where a call remains (FP16 packing) the live vectors
+  wait in VTCM. The guarded trap is reached by leaving the operator.
+- **Bias and tap words.** One vector load serves the next 32 bias words and
+  one serves a depthwise channel's kernel.
+- **Input upload.** The host already wrote the input under each request's
+  gate; the linked loader now accepts all 602,112 bytes in one request
+  instead of 19.
+
+All scratch lies in the existing saved and restored 8 KiB of VTCM.
+
+### Access costs
+
+`tests/resident_access_probe.c` times N repetitions of one primitive per
+request and the host fits the slope between two repeat counts (19.2 MHz
+reference ticks; empty loop subtracted). Owned DDR is only read, and
+cached-alias lines are discarded before return.
+
+| Access | Microseconds |
+|---|---:|
+| Scalar read, uncached DDR | 1.01–1.13 |
+| Scalar read, cached alias (warm) / VTCM | .003 / .026 |
+| Scalar write, uncached DDR | .003 |
+| Vector load, DDR aligned (either alias, warm or cold) | .105 |
+| Vector load, DDR unaligned at a fixed 4-byte skew | .216 |
+| Vector load, DDR unaligned at overlapping 4-byte steps | 1.01 |
+| Vector store, DDR aligned / unaligned | .104 / .13–.17 |
+| Vector load or store, VTCM (aligned or not) | .002–.003 |
+| Vector stored to the job stack and reloaded | 1.41 |
+| Depthwise tap arithmetic on registers | .012 |
+
+The cached data alias does not speed vector loads, so tensors were left where
+they are. These are measurements on one device and firmware, not a model of
+the memory system.
+
+```sh
+python tools/build_access_probe.py --output /path/to/probe
+sudo .venv/bin/python tests/hardware_access_probe.py --run-on-device --reads /path/to/probe/access_reads.fjob --stores /path/to/probe/access_stores.fjob --taps /path/to/probe/access_taps.fjob --output /path/to/access.json
+```
+
 ## Qualification and performance
 
 Every run below uses the pinned v20a model, the four recorded crops and the
-frozen policy (SHA256 `381a033d…951f7b`) of the earlier resident qualifications,
-on the same firmware and boot as [the cache-entry baseline](RESIDENT_CACHE.md).
+frozen policy (SHA256 `381a033d…951f7b`) of the earlier resident qualifications.
 
 The main matrix uses cached instructions and a 20 ms budget: two sessions, two
 crops each, one weight upload per session. All 308 layer checks and 20,351,360
@@ -115,52 +178,60 @@ layer-output values pass; the maximum local tolerance ratio is .80855, as
 before. All 512 head values are bit-identical to the cache-entry, gather and
 streamed baselines, verified from independently saved files. Each session then
 repeats both crops without intermediate readback and reproduces the same head
-bits. All 13,299 main restoration audits pass, the whole arena restores after
+bits. All 1,494 main restoration audits pass, the whole arena restores after
 both sessions, and the DSP service keeps its PID with zero restarts.
 
-| Audited frame, cached instructions | Cache entry, 11 modules | Linked, 5 ms | Linked, 20 ms |
+| Frame, cached instructions | Cache entry, 11 modules | Linked, first image | Linked, working copies |
 |---|---:|---:|---:|
-| Requests per frame | 10,959–10,964 | 5,974 | 1,566–1,567 |
-| Frame body | 153.9–154.6 s | 89.6–89.7 s | 51.2–51.4 s |
-| Native wrapper time per frame | about 49.5 s | 31.6 s | 30.6–30.8 s |
-| Maximum wrapper / publication | 7.59 / 8.88 ms | 6.42 / 7.27 ms | 21.27 / 22.50 ms |
+| Requests, no intermediate readback | about 10,960 | 1,532–1,533 | **52** |
+| Requests, per-layer qualification | 10,959–10,964 | 1,566–1,567 | 95–96 |
+| Frame body, no intermediate readback | — | 48.8–49.0 s | **1.66–1.69 s** |
+| Frame body, per-layer qualification | 153.9–154.6 s | 51.2–51.4 s | 4.3–4.6 s |
+| Native wrapper time per frame | about 49.5 s | 30.6–30.8 s | .99 s |
+| Maximum wrapper / publication | 7.59 / 8.88 ms | 21.27 / 22.50 ms | 20.33 / 22.06 ms |
 
-Without qualification readback the 20 ms frames take 48.8–49.0 seconds and
-1,532–1,533 requests: **7.1× fewer requests and 3.1× less time** than the
-cache-entry baseline. At the unchanged 5 ms budget the linked image alone
-gives 1.72×, because phase boundaries, unit caps and per-request code
-publication no longer end requests. The cache-entry figures are the historical
-runs on the same boot, not an interleaved benchmark.
+The first two columns are the earlier qualifications
+([cache entry](RESIDENT_CACHE.md);
+[first linked image](../evidence/resident-link-validation.json), revision
+`888fbe2`) on a previous boot, not an interleaved benchmark. Those ran at
+5 ms and 20 ms budgets respectively; the first linked image at 5 ms needed
+5,974 requests.
 
-Request count is now set by native time, not by protocol boundaries. One frame
-needs about 30.8 seconds inside the image, so a 20 ms budget cannot go below
-roughly 1,540 requests. Depthwise convolution is 26.4 of those seconds (1,307
-requests); the stem, every 1×1 convolution and dense head, pooling and residual
-adds together take 4.3 seconds (240 requests). One request per layer, or one
-per frame, therefore needs faster depthwise data access rather than more
-batching: uncached program, state and tensor reads dominate each unit. Each
-request also still pays about 7.7 ms of HMX power start and 1.6 ms of power
-close on the host.
+A frame is now 50 batch requests, one start and one input upload. Native time
+by operator class is about .46 s depthwise, .43 s 1×1 convolution and dense
+heads, .08 s stem and .03 s pooling and adds. On one crop the successive
+changes measured 6.07 s (state and record copies), 2.49 s (inlined gather,
+bias window, vector stem), 1.57 s (aligned loads and staged rows), 1.06 s
+(call-free unit paths) and .99 s. Of the 1.66 s frame body, roughly .65 s is
+host work around the requests, mostly HMX power start (about 5 ms) and close
+(1.6 ms) per request; that, not native arithmetic, is the next cost.
 
 Supplemental runs, each restoring the full arena:
 
-- Load, seal, retire and restore without entering the image: 445 audits.
-- Six metadata rejections plus seven batch rejections (outside a frame; zero or
-  excess budget; invalid stop layer/phase; zero units; reserved word), through
-  the uncached and the cached alias: 458 audits each. State, sequence and every
-  arena byte are unchanged after each rejection.
-- Two-crop calibration at the 5 ms budget with identical heads: 24,280 audits.
-  One-crop steps at 10 ms (3,058 requests, 65.4 s) and 20 ms.
-- The same image through the uncached alias at 20 ms: identical heads, 92.8 s
-  and 2,832 requests, every PC in `0xf1ff0000`; cached runs report `0x88ff0000`.
+- Load, seal, retire and restore with six metadata rejections, seven batch
+  rejections and a competing-owner refusal through the uncached alias, and
+  the same fourteen controls through the cached alias inside calibration:
+  state, sequence and every arena byte are unchanged after each rejection
+  (458 audits for the load run).
+- The same image through the uncached instruction alias: identical heads,
+  every PC in `0xf1ff0000`, 1,514 requests and 49.9 s. Uncached instruction
+  fetch now dominates that control; cached runs report `0x88ff0000`.
 - Guarded faults after one HMX transaction and after one in-place depthwise
   unit: native state 4, reuse refused, retire then bounded close, full
-  restoration (467 and 667 audits).
+  restoration (449 and 462 audits).
 - Ordinary SDK direct/benchmark regression afterwards: 72 audits, 38 HMX.
+- The access probe: 215 audits.
 
-No failed completion, reboot, gate reset, power recovery or service restart
-occurred. Sanitized hashes, counts and timings are in
-[resident-link-validation.json](../evidence/resident-link-validation.json).
+One development image failed during this work. Its second stride-two load
+recomputed the staged row offset, and the per-layer checker rejected
+`convdwclip_1`. The session raised `RecoveryRequired` and retained the arena,
+refusal record, sealed image and power as designed; nothing was recovered
+automatically, and the device was rebooted by its owner before further runs.
+The address arithmetic is now checked offline for every depthwise layer. The
+final matrix ran on one boot with no failed completion, gate reset, power
+recovery or service restart. Sanitized hashes, counts, timings and the probe
+table are in
+[resident-link-fast-validation.json](../evidence/resident-link-fast-validation.json).
 These are audited graph runs on four crops, not sustained tracking latency,
 coexistence, thermal or broader accuracy results.
 

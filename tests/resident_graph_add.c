@@ -1,7 +1,7 @@
 #include "resident_graph.h"
 fnpu_u32 frame_job(const fnpu_context *c) {
     if(!rg_run(c,4)) return RG_RETURN(c,FNPU_BAD_ARGUMENT);
-    const volatile fnpu_u32 *r=rg_layer(),*d=fnpu_input(c);
+    RG_RECORD(r);const volatile fnpu_u32 *d=fnpu_input(c);
     fnpu_u32 count=r[7]*r[8]*r[9];
     if(!rg_span(r[2],r[21])) return RG_RETURN(c,FNPU_BAD_ARGUMENT);
     rg_accept(c);rg_u64 start=rg_ticks();

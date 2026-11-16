@@ -3,7 +3,7 @@
 #ifndef RG_STEM
 #define RG_STEM 0
 #endif
-static HVX_Vector gather(const volatile fnpu_u32 *r,fnpu_u32 channel,fnpu_u32 count) {
+static HVX_Vector gather(rg_record *r,fnpu_u32 channel,fnpu_u32 count) {
     if(!RG_STEM) {
         if(channel>=r[4]) return Q6_V_vzero();
         return rg_load((const float *)RG_PTR(r[1]+(channel*r[19]+RG_STATE[22])*4),count);
@@ -12,13 +12,24 @@ static HVX_Vector gather(const volatile fnpu_u32 *r,fnpu_u32 channel,fnpu_u32 co
     fnpu_u32 c=channel/9,ky=(channel%9)/3,kx=channel%3;
     fnpu_u32 y=RG_STATE[23]*2+ky,x=RG_STATE[22]*2+kx;
     const float *in=(const float *)RG_PTR(r[1]);
+#ifdef RG_LINKED
+    /* Same lanes as the scalar loop below, by two loads and a deal. */
+    if(y>=224) return Q6_V_vzero();
+    fnpu_u32 lanes=x<224?(225-x)>>1:0;
+    if(lanes>count) lanes=count;
+    const float *row=in+(c*224+y)*224+x;
+    HVX_Vector low=rg_loadu(row);
+    HVX_Vector even=Q6_V_lo_W(Q6_W_vdeal_VVR(rg_loadu(row+32),low,-4));
+    if(lanes<32) even=Q6_V_vmux_QVV(Q6_Q_vsetq_R(lanes*4),even,Q6_V_vzero());
+    return even;
+#endif
     volatile float *tmp=(volatile float *)0x31001e00u;
     for(fnpu_u32 i=0;i<32;i++) tmp[i]=i<count&&y<224&&x+i*2<224?in[(c*224+y)*224+x+i*2]:0.f;
     return *(volatile HVX_Vector *)tmp;
 }
 fnpu_u32 frame_job(const fnpu_context *c) {
     if(!rg_run(c,RG_STEM?10:9)) return RG_RETURN(c,FNPU_BAD_ARGUMENT);
-    const volatile fnpu_u32 *r=rg_layer(),*d=fnpu_input(c);
+    RG_RECORD(r);const volatile fnpu_u32 *d=fnpu_input(c);
     if(r[0]!=(RG_STEM?2u:1u)||r[19]!=r[5]*r[6]||!r[26]||r[26]>352||RG_STATE[18]>=r[26]||
        (RG_STEM&&(r[4]!=3||r[5]!=224||r[6]!=224))) return RG_RETURN(c,FNPU_BAD_ARGUMENT);
     fnpu_u32 remaining=RG_STEM?r[9]-RG_STATE[22]:r[8]*r[9]-RG_STATE[22];

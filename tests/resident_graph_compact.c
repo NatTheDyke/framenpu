@@ -2,7 +2,7 @@
 fnpu_u32 frame_job(const fnpu_context *c) {
     if(!rg_run(c,7)||RG_STATE[24]!=1) return RG_RETURN(c,FNPU_BAD_ARGUMENT);
     const volatile fnpu_u32 *d=fnpu_input(c);
-        const volatile fnpu_u32 *r=rg_layer();
+        RG_RECORD(r);
         if(r[23]!=1||r[3]!=r[1]||r[19]!=12544||r[20]!=12544||r[8]!=56||r[9]!=56||r[7]!=64) return RG_RETURN(c,FNPU_BAD_ARGUMENT);
         rg_accept(c);rg_u64 start=rg_ticks();
         for(fnpu_u32 n=0;RG_MORE(n,d);n++) {

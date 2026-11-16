@@ -143,6 +143,8 @@ class LinkTransport(AdminTransport):
         pc = 0xF0A92010
         accepted = state[4:8] == words[4:8] and words[8] == state[8] + 1 and opcode == 31
         if op == 4 and accepted:
+            if not 0 < words[22] <= rg.INPUT_BYTES - state[27]:
+                raise AssertionError("input upload exceeds the loader's bound")
             state[8:10], state[29:31] = words[8:10], [0, 0]
             state[27] += words[22]
         elif op in (7, 8) and accepted and words[21:23] == [rg.CODE, rg.CODE_BYTES]:
@@ -220,9 +222,10 @@ def linked_owner(transport, *, cached=True, budget_ms=5.0, loader="resident_grap
 
 def begin_frame(owner):
     owner._command(3)
-    for at in range(0, 602112, 32768):
-        size = min(32768, 602112 - at)
-        owner._command(4, offset=rg.ACTIVATIONS + at, data=bytes(size))
+    # One request carries the whole input; the eleven-module path keeps 32 KiB.
+    with unittest.TestCase().assertRaises(ValueError):
+        owner._command(4, offset=rg.ACTIVATIONS, data=bytes(rg.INPUT_BYTES + 128))
+    owner._command(4, offset=rg.ACTIVATIONS, data=bytes(rg.INPUT_BYTES))
 
 
 class LinkedLifecycleTests(unittest.TestCase):

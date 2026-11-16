@@ -25,6 +25,7 @@ CONTROL = ARENA_START + 4096
 STATE = CONTROL + 128
 PROGRAM = ARENA_START + 8192
 PROGRAM_BYTES = 8192
+INPUT_BYTES = 602112
 WEIGHTS = PROGRAM + PROGRAM_BYTES
 RAW_WEIGHT_BYTES = 2046732
 WEIGHT_BYTES = 2051904
@@ -650,9 +651,14 @@ class ResidentLandmark:
                 else CODE
             )
             limit = (
-                ACTIVATIONS if op == 2 else ACTIVATIONS + 602112 if op == 4 else CODE + CODE_BYTES
+                ACTIVATIONS
+                if op == 2
+                else ACTIVATIONS + INPUT_BYTES
+                if op == 4
+                else CODE + CODE_BYTES
             )
-            if offset != expected or not 0 < len(data) <= 32768 or offset + len(data) > limit:
+            chunk = INPUT_BYTES if op == 4 and self.linked else 32768
+            if offset != expected or not 0 < len(data) <= chunk or offset + len(data) > limit:
                 raise ValueError("resident upload is outside its phase/range")
         words = (
             self._descriptor(
@@ -1096,8 +1102,10 @@ class ResidentLandmark:
             first = len(self.metrics["commands"])
             checks = []
             self._command(3)
-            for at in range(0, len(raw), 32768):
-                self._command(4, offset=ACTIVATIONS + at, data=raw[at : at + 32768])
+            # The linked loader accepts the whole input under one request's gate.
+            chunk = INPUT_BYTES if self.linked else 32768
+            for at in range(0, len(raw), chunk):
+                self._command(4, offset=ACTIVATIONS + at, data=raw[at : at + chunk])
             self.metrics["input_loads"] += 1
             arithmetic = 0
             specs = self.specs

@@ -2,19 +2,19 @@
 void fnpu_hmx_clear(void);
 void fnpu_hmx_load(const fnpu_u16 *,const fnpu_u16 *);
 void fnpu_hmx_store(fnpu_u16 *,const void *);
-static void weight_tile(const volatile fnpu_u32 *r,fnpu_u32 k,fnpu_u32 kt,fnpu_u32 nc) {
+static void weight_tile(rg_record *r,fnpu_u32 k,fnpu_u32 kt,fnpu_u32 nc) {
     volatile HVX_Vector *a=(volatile HVX_Vector *)0x31000000u;
     const unsigned char *w=RG_PTR(r[16]);
     for(fnpu_u32 pair=0;pair<16;pair++) {
         fnpu_u32 row=nc+pair*2;
-        HVX_Vector v=row<r[7]?*(const volatile HVX_UVector *)(w+(row/2*k+kt)*4):Q6_V_vzero();
+        HVX_Vector v=row<r[7]?RG_LOADU(w+(row/2*k+kt)*4):Q6_V_vzero();
         if(k-kt<32) v=Q6_V_vmux_QVV(Q6_Q_vsetq_R((k-kt)*4),v,Q6_V_vzero());
         a[pair]=v;
     }
 }
 fnpu_u32 frame_job(const fnpu_context *c) {
     if(!rg_run(c,1)) return RG_RETURN(c,FNPU_BAD_ARGUMENT);
-    const volatile fnpu_u32 *r=rg_layer(),*d=fnpu_input(c);
+    RG_RECORD(r);const volatile fnpu_u32 *d=fnpu_input(c);
     fnpu_u32 k=r[4]*(r[0]==2?9u:1u),depth=(k+31)>>5;
     volatile HVX_Vector *b=(volatile HVX_Vector *)0x31000800u;
     volatile fnpu_u32 *scales=(volatile fnpu_u32 *)0x31001800u;

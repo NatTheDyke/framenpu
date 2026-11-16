@@ -389,7 +389,8 @@ The initial publication suite passed 29 offline tests; the current suite passes
 173. Nine [linked-operator](RESIDENT_LINK.md) tests cover batch replay against
 the single-module state machine, stop-point/fault bounds, seal/retire ordering,
 image and alias checks before reclamation, and the linked-build verifier; the
-hardware results are in [resident-link-validation.json](../evidence/resident-link-validation.json). Seven cache-diagnostic tests additionally cover alias identity, every output,
+hardware results are in [resident-link-validation.json](../evidence/resident-link-validation.json)
+and [resident-link-fast-validation.json](../evidence/resident-link-fast-validation.json). Seven cache-diagnostic tests additionally cover alias identity, every output,
 cleanup confirmation before resource reclamation, confirmed-fault restoration,
 clock drift and timeout behavior. These host tests do not establish that the
 experimental DSP cache cleanup works on hardware.

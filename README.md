@@ -249,9 +249,10 @@ take 153.9–154.6 seconds, a further 17.0% time reduction, with identical heads
 The default stays uncached.
 [Linked resident operators](docs/RESIDENT_LINK.md) then place all compute
 operators in one image in the owned arena and let a request cross layers up to
-a tick budget. At 20 ms, frames need 1,532–1,567 requests instead of about
-10,960 and take 48.8–51.4 seconds, with identical heads; depthwise native time
-now bounds the request count.
+a tick budget. With operator state and staged rows read from saved VTCM, a
+frame needs 52 requests instead of about 10,960 and takes 1.66–1.69 seconds
+at a 20 ms budget, with identical heads; host power cycling around each
+request is now the largest remaining cost.
 The [accumulator isolation tests](docs/HMX_ACCUMULATOR.md) show shared HMX state
 across workers with the recovered primitives. Keep each complete clear/load/store
 transaction under one HMX owner; use HVX workers for other work.
