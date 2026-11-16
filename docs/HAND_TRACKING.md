@@ -208,9 +208,12 @@ tracking accuracy results; the XOR test cannot supply them.
 Current correctness result: [the streamed graph](LANDMARK.md) passes every layer
 and all four outputs across two calibration and two held-out crops, with
 20,351,360 checked values and 25,455 restoration audits. HVX depthwise/pooling/
-residuals, native sigmoid and 26 storage aliases are implemented. Intermediate
-tensors remain on the host, so the resident-intermediate exit criterion below
-is still open. The next work must close that gap before sustained integration.
+residuals, native sigmoid and 26 storage aliases are implemented. The subsequent
+[resident executor](RESIDENT_LANDMARK.md) now keeps weights and FP32 intermediates
+in the verified DDR arena. Four crops pass all layers and heads, with two
+changing inputs sharing one weight upload per session and full-arena teardown.
+This closes the resident-intermediate correctness gap. Its uncached baseline
+takes about 326 seconds per audited crop; performance remains far from integration.
 
 Add direct HVX depthwise kernels for 3x3 and 5x5, including stride 2 and
 asymmetric padding. Add max/global-average pooling, residual add, fused clip,
@@ -301,11 +304,13 @@ FP32 accumulation, initialization and bias/ReLU remain scalar. Enforce the
 allocation/ownership map before keeping weights across separate jobs. The offline
 reference corpus and shape/binary preflight now exist. The current convolution
 body still takes about 6.3–6.6 seconds for a 112×112 layer with 392 requests.
-The complete streamed graph now adds the remaining operators and passes
-propagated output checks, while taking 71–79 seconds per crop. Keep its frozen
-rules while implementing resident intermediates/weights and reducing bounded
-request overhead. Evaluate accuracy on a larger independent corpus before
-sustained tracking integration.
+The complete streamed graph adds the remaining operators and passes propagated
+output checks in 71–79 seconds per audited crop. The resident implementation
+now passes the same four crops and produces bit-identical heads with weights
+and FP32 intermediates in DDR. Its uncached depthwise gathers and many bounded
+requests raise audited latency to about 326 seconds. Optimize those measured
+costs under the frozen rules, then benchmark more crops sharing weights.
+Evaluate accuracy on a larger independent corpus before sustained integration.
 
 Qualcomm's
 [XNNPACK/HVX work](https://www.qualcomm.com/developer/blog/2026/03/bringing-xnnpack-hexagon-npu)

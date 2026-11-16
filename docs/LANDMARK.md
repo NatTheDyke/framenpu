@@ -7,6 +7,9 @@ matrix checks 20,351,360 layer-output values and passes 25,455 restoration audit
 It is a streamed correctness proof with host intermediates; residency and useful
 tracking performance remain open. Sanitized results and limitations are in
 [landmark-validation.json](../evidence/landmark-validation.json).
+The subsequent [resident executor](RESIDENT_LANDMARK.md) implements the same
+pinned graph with weights and FP32 intermediates in DSP-accessible DDR. This
+document and its measurements describe the original streamed implementation.
 
 ## Execution and ownership
 

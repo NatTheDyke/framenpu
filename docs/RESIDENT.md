@@ -7,7 +7,10 @@ It opens no device; its generic schedule output sets `execution_supported=false`
 Step 2 now implements a separate [bounded resident GEMM proof](RESIDENT_GEMM.md)
 with fixed descriptors, weights loaded once, changing inputs and qualified
 cache/fault teardown. Step 3 adds [three real-weight convolution layers](CONVOLUTION.md)
-with frozen ncnn numerical comparisons. General graph loading/submission remains future work.
+with frozen ncnn numerical comparisons. The separate
+[pinned resident landmark executor](RESIDENT_LANDMARK.md) implements its fixed
+v20a graph with persistent weights and FP32 activations. General graph loading
+and execution of the generic planner's schedules remain future work.
 
 The design targets the exact firmware hash in [profile.py](../src/framenpu/profile.py).
 Its evidence is the [memory map](MEMMAP.md), [direct dispatcher](DISPATCH.md),

@@ -312,6 +312,29 @@ zero restarts. Earlier numerical identity failures stopped and retained resource
 explicitly authorized device reboots preceded further tests. They are excluded
 from final matrix counts. The public SDK payload remains 3672 bytes.
 
+## Resident landmark qualification — 2026-11-16
+
+The [pinned resident graph](RESIDENT_LANDMARK.md) keeps weights and FP32
+intermediates in the verified 6,152,192-byte arena. Four crops pass 308 layer
+checks, 360 blob checks and 20,351,360 layer-output values under the unchanged
+policy. All 512 head values independently reproduce their saved hashes and
+are bit-identical to the streamed baseline. Two changing inputs per session
+reuse one weight upload. Main restoration audits total 93,741; full-arena
+readback, firmware/power restoration and service identity all pass.
+
+Supplemental tests cover lossless FP16 conversion, gathers, stale metadata,
+owner exclusion, guarded HMX/in-place depthwise faults, invalid-session refusal
+and clean teardown. The standard SDK regression passes another 72 audits.
+An initial depthwise mask bug stopped and retained resources; an explicitly
+authorized reboot preceded the corrected primitive and final graph matrix.
+No numerical policy or timeout was widened. Sanitized evidence is in
+[resident-landmark-validation.json](../evidence/resident-landmark-validation.json).
+
+Audited resident bodies take 325.8–326.6 seconds, slower than the streamed
+71–79-second proof. Uncached depthwise gathering and per-request power overhead
+dominate. This establishes resident dataflow and reuse, without useful tracking
+latency, broad accuracy, coexistence or thermal qualification.
+
 ## Publication audit
 
 The repository provides an MIT license, self-contained examples, SDK/compiler
@@ -320,7 +343,7 @@ machine paths, credentials and proprietary firmware are excluded from the
 public source; the numerical summary is intentionally sanitized.
 
 The initial publication suite passed 29 offline tests; the current suite passes
-141. Seven cache-diagnostic tests additionally cover alias identity, every output,
+152. Seven cache-diagnostic tests additionally cover alias identity, every output,
 cleanup confirmation before resource reclamation, confirmed-fault restoration,
 clock drift and timeout behavior. These host tests do not establish that the
 experimental DSP cache cleanup works on hardware.
@@ -352,6 +375,14 @@ depthwise/residual/pooling orchestration, K704 reduction and 33-output dense-hea
 tails, all four outputs/sigmoid, host validation before reclamation, input/model
 preflight and heldout exclusion from tolerance fitting. They emulate native I/O;
 actual operator arithmetic and all-layer results have the separate hardware proof.
+
+Eleven resident-landmark regressions check lossless row-pair weight packing,
+independent in-place downsample and forward-compaction overwrite proofs,
+residual lifetimes, phase boundaries, guarded-fault state, bounded full-arena
+restoration, interruption during close, program corruption and crash-record
+refusal, plus explicit opt-in before artifact/device access in all three new
+hardware tools. Lifecycle emulation does not establish native arithmetic or cache
+behavior; those require the separate resident hardware qualification.
 
 Local verification uses Python 3.14.9 and LLVM 23.1.4. The GitHub Actions
 matrix is configured for Python 3.11–3.14; this local run does not establish

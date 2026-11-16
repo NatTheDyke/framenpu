@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Added a pinned resident landmark executor: weights upload once per session,
+  FP32 intermediates stay in the verified DDR arena, and packing/operators run
+  on DSP. Lossless weight-row packing and a proven in-place downsample plus
+  compaction fit the graph without new quantization. All 77 layers, 90 blobs
+  and four outputs pass four crops under the unchanged limits; all 512 head
+  values are bit-identical to the streamed baseline. Two changing inputs per
+  session pass 93,741 main restoration audits and full-arena teardown.
+  Added bounded reverse restoration, persistent refusal/state checks and
+  eleven offline regressions. This uncached baseline takes 325.8–326.6 seconds
+  per audited crop; depthwise gathering and request overhead need optimization.
 - Qualified an experimental pinned complete landmark graph executor: full-depth
   HMX convolutions/heads through K704, HVX depthwise/pooling/residual operations,
   native sigmoid and lifetime-aware tensor aliases. Intermediate tensors remain

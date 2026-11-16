@@ -207,13 +207,14 @@ sudo .venv/bin/python tests/hardware_smoke.py --run-on-device
 ~~~
 
 Configured CI covers Python 3.11–3.14. [Validation notes](docs/VALIDATION.md)
-record 141 passing offline tests and distinguish local results from the
+record 152 passing offline tests and distinguish local results from the
 configured CI matrix.
 
 ## Hand tracking and contributions
 
-The pinned FrameTop v20a landmark graph now has an experimental streamed DSP
-executor. General ncnn import remains unsupported; inspect-ncnn inventories
+The pinned FrameTop v20a landmark graph now has experimental streamed and
+[resident DSP executors](docs/RESIDENT_LANDMARK.md). General ncnn import remains
+unsupported; inspect-ncnn inventories
 your own param file without execution. Bounded two-depth-tile jobs also have
 validated HVX input packing and output conversion.
 
@@ -232,9 +233,11 @@ per layer. A [pinned complete-graph prototype](docs/LANDMARK.md) now adds HVX
 depthwise/pooling/residual kernels and tensor aliases through bounded streamed
 submissions. All 77 layers, 90 blobs and four outputs pass on four recorded
 crops under frozen provisional limits: 20,351,360 layer-output values and
-25,455 restoration audits. Its intermediate tensors live on the host and each
-crop takes 71–79 seconds with audits; resident graph execution, useful tracking
-performance and broader accuracy qualification remain future work.
+25,455 restoration audits. The streamed version keeps intermediates on the host
+and takes 71–79 seconds per crop with audits. The subsequent resident executor
+keeps weights and FP32 intermediates in the verified arena, uploads weights once
+and streams changing inputs. Its uncached depthwise/submission costs are higher;
+useful tracking performance and broader accuracy qualification remain open.
 The [accumulator isolation tests](docs/HMX_ACCUMULATOR.md) show shared HMX state
 across workers with the recovered primitives. Keep each complete clear/load/store
 transaction under one HMX owner; use HVX workers for other work.
@@ -257,8 +260,8 @@ establish full-model throughput. Cached publication/cleanup costs roughly
 commands still take roughly 12.4–12.6 ms median with per-request power and
 full-window cleanup. Real convolution is now numerically qualified in the bounded
 proof. Complete graph correctness now also passes in the streamed executor.
-Next are resident intermediates, weight reuse and bounded overhead reduction
-while preserving the frozen rules. See
+Next are faster resident depthwise gathers and bounded submission overhead
+reduction while preserving the frozen rules. See
 [HAND_TRACKING.md](docs/HAND_TRACKING.md) for the roadmap and
 [HMX_THROUGHPUT.md](docs/HMX_THROUGHPUT.md) for research context.
 
