@@ -237,13 +237,21 @@ machine paths, credentials and proprietary firmware are excluded from the
 public source; the numerical summary is intentionally sanitized.
 
 The initial publication suite passed 29 offline tests; the current suite passes
-88. Seven cache-diagnostic tests additionally cover alias identity, every output,
+109. Seven cache-diagnostic tests additionally cover alias identity, every output,
 cleanup confirmation before resource reclamation, confirmed-fault restoration,
 clock drift and timeout behavior. These host tests do not establish that the
 experimental DSP cache cleanup works on hardware.
 Seven unwind-regression tests additionally check normal/fault trace validation,
 distinct live frames, completion checks before reclamation, explicit opt-in and
 stopping after a timeout. Native unwind qualification is recorded separately above.
+
+The [resident planner](RESIDENT.md) adds 21 offline tests covering residual and
+alias lifetimes, same-step input/output/scratch overlap, cache-line alignment,
+padded strides, arena bounds, invalid schedules, deterministic placement, bounded
+JSON and the CLI. Eighty seeded varied schedules additionally check every pair
+of live allocations for overlap and independently recompute peak memory. The
+synthetic residual example needs 187,392 bytes versus 297,984 without reuse.
+These are host storage checks; no resident loader or device execution was added.
 
 Local verification uses Python 3.14.9 and LLVM 23.1.4. The GitHub Actions
 matrix is configured for Python 3.11–3.14; this local run does not establish

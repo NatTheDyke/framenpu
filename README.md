@@ -35,10 +35,14 @@ A source checkout does not assume that ignored build/release files exist.
 python examples/make_xor.py
 framenpu inspect-model examples/xor.fnpu --batch-size 4
 framenpu inspect-ncnn examples/dense.param
+framenpu plan-resident examples/resident_residual.json
 ~~~
 
 The synthetic examples are included. Model inspection and ncnn graph inventory
 do not execute DSP code. The ncnn command is an inventory tool, not an importer.
+The resident planner checks a storage schedule, tensor lifetimes and DDR bounds
+without device access; see the [resident design](docs/RESIDENT.md). Its output
+does not execute a model.
 
 Supported model layers are Dense, ReLU and Clip:
 
@@ -203,7 +207,7 @@ sudo .venv/bin/python tests/hardware_smoke.py --run-on-device
 ~~~
 
 Configured CI covers Python 3.11–3.14. [Validation notes](docs/VALIDATION.md)
-record 88 passing offline tests and distinguish local results from the
+record 109 passing offline tests and distinguish local results from the
 configured CI matrix.
 
 ## Hand tracking and contributions
@@ -213,8 +217,9 @@ own hand.ncnn.param file to inventory it. Bounded two-depth-tile jobs are
 implemented with validated HVX input packing and output conversion.
 
 A [5.87 MiB persistent DDR region](docs/MEMMAP.md) is mapped and canary-checked;
-resident tensor allocation and graph execution remain unimplemented. The
-[accumulator isolation tests](docs/HMX_ACCUMULATOR.md) show shared HMX state
+an [offline resident allocation planner](docs/RESIDENT.md) now checks tensor
+lifetimes, aliases and storage bounds. Device loading and graph execution remain
+unimplemented. The [accumulator isolation tests](docs/HMX_ACCUMULATOR.md) show shared HMX state
 across workers with the recovered primitives. Keep each complete clear/load/store
 transaction under one HMX owner; use HVX workers for other work.
 
@@ -230,9 +235,9 @@ jobs and 32 warmups, with about 2.52x improvement in its uncached loop.
 
 These remain experimental fixtures; public matrix execution still uses its
 existing uncached path. The experiments reuse blocks within a job and do not
-establish full-model throughput. Cached
-publication/cleanup costs roughly 1.5 ms per job, and fresh sessions still take
-about 33 ms. Next are resident code/tensor/weight ownership, real convolution
+establish full-model throughput. Cached publication/cleanup costs roughly
+1.5 ms per job, and fresh sessions still take about 33 ms. Next are implementing
+the resident ownership contract, repeated resident GEMM, real convolution
 and HVX depthwise kernels, then a validated ncnn converter. See
 [HAND_TRACKING.md](docs/HAND_TRACKING.md) for the roadmap and
 [HMX_THROUGHPUT.md](docs/HMX_THROUGHPUT.md) for research context.

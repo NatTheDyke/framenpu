@@ -64,9 +64,10 @@ not add native-job cancellation. A poisoned direct session retains its firmware
 edit, and a later process rejects that modified window until deliberate recovery.
 Partial firmware edits are checked before helper acknowledgment.
 
-A production backend still needs persistent model arenas, explicit tensor/power
-ownership and cooperative cancellation. This release exposes a version-pinned
-research interface.
+A production backend still needs persistent model execution, enforced tensor/power
+ownership and cooperative cancellation. The [resident design](RESIDENT.md) and
+offline planner define the proposed contract; they do not change the current
+wire ABI or submit path. This release exposes a version-pinned research interface.
 
 The public entry now restores both SP and FP when abandoning nested C frames
 after a guarded exception. [Fault-unwind qualification](FAULT_UNWIND.md) covers

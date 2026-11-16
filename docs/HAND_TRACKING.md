@@ -256,18 +256,20 @@ distinct-weight model. A separate [two-block-load comparison](HMX_BATCHING.md)
 passes another 800 measured jobs and 32 warmups, with about 2.52x improvement
 in its uncached diagnostic. Preserve the distinction between the two results.
 
-Build a minimal resident executor next. Amortize cached publication/cleanup
+The [resident design and offline planner](RESIDENT.md) now define the memory,
+session and cache contract, and produce a checked residual-block allocation map.
+The planner does not load or execute a model. Implement the minimal resident
+GEMM proof next. Amortize cached publication/cleanup
 (roughly 1.5 ms per job) and fresh-session overhead (about 33 ms even for the
 cached diagnostic), while preserving bounded ownership and cache publication.
 The [public SDK unwind fix](FAULT_UNWIND.md) is now rebuilt and qualified with
-nested guarded traps and numerical regressions. Plan allocations/liveness, then
-validate distinct operand
+nested guarded traps and numerical regressions. Validate distinct operand
 staging and a real convolution against ncnn before completing the graph.
 
 The benchmark-free dispatcher, two-depth-tile GEMM jobs, full-tile HVX packing
 and HVX output unpacking/conversion now have numerical and restoration validation.
-FP32 accumulation, initialization and bias/ReLU remain scalar. Establish the allocation/ownership map
-before keeping weights across separate jobs. Offline
+FP32 accumulation, initialization and bias/ReLU remain scalar. Enforce the
+allocation/ownership map before keeping weights across separate jobs. Offline
 companion work is a pinned ncnn reference corpus and shape/liveness preflight.
 The next model milestone is one real convolution through that path.
 

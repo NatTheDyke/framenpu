@@ -1,0 +1,24 @@
+{
+  "format": "framenpu-resident-plan",
+  "version": 1,
+  "name": "residual-storage-demo",
+  "code_bytes": 4096,
+  "control_bytes": 4096,
+  "tensors": [
+    {"name": "input", "kind": "input", "shape": [1, 32, 32, 24], "dtype": "f16", "layout": "nhwc"},
+    {"name": "weight0", "kind": "weight", "shape": [24, 32], "dtype": "f16", "layout": "matrix"},
+    {"name": "weight1", "kind": "weight", "shape": [32, 24], "dtype": "f16", "layout": "matrix"},
+    {"name": "hidden", "kind": "activation", "shape": [1, 32, 32, 32], "dtype": "f16", "layout": "nhwc"},
+    {"name": "projected", "kind": "activation", "shape": [1, 32, 32, 24], "dtype": "f16", "layout": "nhwc"},
+    {"name": "residual", "kind": "activation", "shape": [1, 32, 32, 24], "dtype": "f16", "layout": "nhwc"},
+    {"name": "clipped", "kind": "activation", "shape": [1, 32, 32, 24], "dtype": "f16", "layout": "nhwc"},
+    {"name": "output", "kind": "activation", "alias_of": "clipped", "shape": [24576], "dtype": "f16", "layout": "linear"}
+  ],
+  "steps": [
+    {"name": "pointwise0", "inputs": ["input", "weight0"], "outputs": ["hidden"], "scratch_bytes": 12288},
+    {"name": "pointwise1", "inputs": ["hidden", "weight1"], "outputs": ["projected"], "scratch_bytes": 12288},
+    {"name": "residual_add", "inputs": ["input", "projected"], "outputs": ["residual"]},
+    {"name": "clip", "inputs": ["residual"], "outputs": ["clipped"]}
+  ],
+  "outputs": ["output"]
+}

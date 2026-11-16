@@ -9,6 +9,7 @@ from .compiler import build_job
 from .errors import FrameNPUError
 from .model import Model
 from .ncnn import inspect_ncnn
+from .resident import load_resident_plan
 
 
 def main(argv=None):
@@ -21,6 +22,10 @@ def main(argv=None):
     inspect = sub.add_parser("inspect-model", help="validate a model and show its execution plan")
     inspect.add_argument("model", type=Path)
     inspect.add_argument("--batch-size", type=int, default=1)
+    resident = sub.add_parser(
+        "plan-resident", help="plan resident DDR storage offline; no execution"
+    )
+    resident.add_argument("schedule", type=Path, help="version 1 resident storage schedule JSON")
     run = sub.add_parser("run-model", help="run a supported model on the headset")
     run.add_argument("model", type=Path)
     run.add_argument("input", type=Path, help="JSON vector or batch")
@@ -38,6 +43,8 @@ def main(argv=None):
         elif args.command == "inspect-model":
             model = Model.load(args.model)
             print(json.dumps({"name": model.name, "plan": model.plan(args.batch_size)}, indent=2))
+        elif args.command == "plan-resident":
+            print(json.dumps(load_resident_plan(args.schedule), indent=2))
         elif args.command == "run-model":
             model = Model.load(args.model)
             inputs = json.loads(args.input.read_text())

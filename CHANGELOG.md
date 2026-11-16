@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Added offline resident-DDR storage planning with explicit tensor layouts,
+  strides, aliases and graph-derived lifetimes. The CLI reports bounded aligned
+  allocations, scratch costs and reuse for a residual example. Documented the
+  proposed ownership, session, completion and cache contract; device execution
+  remains future work. Added 21 offline regressions, including varied schedules.
 - Ported nested-C-frame exception unwinding to the public SDK: reconstruct FP
   from the saved entry SP before deallocation. Rebuilt the 3,672-byte runtime,
   vector-add example and dispatch patch helper; existing custom FJOBs need a

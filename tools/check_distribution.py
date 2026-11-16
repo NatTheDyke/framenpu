@@ -117,11 +117,20 @@ def main(argv=None):
         )
         if inventory["layers"] != 2 or inventory["native_ncnn_loading"] is not False:
             raise ValueError("installed-wheel ncnn inspection failed")
+        resident = json.loads(
+            run(
+                [cli, "plan-resident", source / "examples/resident_residual.json"],
+                cwd=work,
+                env=env,
+            )
+        )
+        if resident["execution_supported"] is not False or resident["required_bytes"] != 187392:
+            raise ValueError("installed-wheel resident storage planning failed")
         for example in ("run_custom.py", "run_xor.py"):
             run([python, source / "examples" / example, "--help"], cwd=work, env=env)
         print(
             f"Distribution checks passed: {version}; sdist rebuild, isolated wheel installation, "
-            "CLI, model, SDK resources and examples from an unrelated directory"
+            "CLI, model, resident planner, SDK resources and examples from an unrelated directory"
         )
 
 
