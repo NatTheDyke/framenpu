@@ -1,6 +1,7 @@
 /* Fixed, pinned resident protocol; all persistent pointers use uncached DDR.
  * Host revalidates the immutable program under the firmware gate and checks
- * every completion before reclamation. No cache alias is used after loading. */
+ * every completion before reclamation. Data stays uncached; the opt-in cache
+ * entry may execute this same image through the cached instruction alias. */
 #include "landmark_common.h"
 typedef unsigned long long rg_u64;
 #define RG_START 0x1a22000u
@@ -30,7 +31,8 @@ static __attribute__((noinline)) fnpu_u32 rg_finish(const fnpu_context *c,fnpu_u
 }
 static __attribute__((noinline)) int rg_header(const fnpu_context *c,fnpu_u32 kind) {
     if(!valid(c)||c->opcode!=31||c->input_bytes!=128||c->output_bytes!=256) return 0;
-    for(fnpu_u32 i=0;i<6;i++) if(c->params[i]) return 0;
+    if(c->params[0]>1) return 0;
+    for(fnpu_u32 i=1;i<6;i++) if(c->params[i]) return 0;
     rg_echo(c);
     const volatile fnpu_u32 *d=fnpu_input(c);
     if(d[0]!=RG_MAGIC||d[1]!=1||d[3]!=kind||d[30]>1) return 0;

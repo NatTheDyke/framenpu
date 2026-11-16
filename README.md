@@ -207,7 +207,7 @@ sudo .venv/bin/python tests/hardware_smoke.py --run-on-device
 ~~~
 
 Configured CI covers Python 3.11–3.14. [Validation notes](docs/VALIDATION.md)
-record 157 passing offline tests and distinguish local results from the
+record 164 passing offline tests and distinguish local results from the
 configured CI matrix.
 
 ## Hand tracking and contributions
@@ -242,6 +242,11 @@ useful tracking performance and broader accuracy qualification remain open.
 resident frames from about 326 to 184–187 seconds, preserving every head bit.
 Depthwise native time improves 2.38× and its request count falls 54.5%; the
 complete-frame improvement is 1.76×.
+The opt-in [resident cache entry](docs/RESIDENT_CACHE.md) now executes kernel
+instructions through the cached alias while preserving uncached data and the
+existing ownership, work caps and timeout limits. Four-crop audited frames now
+take 153.9–154.6 seconds, a further 17.0% time reduction, with identical heads.
+The default stays uncached.
 The [accumulator isolation tests](docs/HMX_ACCUMULATOR.md) show shared HMX state
 across workers with the recovered primitives. Keep each complete clear/load/store
 transaction under one HMX owner; use HVX workers for other work.
@@ -256,7 +261,7 @@ load slope is 1,264–1,269 GMAC/s. A separate
 [two-block-load diagnostic](docs/HMX_BATCHING.md) passed another 800 measured
 jobs and 32 warmups, with about 2.52x improvement in its uncached loop.
 
-These remain experimental fixtures; public matrix execution still uses its
+These remain experimental fixtures; the general matrix API still uses its
 existing uncached path. The experiments reuse blocks within a job and do not
 establish full-model throughput. Cached publication/cleanup costs roughly
 1.5 ms per experimental job, and fresh sessions in that experiment take about
@@ -264,8 +269,8 @@ establish full-model throughput. Cached publication/cleanup costs roughly
 commands still take roughly 12.4–12.6 ms median with per-request power and
 full-window cleanup. Real convolution is now numerically qualified in the bounded
 proof. Complete graph correctness now also passes in the streamed executor.
-Next are further uncached native execution and bounded submission overhead
-reductions while preserving the frozen rules. See
+Next are bounded submission overhead and uncached data-access reductions while
+preserving the frozen rules. See
 [HAND_TRACKING.md](docs/HAND_TRACKING.md) for the roadmap and
 [HMX_THROUGHPUT.md](docs/HMX_THROUGHPUT.md) for research context.
 

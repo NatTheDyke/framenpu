@@ -354,6 +354,30 @@ or cached alias was needed. The depthwise/pool modules shrink to 4,060/4,004
 bytes; the other nine modules and public SDK payloads are byte-identical.
 See [sanitized evidence](../evidence/depthwise-gather-validation.json).
 
+## Cached resident instructions — 2026-11-16
+
+The opt-in [resident cache entry](RESIDENT_CACHE.md) passes the unchanged
+four-crop policy: 308 layer checks, 360 blobs and 20,351,360 output values.
+All 512 saved head values independently match the earlier baselines bit for bit.
+Two sessions each reuse one weight upload across two different inputs. All
+44,739 main restoration audits pass, including selected-PC/cleanup validation,
+independent arena restoration and unchanged firmware/power/service state.
+
+Audited frames take 153.9–154.6 seconds versus the earlier 183.6–187.1-second
+gather baseline, a 17.0% reduction. A sequential first-crop control with identical
+module bytes takes 196.95 seconds uncached versus 153.88 seconds cached (1.28×),
+with matching work totals and head bits. It is a single control, not a statistical
+model benchmark. Small image/alias replacement controls include sixteen guarded
+traps followed by reuse and three invalid requests, passing 53 audits. Linked
+verification checks all eleven vector tables, forwarding targets and cached
+tail targets; cached builds disable jump tables and reject absolute C relocations.
+Native cached HMX and in-place depthwise fault controls invalidate/refuse reuse
+and restore the arena across another 465/4,558 audits. Ordinary SDK regression
+passes 72 audits. No failed completion, reboot or recovery was needed.
+No reservation, work cap, power lifetime or timeout was enlarged. Data remains
+uncached; public SDK payloads remain byte-identical. Results and limitations are
+in [sanitized evidence](../evidence/resident-cache-validation.json).
+
 ## Publication audit
 
 The repository provides an MIT license, self-contained examples, SDK/compiler
@@ -362,7 +386,7 @@ machine paths, credentials and proprietary firmware are excluded from the
 public source; the numerical summary is intentionally sanitized.
 
 The initial publication suite passed 29 offline tests; the current suite passes
-157. Seven cache-diagnostic tests additionally cover alias identity, every output,
+164. Seven cache-diagnostic tests additionally cover alias identity, every output,
 cleanup confirmation before resource reclamation, confirmed-fault restoration,
 clock drift and timeout behavior. These host tests do not establish that the
 experimental DSP cache cleanup works on hardware.
@@ -406,6 +430,11 @@ Five gather-qualification regressions additionally cover the independent
 word oracle, signed-zero/NaN preservation, leading/trailing zero fill, the last
 input row, borrowed-arena/work budgets, boundary-case coverage and explicit
 opt-in. Native copy/bounds behavior has the separate paired hardware proof.
+Seven resident-cache regressions check entry tags before device access,
+mode-bound identity, full arena restoration, retention on missing cleanup or
+wrong PC alias, compiler relocation rejection, linked vector/forwarding targets
+and hardware opt-in. These tests emulate host lifecycle or check verifier
+fixtures; native behavior has its separate cached graph qualification.
 
 Local verification uses Python 3.14.9 and LLVM 23.1.4. The GitHub Actions
 matrix is configured for Python 3.11–3.14; this local run does not establish

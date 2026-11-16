@@ -27,6 +27,7 @@ include evidence/convolution-validation.json
 include evidence/landmark-validation.json
 include evidence/resident-landmark-validation.json
 include evidence/depthwise-gather-validation.json
+include evidence/resident-cache-validation.json
 global-exclude *.pyc
 include .gitignore .gitattributes
 recursive-include .github *.yml

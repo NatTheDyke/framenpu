@@ -405,8 +405,12 @@ class ResidentLandmark:
     close only; uncertain completion retains arena/code/power and refusal record.
     """
 
-    def __init__(self, graph, jobs, *, _device_factory=Device, _lease_factory=_lease):
+    def __init__(
+        self, graph, jobs, *, cached_code=False, _device_factory=Device, _lease_factory=_lease
+    ):
         planning_started = time.monotonic_ns()
+        if type(cached_code) is not bool:
+            raise InvalidModel("cached_code must be boolean")
         self.graph = graph
         self.plan = resident_landmark_plan(graph)
         if set(jobs) != set(JOB_KINDS.values()) or any(
@@ -414,6 +418,11 @@ class ResidentLandmark:
             for j in jobs.values()
         ):
             raise InvalidModel("all resident HMX/direct modules are required")
+        if cached_code and any(
+            job.name != f"resident_graph_{name}_cache_v1" for name, job in jobs.items()
+        ):
+            raise InvalidModel("cached execution requires the resident cache-v1 entry modules")
+        self._cached_code = cached_code
         self.jobs = dict(jobs)
         self.specs = specifications(graph)
         self.records = tuple(tuple(r) for r in self.plan["records"])
@@ -423,7 +432,7 @@ class ResidentLandmark:
         self.roots = dict(self.plan["roots"])
         self.allocations = {k: dict(v) for k, v in self.plan["allocations"].items()}
         self.identity = hashlib.sha256(
-            self.immutable + b"".join(jobs[k].code for k in sorted(jobs))
+            self.immutable + b"".join(jobs[k].code for k in sorted(jobs)) + bytes([cached_code])
         ).digest()
         self.nonce = secrets.token_bytes(16)
         if not any(self.nonce):
@@ -438,6 +447,7 @@ class ResidentLandmark:
         self._factory, self._lease_factory = _device_factory, _lease_factory
         self._lock = threading.RLock()
         self.metrics = {
+            "cached_code": cached_code,
             "plan_and_weight_pack_ms": (time.monotonic_ns() - planning_started) / 1e6,
             "commands": [],
             "runs": [],
@@ -449,6 +459,10 @@ class ResidentLandmark:
             "qualification_readback_bytes": 0,
             "head_readback_bytes": 0,
         }
+
+    @property
+    def cached_code(self):
+        return self._cached_code
 
     def _owner(self, t):
         if bytes(t.memory[CONTROL : CONTROL + 56]) != RECORD + self.nonce + self.identity:
@@ -516,6 +530,8 @@ class ResidentLandmark:
         record = self.records[before[19]] if op == 5 else None
         phases = {}
         captured = []
+        completions = []
+        code_base = 0x87A92000 if self.cached_code else 0xF0A92000
         started = time.monotonic_ns()
         program_live = self.sealed and not (before[0] == 6 and before[25] < PROGRAM + PROGRAM_BYTES)
         expected_guard = bytes(self.saved[GUARD - ARENA_START :]) if before[0] == 6 else self.guard
@@ -570,20 +586,22 @@ class ResidentLandmark:
                         or row[7] != SSR[i]
                     ):
                         raise ValueError("resident worker identity/SSR/error differs")
+                    if tuple(row[14:16]) != ((1, 1) if i == 0 and self.cached_code else (0, 0)):
+                        raise ValueError("resident cache cleanup was not confirmed")
                     if i == 0 and fault and not reject:
-                        if row[3] & 255 != 37 or not 0xF0A92000 <= row[4] < 0xF0A92000 + len(
+                        if row[3] & 255 != 37 or not code_base <= row[4] < code_base + len(
                             self.jobs[JOB_KINDS[kind]].code
                         ):
                             raise ValueError("resident guarded fault differs")
                     elif any(row[3:6]):
                         raise ValueError("unexpected resident fault")
                 row = result.workers[0]
-                if row[8] != 0x87000000 or any(row[14:]):
-                    raise ValueError("resident EVB/cache marker differs")
+                if row[8] != 0x87000000:
+                    raise ValueError("resident EVB differs")
                 if result.kernel_reference_ticks is None or result.kernel_reference_ticks >= 768000:
                     raise ValueError("resident wrapper exceeds 40ms")
                 meta = list(struct.unpack("<64I", result.output))
-                if meta[:31] != words[:31] or not 0xF0A92000 <= meta[31] < 0xF0A92000 + len(
+                if meta[:31] != words[:31] or not code_base <= meta[31] < code_base + len(
                     self.jobs[JOB_KINDS[kind]].code
                 ):
                     raise ValueError("resident descriptor echo/PC differs")
@@ -648,16 +666,18 @@ class ResidentLandmark:
                         ):
                             raise ValueError("resident teardown control readback differs")
                 captured.append(actual)
+                completions.append((result, meta[31], list(row[14:16])))
             except BaseException as exc:
                 raise RecoveryRequired(
                     "resident graph completion invalid; retain arena/code/power"
                 ) from exc
 
         try:
-            result = self.device._submit(
+            self.device._submit(
                 self.jobs[JOB_KINDS[kind]],
                 struct.pack("<32I", *words),
                 opcode=31,
+                params=(int(self.cached_code),),
                 output_size=256,
                 use_direct=True,
                 _prepare=prepare,
@@ -669,7 +689,6 @@ class ResidentLandmark:
         except JobFailed:
             if not (fault or reject) or len(captured) != 1:
                 raise
-            result = None
         except RecoveryRequired:
             self.device._transport.poisoned = True
             raise
@@ -678,6 +697,7 @@ class ResidentLandmark:
             self.sequence = words[8] | words[9] << 32
             if fault:
                 self.invalid = True
+        returned, pc, cleanup = completions[0]
         self.metrics["commands"].append(
             {
                 "op": op,
@@ -689,8 +709,10 @@ class ResidentLandmark:
                 "fault": fault,
                 "command_ms": (time.monotonic_ns() - started) / 1e6,
                 "host_phase_ms": phases,
-                "wrapper_ms": result.kernel_reference_ticks / 19200 if result else None,
-                "publication_ms": result.elapsed_ms if result else None,
+                "wrapper_ms": returned.kernel_reference_ticks / 19200,
+                "publication_ms": returned.elapsed_ms,
+                "pc": pc,
+                "cache_cleanup": cleanup,
             }
         )
         return self.native

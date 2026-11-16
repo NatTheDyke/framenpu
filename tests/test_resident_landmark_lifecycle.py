@@ -22,6 +22,8 @@ class AdminTransport(FakeTransport):
         self.requests = []
         self.close_count = 0
         self.fail_close = 0
+        self.bad_cache_markers = False
+        self.bad_pc = False
 
     def publish(self, *, direct=False):
         super().publish()
@@ -61,17 +63,20 @@ class AdminTransport(FakeTransport):
                 raise AssertionError("admin simulation received arithmetic")
         struct.pack_into("<32I", self.memory, rg.STATE, *state)
         meta = words + state
-        meta[31] = 0xF0A92010
+        cached = self.get(PROFILE.header + 40)
+        meta[31] = 0x87A92010 if bool(cached) != self.bad_pc else 0xF0A92010
         struct.pack_into("<64I", self.memory, PROFILE.arena + 128, *meta)
         for worker in range(3):
             row = [0] * 16
             row[:3] = [seq, worker, error if worker == 0 else 0]
             row[7], row[8] = rg.SSR[worker], 0x87000000
             row[10], row[12] = 100, 200
+            if worker == 0 and cached:
+                row[14:16] = [1, int(not self.bad_cache_markers)]
             struct.pack_into("<16I", self.memory, PROFILE.status + 64 * worker, *row)
 
 
-def owner_for(transport):
+def owner_for(transport, *, cached=False, tagged=True):
     def factory(**kwargs):
         device = Device(
             _transport=transport, _power_factory=lambda: FakePower(transport.events), **kwargs
@@ -92,13 +97,48 @@ def owner_for(transport):
     ):
         return rg.ResidentLandmark(
             SimpleNamespace(),
-            {name: Job(bytes(2048), name, True, True) for name in rg.JOB_KINDS.values()},
+            {
+                name: Job(
+                    bytes(2048), f"resident_graph_{name}_cache_v1" if tagged else name, True, True
+                )
+                for name in rg.JOB_KINDS.values()
+            },
+            cached_code=cached,
             _device_factory=factory,
             _lease_factory=Mock,
         )
 
 
 class ResidentGraphLifecycleTests(unittest.TestCase):
+    def test_cached_mode_requires_entry_contract_before_device_access(self):
+        t = AdminTransport()
+        with self.assertRaisesRegex(ValueError, "cache-v1"):
+            owner_for(t, cached=True, tagged=False)
+        self.assertFalse(t.events)
+
+    def test_cached_mode_binds_identity_and_restores_all_arena_bytes(self):
+        t = AdminTransport()
+        original = bytes(t.memory[rg.ARENA_START : rg.ARENA_END])
+        control = owner_for(t)
+        with owner_for(t, cached=True) as owner:
+            self.assertNotEqual(owner.identity, control.identity)
+            self.assertTrue(owner.metrics["cached_code"])
+            self.assertTrue(all(c["cache_cleanup"] == [1, 1] for c in owner.metrics["commands"]))
+        self.assertEqual(bytes(t.memory[rg.ARENA_START : rg.ARENA_END]), original)
+
+    def test_missing_cache_cleanup_or_wrong_alias_retains_before_reclamation(self):
+        for field in ("bad_cache_markers", "bad_pc"):
+            t = AdminTransport()
+            owner = owner_for(t, cached=True).__enter__()
+            setattr(t, field, True)
+            before = t.events.count("power_off")
+            with self.subTest(field=field), self.assertRaises(RecoveryRequired):
+                owner._command(3)
+            owner.close()
+            self.assertEqual(t.events.count("power_off"), before)
+            self.assertTrue(t.poisoned)
+            self.assertEqual(bytes(t.memory[rg.CONTROL : rg.CONTROL + 8]), rg.RECORD)
+
     def test_hardware_tools_refuse_without_opt_in_before_loading_artifacts(self):
         for name, options in (
             (

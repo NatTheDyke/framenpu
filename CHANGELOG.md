@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Added opt-in cached instructions for the pinned resident landmark executor,
+  with uncached data, unchanged work/resource/timeout limits and one HMX owner.
+  Versioned entry tags, selected-PC/fault checks and normal/fault cleanup markers
+  are required before resource reclamation. All four crops retain identical
+  heads and frozen error limits across 44,739 main restoration audits. Audited
+  frames fall from 183.6–187.1 to 153.9–154.6 seconds (17.0% less time).
+  Added linked-entry/relocation verification and seven offline regressions;
+  public SDK payloads remain byte-identical. The default stays uncached.
 - Optimized resident depthwise/max-pool gathers with HVX padding masks and
   bounded scalar tensor-edge copies. Four crops retain bit-identical heads
   under the unchanged numerical/ownership/timeout rules. Audited frames fall

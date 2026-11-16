@@ -216,6 +216,9 @@ This closes the resident-intermediate correctness gap. Its uncached baseline
 takes about 326 seconds per audited crop. The [gather optimization](DEPTHWISE_GATHER.md)
 reduces that to 184–187 seconds with the same head bits; performance remains far
 from integration.
+The subsequent [resident cache entry](RESIDENT_CACHE.md) adds opt-in cached
+instructions with checked normal/fault cleanup. Data stays uncached and all
+existing resource, ownership and timeout limits remain in force.
 
 Add direct HVX depthwise kernels for 3x3 and 5x5, including stride 2 and
 asymmetric padding. Add max/global-average pooling, residual add, fused clip,
@@ -312,7 +315,8 @@ now passes the same four crops and produces bit-identical heads with weights
 and FP32 intermediates in DDR. Its uncached depthwise gathers and many bounded
 requests initially raised audited latency to about 326 seconds. Optimized gathers
 now reduce that to 184–187 seconds: 2.38× faster depthwise native work and
-54.5% fewer depthwise requests. Reduce the remaining uncached execution and
+54.5% fewer depthwise requests. [Cached resident instructions](RESIDENT_CACHE.md)
+address instruction fetch next. Reduce the remaining uncached data access and
 power/submission costs under the frozen rules, then benchmark more crops sharing weights.
 Evaluate accuracy on a larger independent corpus before sustained integration.
 

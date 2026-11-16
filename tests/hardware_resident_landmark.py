@@ -182,6 +182,7 @@ def main():
     p.add_argument("--crop")
     p.add_argument("--stop-after")
     p.add_argument("--load-only", action="store_true")
+    p.add_argument("--cached-code", action="store_true")
     p.add_argument("--controls", action="store_true")
     p.add_argument("--fault-at", nargs=2, metavar=("LAYER", "KIND"))
     args = p.parse_args()
@@ -203,6 +204,8 @@ def main():
         "tests/hardware_resident_landmark.py",
         "tools/landmark_reference.py",
         "src/framenpu/sdk/entry.S",
+        "tools/build_resident_landmark.py",
+        "tests/resident_graph_entry.S",
         "tests/resident_graph.h",
         "tests/resident_graph_gather.h",
         "tests/resident_fp16.h",
@@ -256,6 +259,7 @@ def main():
         prior = json.loads(args.calibration_report.read_text())
         if (
             not prior.get("qualification_complete")
+            or prior.get("cached_code", False) != args.cached_code
             or not prior.get("all_checks_passed")
             or prior["jobs_sha256"] != identity
             or prior["tolerances_sha256"] != manifest["tolerances_sha256"]
@@ -265,6 +269,7 @@ def main():
             p.error("calibration pin/completion differs")
     report = {
         "format": "framenpu-resident-landmark-validation",
+        "cached_code": args.cached_code,
         "jobs_sha256": identity,
         "model_sha256": graph.weights_sha256,
         "param_sha256": graph.param_sha256,
@@ -285,7 +290,9 @@ def main():
             with Device() as observer:
                 original = bytes(observer._transport.memory[ARENA_START:ARENA_END])
             report["arena_before_sha256"] = hashlib.sha256(original).hexdigest()
-            owner = ResidentLandmark(graph, jobs, _device_factory=factory)
+            owner = ResidentLandmark(
+                graph, jobs, cached_code=args.cached_code, _device_factory=factory
+            )
             report["plan"] = {
                 k: v for k, v in owner.plan.items() if k not in ("program", "packed_weights")
             }
