@@ -1,7 +1,8 @@
+#define FNPU_ENTRY_FRAME_BYTES 80
 .section .text.entry,"ax",@progbits
 .global custom_job
 custom_job:
- { allocframe(#80) }
+ { allocframe(#FNPU_ENTRY_FRAME_BYTES) }
  { memd(r29+#0) = r17:16 }
  { memd(r29+#8) = r19:18 }
  { memd(r29+#16) = r21:20 }
@@ -58,6 +59,9 @@ recover:
  { r1:0 = c31:30 }
  { memd(r16+#48) = r1:0 }
  { r29 = memw(r16+#24) }
+ /* A synchronous fault abandons C frames. deallocframe reads through FP, so
+  * restoring SP alone can return into an abandoned frame and publish twice. */
+ { r30 = add(r29,#FNPU_ENTRY_FRAME_BYTES) }
  { r17 = memw(r16+#28) }
  { r18 = memw(r16+#32) }
  { r0 = memw(r16+#36) }

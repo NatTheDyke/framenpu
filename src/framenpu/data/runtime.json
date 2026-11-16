@@ -3,7 +3,7 @@
   "abi": 1,
   "target": "hexagonv75",
   "bytes": 3672,
-  "sha256": "93b242ba9d7f7bc41462a85f77ad0a6e95ecaee413bcaf0b87795098cf877fe8",
+  "sha256": "4ee5d0122fc7cc1df5960e38cbcc58e43f60e7599364dcb70d72ca47e4fa3578",
   "compiler_flags": [
     "--target=hexagon",
     "-mcpu=hexagonv75",
@@ -29,7 +29,7 @@
   },
   "source_sha256": {
     "compiler.py": "a922a94d2328ecff84a6947883653f8b15f0dd249f4ff09afa8f26a5b6e47c8e",
-    "sdk/entry.S": "34a70594e19182d653b825a42417b00120e91001303c77de94e7a82c21cb02d3",
+    "sdk/entry.S": "fce39ec1dfb601ab37be23addc3570af9b662c09dfb2a59b3cb41ef62a614dd8",
     "sdk/hmx.S": "ca725000e846c220cdf709a82ce61d223dd0862d66687fa968e41be18f262fb6",
     "sdk/link.ld": "c0b7dd53a7e254de549280ead79f303db3ab657e13e8565e5be3852c29a08e82",
     "sdk/include/framenpu.h": "4e65f4b8fb82586428a810714d91540685cc4895810ad5bb753b178e1db62754",
@@ -47,7 +47,7 @@
     },
     "dispatch_patch.bin": {
       "bytes": 2232,
-      "sha256": "3a40d87515e5b2cd7ec357a2c371383a799903db27cb2888752ed00778c90e5a"
+      "sha256": "a66980cef803fc07965a64d47b64da05eb2978b37395727be4d11bca6c0d20ee"
     }
   }
 }

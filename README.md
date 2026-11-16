@@ -140,6 +140,9 @@ The wheel includes SDK sources, the header, entry wrapper and linker script.
 
 Native jobs are trusted supervisor code, not sandboxed model data. See
 [ABI.md](docs/ABI.md) and [SECURITY.md](SECURITY.md).
+The SDK now restores both SP and FP after guarded nested-C-frame faults.
+Rebuild older custom FJOBs to receive the fix; see
+[fault-unwind qualification](docs/FAULT_UNWIND.md).
 
 ## Compatibility and limits
 
@@ -200,7 +203,7 @@ sudo .venv/bin/python tests/hardware_smoke.py --run-on-device
 ~~~
 
 Configured CI covers Python 3.11–3.14. [Validation notes](docs/VALIDATION.md)
-record 81 passing offline tests and distinguish local results from the
+record 88 passing offline tests and distinguish local results from the
 configured CI matrix.
 
 ## Hand tracking and contributions
@@ -225,8 +228,9 @@ load slope is 1,264–1,269 GMAC/s. A separate
 [two-block-load diagnostic](docs/HMX_BATCHING.md) passed another 800 measured
 jobs and 32 warmups, with about 2.52x improvement in its uncached loop.
 
-These remain experimental fixtures; the public runtime is unchanged. They
-reuse blocks within a job and do not establish full-model throughput. Cached
+These remain experimental fixtures; public matrix execution still uses its
+existing uncached path. The experiments reuse blocks within a job and do not
+establish full-model throughput. Cached
 publication/cleanup costs roughly 1.5 ms per job, and fresh sessions still take
 about 33 ms. Next are resident code/tensor/weight ownership, real convolution
 and HVX depthwise kernels, then a validated ncnn converter. See

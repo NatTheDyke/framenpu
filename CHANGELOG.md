@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Ported nested-C-frame exception unwinding to the public SDK: reconstruct FP
+  from the saved entry SP before deallocation. Rebuilt the 3,672-byte runtime,
+  vector-add example and dispatch patch helper; existing custom FJOBs need a
+  rebuild. Native qualification passes 48 guarded traps and 64 normal jobs
+  across CPU/HMX modes and both dispatch paths, plus GEMM/XOR and multi-tile
+  regressions. All 288 main-suite restoration audits pass without a restart.
 - Qualified cached-code HMX execution at unchanged clock configuration:
   800 measured jobs and 32 warmups match exactly. Deep resident HMX p50 falls
   from 9.51 ms to 56.25 us; fitted load slopes are 1,264–1,269 GMAC/s. Fresh
@@ -12,8 +18,8 @@
 - Experimental entry cleans cached code on normal and guarded-fault return,
   with confirmation checked before host reclamation. Fixed its nested-C-frame
   unwind by restoring FP as well as SP; three audited cached traps pass.
-  Public SDK/runtime are unchanged. Added portable fixtures, sanitized evidence
-  and clock-drift checks; public nested-frame fault recovery needs follow-up.
+  Added portable fixtures, sanitized evidence and clock-drift checks. The later
+  public unwind port is qualified separately from these cached-code timings.
 - Documented the verified 5.87 MiB persistent DDR region. Resident allocation
   and graph execution remain future work. Publication checks exclude local
   handoff/recovery files and scan the portable multi-worker builder in source

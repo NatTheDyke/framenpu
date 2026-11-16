@@ -259,9 +259,9 @@ in its uncached diagnostic. Preserve the distinction between the two results.
 Build a minimal resident executor next. Amortize cached publication/cleanup
 (roughly 1.5 ms per job) and fresh-session overhead (about 33 ms even for the
 cached diagnostic), while preserving bounded ownership and cache publication.
-The experimental entry also fixes nested-C-frame fault unwinding; carry that
-fix into the public SDK with its own payload rebuild and qualification before
-production use. Plan allocations/liveness, then validate distinct operand
+The [public SDK unwind fix](FAULT_UNWIND.md) is now rebuilt and qualified with
+nested guarded traps and numerical regressions. Plan allocations/liveness, then
+validate distinct operand
 staging and a real convolution against ncnn before completing the graph.
 
 The benchmark-free dispatcher, two-depth-tile GEMM jobs, full-tile HVX packing

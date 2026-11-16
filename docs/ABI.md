@@ -68,10 +68,10 @@ A production backend still needs persistent model arenas, explicit tensor/power
 ownership and cooperative cancellation. This release exposes a version-pinned
 research interface.
 
-The [cached-code fault experiment](HMX_CACHE.md#publication-cleanup-and-fault-return)
-also exposed a nested-C-frame unwind limitation in the original public entry:
-it restores SP but not FP before `deallocframe`. The experimental entry restores
-both and passes guarded trap/restoration checks. Public payloads are unchanged;
-their nested-frame exception recovery needs a separate rebuild/qualification.
-Captured native exceptions must not be taken as proof of safe public-session
-reuse under this limitation.
+The public entry now restores both SP and FP when abandoning nested C frames
+after a guarded exception. [Fault-unwind qualification](FAULT_UNWIND.md) covers
+48 traps and following same-session work across both dispatch paths and CPU/HMX
+jobs. The rebuilt runtime, vector-add example and patch helper contain the fix.
+Existing custom FJOBs must be rebuilt; their embedded entry is not upgraded by
+installing a new Python package. Guarded software traps do not establish
+arbitrary native-fault or pipeline-stall recovery.

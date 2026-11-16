@@ -8,8 +8,10 @@ These are synthetic within-job results, not full-model throughput.
 
 The [sanitized evidence](../evidence/hmx-cache-validation.json) contains source
 and payload hashes, latency quantiles, per-sample transaction timings, clock
-configuration and guarded-fault controls. The public SDK, runtime, dispatch and
-power policy are unchanged. This remains an experimental fixture.
+configuration and guarded-fault controls. The comparison left the public SDK,
+runtime, dispatch and power policy unchanged. The later
+[public unwind port](FAULT_UNWIND.md) is qualified separately; cached execution
+remains an experimental fixture.
 
 ## Identical math, different instruction alias
 
@@ -98,8 +100,9 @@ The experimental entry now reconstructs FP from saved entry SP plus its
 cached trap controls return exception code 2, confirm cleanup, pass DDR/power
 restoration audits before acknowledgment, and are followed by correct GEMMs.
 Four earlier fault diagnostics are excluded from throughput qualification.
-The public SDK's original nested-frame fault unwind still needs this fix and
-its own payload rebuild/qualification before production use.
+The public SDK has since received the FP restoration and its own payload
+rebuild/[qualification](FAULT_UNWIND.md). These timing results retain their
+original measured payload and source hashes.
 
 All measured sessions restored the gate, callback, dispatch window, firmware
 prefix and power configuration. The service stayed active with the same PID

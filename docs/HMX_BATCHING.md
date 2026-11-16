@@ -7,8 +7,9 @@ the much larger [cached-code result](HMX_CACHE.md).
 
 The 2026-11-15 [sanitized evidence](../evidence/hmx-batch2-validation.json)
 contains payload/source hashes, input hashes, timing quantiles and every
-measured transaction timing. Public SDK/runtime and clock/power policy are
-unchanged.
+measured transaction timing. Public SDK/runtime and clock/power policy were
+unchanged for that comparison. The later public unwind port is documented in
+[FAULT_UNWIND.md](FAULT_UNWIND.md).
 
 ## Workload and limits
 

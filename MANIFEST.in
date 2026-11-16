@@ -20,6 +20,7 @@ include evidence/hmx-accumulator-validation.json
 include evidence/hmx-baseline-validation.json
 include evidence/hmx-cache-validation.json
 include evidence/hmx-batch2-validation.json
+include evidence/fault-unwind-validation.json
 global-exclude *.pyc
 include .gitignore .gitattributes
 recursive-include .github *.yml

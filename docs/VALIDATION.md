@@ -184,7 +184,7 @@ traps exposed a missing FP restoration when abandoning nested C frames. The
 experimental entry fixes it; three final traps return exception code 2, pass
 DDR/power restoration audits, and are followed by correct GEMMs. Earlier fault
 diagnostics are excluded from timing qualification. The public SDK/runtime
-remain unchanged and need separate qualification of that unwind fix.
+were unchanged for that comparison; the subsequent public unwind port is below.
 
 The [load-batching comparison](HMX_BATCHING.md) passes another 800 measured
 jobs and 32 warmups using the corrected entry, with uncached code in both
@@ -200,6 +200,35 @@ worker spans are 10.323 ms and 14.335 ms, respectively, within the unchanged
 40 ms host limit. Sustained tracking, thermals and full-model accuracy remain
 unqualified.
 
+## Public SDK fault-unwind qualification — 2026-11-15
+
+The public entry now reconstructs FP from its saved SP and shared 80-byte frame
+size before `deallocframe`, fixing return through abandoned nested C frames.
+The runtime remains 3,672 bytes with SHA-256
+`4ee5d0122fc7cc1df5960e38cbcc58e43f60e7599364dcb70d72ca47e4fa3578`.
+The vector-add FJOB, dispatch patch helper and source manifest are regenerated.
+The dispatcher, ABI, power policy, memory bounds and timeout are unchanged.
+
+The ordinary SDK-compiled regression probe keeps 1/2/4/7 helper frames live.
+Both dispatch backends and CPU/HMX modes pass 16 normal controls, 48 guarded
+leaf traps and 48 following same-session jobs. Exception code/cause/PC, C
+continuation sentinels, live frame order and normal checksums all match.
+Borrowed DDR, callback and power restore before acknowledgment; SSR, EVB,
+dispatch and firmware-prefix checks pass. These runs perform 176 audits,
+including 56 HMX jobs and direct-dispatch install/removal helpers.
+
+The rebuilt runtime also passes the existing GEMM/activation/custom-job/saved-XOR
+suites on both backends (78 audits, 39 HMX) and direct multi-tile correctness,
+precision/rejection/reuse checks (34 audits, 30 HMX). All 288 main-suite audits
+pass with the service retaining its PID and zero restarts. Timing harnesses
+use one smoke sample here; no new performance claim is made.
+
+See [FAULT_UNWIND.md](FAULT_UNWIND.md) and the
+[sanitized evidence](../evidence/fault-unwind-validation.json). Guarded software
+traps do not qualify arbitrary exception, memory-corruption or stall recovery.
+Existing custom FJOBs embed the old entry and must be rebuilt to get the fix.
+Earlier measurement reports retain their measured payload/source hashes.
+
 ## Publication audit
 
 The repository provides an MIT license, self-contained examples, SDK/compiler
@@ -208,10 +237,13 @@ machine paths, credentials and proprietary firmware are excluded from the
 public source; the numerical summary is intentionally sanitized.
 
 The initial publication suite passed 29 offline tests; the current suite passes
-81. Seven cache-diagnostic tests additionally cover alias identity, every output,
+88. Seven cache-diagnostic tests additionally cover alias identity, every output,
 cleanup confirmation before resource reclamation, confirmed-fault restoration,
 clock drift and timeout behavior. These host tests do not establish that the
 experimental DSP cache cleanup works on hardware.
+Seven unwind-regression tests additionally check normal/fault trace validation,
+distinct live frames, completion checks before reclamation, explicit opt-in and
+stopping after a timeout. Native unwind qualification is recorded separately above.
 
 Local verification uses Python 3.14.9 and LLVM 23.1.4. The GitHub Actions
 matrix is configured for Python 3.11–3.14; this local run does not establish

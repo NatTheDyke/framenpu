@@ -164,7 +164,8 @@ notes and evidence before comparing rates.
   replaced. Three explicitly selected guarded trap checks
   (`--verify-fault-cleanup`) pass after correcting SP/FP restoration in the
   experimental entry. It does not recover stalls or faults in cleanup itself.
-  The public SDK is unchanged. The runner defaults to the uncached control.
+  The public unwind fix is [qualified separately](FAULT_UNWIND.md); cached
+  execution remains experimental. The runner defaults to the uncached control.
   See [HMX_CACHE.md](HMX_CACHE.md) and its
   [evidence](../evidence/hmx-cache-validation.json).
 - [hmx_batch2.c](../tests/hmx_batch2.c) and
