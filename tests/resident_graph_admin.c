@@ -52,7 +52,26 @@ fnpu_u32 frame_job(const fnpu_context *c) {
         if(RG_STATE[0]!=3||RG_STATE[19]||RG_STATE[20]||off!=RG_ACT+RG_STATE[27]||
            !len||len>32768||len>602112-RG_STATE[27]) return rg_finish(c,FNPU_BAD_ARGUMENT);
         rg_accept(c);RG_STATE[27]+=len;
+#ifdef RG_LOADER
+    } else if(op==7||op==8) {
+        /* Seal (7) the uploaded operator image or retire (8) it before the
+         * arena is restored. Nothing writes this span through the cached
+         * alias, so stale lines are discarded, never written back. */
+        if(off!=RG_CODE||len!=RG_CODE_BYTES||RG_STATE[0]==6||
+           (op==7?RG_STATE[0]!=2||RG_STATE[19]!=63||RG_STATE[31]:RG_STATE[31]!=RG_SEAL))
+            return rg_finish(c,FNPU_BAD_ARGUMENT);
+        rg_accept(c);
+        RG_STATE[31]=0;
+        for(fnpu_u32 addr=off;addr<off+len;addr+=32) {
+            fnpu_u32 cached=0x87000000u+addr;
+            __asm__ volatile("dcinva(%0)\n\ticinva(%0)\n\tisync"::"r"(cached):"memory");
+        }
+        if(op==7) RG_STATE[31]=RG_SEAL;
+#endif
     } else if(op==6) {
+#ifdef RG_LOADER
+        if(RG_STATE[31]) return rg_finish(c,FNPU_BAD_ARGUMENT);
+#endif
         if(len) {
             if(len>32768||off<RG_PROGRAM||off>RG_STATE[25]||len!=RG_STATE[25]-off)
                 return rg_finish(c,FNPU_BAD_ARGUMENT);

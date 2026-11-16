@@ -1,3 +1,5 @@
+#ifndef FNPU_RESIDENT_GRAPH_GATHER_H
+#define FNPU_RESIDENT_GRAPH_GATHER_H
 #include "resident_graph.h"
 /* Loads may cross a row/channel only inside the owned input tensor. Both
  * leading padding and trailing/count lanes are masked before arithmetic. */
@@ -35,3 +37,4 @@ static fnpu_u32 half_bits(fnpu_u32 h) {
     fnpu_u32 sign=(h&0x8000)<<16,mag=h&0x7fff;
     return sign|(mag?(mag<<13)+0x38000000u:0);
 }
+#endif

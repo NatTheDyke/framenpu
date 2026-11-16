@@ -18,14 +18,14 @@ static float sigmoid(float x) {
     return reciprocal.f;
 }
 fnpu_u32 frame_job(const fnpu_context *c) {
-    if(!rg_run(c,6)) return rg_finish(c,FNPU_BAD_ARGUMENT);
+    if(!rg_run(c,6)) return RG_RETURN(c,FNPU_BAD_ARGUMENT);
     const volatile fnpu_u32 *r=rg_layer();
-    if(r[7]!=1||r[8]!=1||r[9]!=1||r[18]!=2||RG_STATE[24]!=2) return rg_finish(c,FNPU_BAD_ARGUMENT);
+    if(r[7]!=1||r[8]!=1||r[9]!=1||r[18]!=2||RG_STATE[24]!=2) return RG_RETURN(c,FNPU_BAD_ARGUMENT);
     rg_accept(c);
     volatile float *out=(volatile float *)RG_PTR(r[3]);
     union {float f;fnpu_u32 u;} value;value.f=*out;
     if((value.u&0x7f800000)==0x7f800000) RG_STATE[29]=~0u;
-    *out=sigmoid(value.f);RG_STATE[30]=1;
+    *out=sigmoid(value.f);RG_ONE();
     rg_fault(c);rg_done(r);
-    return rg_finish(c,FNPU_OK);
+    return RG_RETURN(c,FNPU_OK);
 }

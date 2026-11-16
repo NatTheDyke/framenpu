@@ -1,5 +1,7 @@
 /* Integer FP32 -> FP16 round-to-nearest/even. The native sf->hf instruction
  * in current LLVM headers requires a later architecture than v75. */
+#ifndef FNPU_RESIDENT_FP16_H
+#define FNPU_RESIDENT_FP16_H
 #include "fnpu_readback.h"
 static __attribute__((noinline)) HVX_Vector half_words(HVX_Vector bits) {
     HVX_Vector zero=Q6_V_vzero(),one=Q6_V_vsplat_R(1);
@@ -25,3 +27,4 @@ static HVX_Vector half_pair(HVX_Vector low,HVX_Vector high) {
     HVX_Vector a=half_words(low),b=half_words(high);
     return Q6_V_vor_VV(a,Q6_Vw_vasl_VwR(b,16));
 }
+#endif

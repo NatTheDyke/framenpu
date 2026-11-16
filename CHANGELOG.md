@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Linked the ten resident compute operators into one position-independent
+  image in owned DDR, entered from a small slot loader, with requests that
+  cross phase and layer boundaries up to a host tick budget or stop point.
+  Seal/retire commands bracket cached instructions; the host replays each
+  reported unit count through its independent state machine. Four crops retain
+  identical heads and frozen limits across 13,299 main restoration audits.
+  At a 20 ms budget, frames fall from 10,959–10,964 requests and 153.9–154.6
+  seconds to 1,532–1,567 requests and 48.8–51.4 seconds. The eleven-module
+  path and its module bytes are unchanged. Added a linked-build verifier and
+  nine offline regressions. Remaining requests are bounded by depthwise
+  native time.
 - Added opt-in cached instructions for the pinned resident landmark executor,
   with uncached data, unchanged work/resource/timeout limits and one HMX owner.
   Versioned entry tags, selected-PC/fault checks and normal/fault cleanup markers

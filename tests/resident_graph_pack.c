@@ -17,15 +17,15 @@ static HVX_Vector gather(const volatile fnpu_u32 *r,fnpu_u32 channel,fnpu_u32 co
     return *(volatile HVX_Vector *)tmp;
 }
 fnpu_u32 frame_job(const fnpu_context *c) {
-    if(!rg_run(c,RG_STEM?10:9)) return rg_finish(c,FNPU_BAD_ARGUMENT);
+    if(!rg_run(c,RG_STEM?10:9)) return RG_RETURN(c,FNPU_BAD_ARGUMENT);
     const volatile fnpu_u32 *r=rg_layer(),*d=fnpu_input(c);
     if(r[0]!=(RG_STEM?2u:1u)||r[19]!=r[5]*r[6]||!r[26]||r[26]>352||RG_STATE[18]>=r[26]||
-       (RG_STEM&&(r[4]!=3||r[5]!=224||r[6]!=224))) return rg_finish(c,FNPU_BAD_ARGUMENT);
+       (RG_STEM&&(r[4]!=3||r[5]!=224||r[6]!=224))) return RG_RETURN(c,FNPU_BAD_ARGUMENT);
     fnpu_u32 remaining=RG_STEM?r[9]-RG_STATE[22]:r[8]*r[9]-RG_STATE[22];
     fnpu_u32 count=remaining<32?remaining:32;
-    if(!count) return rg_finish(c,FNPU_BAD_ARGUMENT);
+    if(!count) return RG_RETURN(c,FNPU_BAD_ARGUMENT);
     rg_accept(c);rg_u64 start=rg_ticks();
-    for(fnpu_u32 i=0;i<d[19];i++) {
+    for(fnpu_u32 i=0;RG_MORE(i,d);i++) {
         fnpu_u32 pair=RG_STATE[18];
         HVX_Vector low=gather(r,pair*2,count),high=gather(r,pair*2+1,count);
         HVX_Vector v=half_pair(low,high);
@@ -37,7 +37,7 @@ fnpu_u32 frame_job(const fnpu_context *c) {
         RG_STATE[18]++;RG_STATE[30]++;
         rg_fault(c);
         if(RG_STATE[18]==r[26]) {RG_STATE[24]=1;break;}
-        if(rg_ticks()-start>96000) break;
+        if(RG_EXPIRED(start)) break;
     }
-    return rg_finish(c,FNPU_OK);
+    return RG_RETURN(c,FNPU_OK);
 }

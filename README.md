@@ -207,7 +207,7 @@ sudo .venv/bin/python tests/hardware_smoke.py --run-on-device
 ~~~
 
 Configured CI covers Python 3.11–3.14. [Validation notes](docs/VALIDATION.md)
-record 164 passing offline tests and distinguish local results from the
+record 173 passing offline tests and distinguish local results from the
 configured CI matrix.
 
 ## Hand tracking and contributions
@@ -247,6 +247,11 @@ instructions through the cached alias while preserving uncached data and the
 existing ownership, work caps and timeout limits. Four-crop audited frames now
 take 153.9–154.6 seconds, a further 17.0% time reduction, with identical heads.
 The default stays uncached.
+[Linked resident operators](docs/RESIDENT_LINK.md) then place all compute
+operators in one image in the owned arena and let a request cross layers up to
+a tick budget. At 20 ms, frames need 1,532–1,567 requests instead of about
+10,960 and take 48.8–51.4 seconds, with identical heads; depthwise native time
+now bounds the request count.
 The [accumulator isolation tests](docs/HMX_ACCUMULATOR.md) show shared HMX state
 across workers with the recovered primitives. Keep each complete clear/load/store
 transaction under one HMX owner; use HVX workers for other work.

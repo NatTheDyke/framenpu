@@ -4,7 +4,7 @@ recursive-include docs *.md
 recursive-include tools *.py
 recursive-include tools *.cpp
 recursive-include examples *.py *.c *.param *.fjob *.fnpu *.json
-recursive-include tests *.py *.c *.h *.S
+recursive-include tests *.py *.c *.h *.S *.ld
 exclude HANDOFF.md
 prune handoff-tools
 include handoff-tools/build_mw.py
@@ -28,6 +28,7 @@ include evidence/landmark-validation.json
 include evidence/resident-landmark-validation.json
 include evidence/depthwise-gather-validation.json
 include evidence/resident-cache-validation.json
+include evidence/resident-link-validation.json
 global-exclude *.pyc
 include .gitignore .gitattributes
 recursive-include .github *.yml

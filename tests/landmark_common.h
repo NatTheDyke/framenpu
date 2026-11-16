@@ -1,4 +1,6 @@
 /* Bounded uncached job-arena I/O only. No resident/cache aliases are used. */
+#ifndef FNPU_LANDMARK_COMMON_H
+#define FNPU_LANDMARK_COMMON_H
 #include "fnpu_readback.h"
 static int valid(const fnpu_context *c) {
     return c->magic==FNPU_MAGIC && c->abi==FNPU_ABI &&
@@ -34,3 +36,4 @@ static void fault_control(const fnpu_context *c) {
         *(volatile HVX_Vector *)fnpu_output(c)=Q6_V_vsplat_R(0xbad);
     }
 }
+#endif

@@ -57,7 +57,9 @@ at most 32 KiB per real submission and saves effective original bytes after
 completion. Subsequent model data accesses use uncached aliases. Code also
 defaults to uncached; the opt-in [resident cache entry](RESIDENT_CACHE.md)
 adds checked instruction publication and cleanup on normal and guarded-fault
-returns, within the same reservations and timeout limits.
+returns, within the same reservations and timeout limits. The separate
+[linked operator image](RESIDENT_LINK.md) executes from owned DDR instead and
+lets one request cross layers.
 Each native loop stops between whole work units after a five-millisecond tick
 budget, with fixed unit caps. There is no mid-HMX cancellation. The public
 4 KiB code slot, 8 KiB VTCM backup, 128 KiB borrowed job arena and 40 ms host

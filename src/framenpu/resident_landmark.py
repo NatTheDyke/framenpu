@@ -33,6 +33,15 @@ ACTIVATIONS = WEIGHTS + WEIGHT_SPAN + 128
 GUARD = ARENA_END - 4096
 SCRATCH = GUARD - 45056
 SPAN = ARENA_END - ARENA_START
+# Linked execution: one read-only operator image in the unused pages between
+# the activation high-water mark and the packed-input page.
+CODE = 0x1FF0000
+CODE_BYTES = 12288
+SEAL = 0x434F4445
+BATCH = 12
+UNIT_LIMIT = 1 << 20
+BUDGET_TICKS_MAX = 480000
+TICKS_PER_MS = 19200
 MAGIC = 0x524C4D4B
 KINDS = {
     "Convolution": 1,
@@ -293,6 +302,145 @@ def _next_row(state, record):
             state[21] += 1
 
 
+def _unit(s, kind, record, fault):
+    """Apply one completed native work unit in place; True ends its phase."""
+    terminal = False
+    s[30] += 1
+    if kind in (9, 10):
+        s[18] += 1
+        if not fault and s[18] == record[26]:
+            s[24] = 1
+            terminal = True
+    elif kind == 1:
+        s[20] += 1
+        if not fault:
+            s[21] += 32
+            if s[21] >= record[7]:
+                s[21] = s[18] = 0
+                s[24] = 3
+                terminal = True
+    elif kind == 8:
+        s[18] += 1
+        if not fault and s[18] == record[7]:
+            s[18] = 0
+            if s[20] == record[24]:
+                if record[18] == 2:
+                    s[24] = 2
+                    s[20] = s[22] = s[23] = 0
+                else:
+                    _done(s, record)
+            else:
+                s[22] += 32
+                if record[0] == 2 and s[22] >= record[9]:
+                    s[22] = 0
+                    s[23] += 1
+                s[24] = 0
+            terminal = True
+    elif kind in (3, 5):
+        s[20] += 1
+        _next_row(s, record)
+        if not fault and s[20] == record[24]:
+            _done(s, record)
+            terminal = True
+    elif kind in (4, 11):
+        s[20] += 1
+        if not fault and s[20] == record[24]:
+            _done(s, record)
+            terminal = True
+    elif kind == 7:
+        s[20] += 1
+        s[22] += 1
+        if s[22] == 98:
+            s[22] = 0
+            s[21] += 1
+        if not fault and s[20] == record[25]:
+            _done(s, record)
+            terminal = True
+    elif kind == 6:
+        if not fault:
+            _done(s, record)
+            terminal = True
+    else:
+        raise ValueError("unknown resident work kind")
+    if fault:
+        s[0] = 4
+        terminal = True
+    return terminal
+
+
+def _batch_transition(before, words, count, records):
+    """Replay a linked request that may cross phases and layers.
+
+    Every unit's module follows from resident state alone, so the reported
+    unit count determines the result. A request must end at its host stop
+    point, at frame completion and after a guarded fault; it may end earlier
+    only between whole units (tick budget or unit limit).
+    """
+    s = list(before)
+    s[8:10] = words[8:10]
+    s[29] = s[30] = 0
+    if not 1 <= count <= words[19]:
+        raise ValueError("resident batch count differs")
+    if words[30] and count != 1:
+        raise ValueError("fault must stop after one unit")
+    for i in range(count):
+        if s[0] != 3 or s[19] >= len(records):
+            raise ValueError("resident batch ran beyond the frame")
+        record = records[s[19]]
+        terminal = _unit(s, _kind(s, record), record, words[30])
+        stopped = s[0] != 3 or (terminal and s[19] == words[24] and s[24] == words[25])
+        if stopped and i + 1 != count:
+            raise ValueError("resident batch ran past its stop point")
+    return s
+
+
+def _phase_end(state, records):
+    """(layer, phase) reached when the current phase finishes; the first such
+    state after any unit of this phase, so it is a valid one-phase stop point."""
+    s = list(state)
+    while True:
+        record = records[s[19]]
+        if _unit(s, _kind(s, record), record, 0):
+            return s[19], s[24]
+
+
+def load_linked(folder):
+    """Load a checked `build_resident_landmark.py --linked` output directory."""
+    import json
+    from pathlib import Path
+
+    folder = Path(folder)
+    record = json.loads((folder / "link.json").read_text())
+    loader = Job.load(folder / "resident_graph_loader.fjob")
+    image = (folder / "resident_graph_linked.bin").read_bytes()
+    if (
+        record.get("format") != "framenpu-resident-link-build"
+        or record.get("version") != 1
+        or record.get("code_offset") != CODE
+        or record.get("code_reservation_bytes") != CODE_BYTES
+        or record["loader"] != {"bytes": len(loader.code), "sha256": _sha(loader.code)}
+        or record["linked"] != {"bytes": len(image), "sha256": _sha(image)}
+    ):
+        raise InvalidModel("linked resident build record differs")
+    return LinkedJobs(loader, image)
+
+
+def _sha(data):
+    return hashlib.sha256(data).hexdigest()
+
+
+class LinkedJobs(tuple):
+    """(slot loader Job, operator image bytes) for linked resident execution."""
+
+    __slots__ = ()
+
+    def __new__(cls, loader, image):
+        return super().__new__(cls, (loader, image))
+
+    loader = property(lambda self: self[0])
+    image = property(lambda self: self[1])
+
+
 def _transition(before, words, count, record=None):
     """Independent host FSM; count is bounded actual work, never a trusted cursor."""
     s = list(before)
@@ -324,73 +472,15 @@ def _transition(before, words, count, record=None):
         s[0] = 6 if words[22] else 5
         if words[22]:
             s[25] = words[21]
+    elif op in (7, 8):
+        s[31] = SEAL if op == 7 else 0
     elif op == 5:
         if not 1 <= count <= words[19]:
             raise ValueError("resident work count differs")
         if words[30] and count != 1:
             raise ValueError("fault must stop after one unit")
         for i in range(count):
-            terminal = False
-            s[30] += 1
-            if kind in (9, 10):
-                s[18] += 1
-                if not words[30] and s[18] == record[26]:
-                    s[24] = 1
-                    terminal = True
-            elif kind == 1:
-                s[20] += 1
-                if not words[30]:
-                    s[21] += 32
-                    if s[21] >= record[7]:
-                        s[21] = s[18] = 0
-                        s[24] = 3
-                        terminal = True
-            elif kind == 8:
-                s[18] += 1
-                if not words[30] and s[18] == record[7]:
-                    s[18] = 0
-                    if s[20] == record[24]:
-                        if record[18] == 2:
-                            s[24] = 2
-                            s[20] = s[22] = s[23] = 0
-                        else:
-                            _done(s, record)
-                    else:
-                        s[22] += 32
-                        if record[0] == 2 and s[22] >= record[9]:
-                            s[22] = 0
-                            s[23] += 1
-                        s[24] = 0
-                    terminal = True
-            elif kind in (3, 5):
-                s[20] += 1
-                _next_row(s, record)
-                if not words[30] and s[20] == record[24]:
-                    _done(s, record)
-                    terminal = True
-            elif kind in (4, 11):
-                s[20] += 1
-                if not words[30] and s[20] == record[24]:
-                    _done(s, record)
-                    terminal = True
-            elif kind == 7:
-                s[20] += 1
-                s[22] += 1
-                if s[22] == 98:
-                    s[22] = 0
-                    s[21] += 1
-                if not words[30] and s[20] == record[25]:
-                    _done(s, record)
-                    terminal = True
-            elif kind == 6:
-                if not words[30]:
-                    _done(s, record)
-                    terminal = True
-            else:
-                raise ValueError("unknown resident work kind")
-            if words[30]:
-                s[0] = 4
-                terminal = True
+            terminal = _unit(s, kind, record, words[30])
             if terminal and i + 1 != count:
                 raise ValueError("resident work crossed a phase boundary")
     return s
@@ -406,24 +496,61 @@ class ResidentLandmark:
     """
 
     def __init__(
-        self, graph, jobs, *, cached_code=False, _device_factory=Device, _lease_factory=_lease
+        self,
+        graph,
+        jobs,
+        *,
+        cached_code=False,
+        budget_ms=5.0,
+        _device_factory=Device,
+        _lease_factory=_lease,
     ):
         planning_started = time.monotonic_ns()
         if type(cached_code) is not bool:
             raise InvalidModel("cached_code must be boolean")
         self.graph = graph
         self.plan = resident_landmark_plan(graph)
-        if set(jobs) != set(JOB_KINDS.values()) or any(
+        self.linked = isinstance(jobs, LinkedJobs)
+        self.image = b""
+        self.budget_ticks = 96000
+        if self.linked:
+            loader, image = jobs
+            if (
+                not isinstance(loader, Job)
+                or not loader.requires_hmx
+                or not loader.supports_direct
+                or loader.name != "resident_graph_loader_link_v1"
+                or not isinstance(image, bytes)
+                or not 0 < len(image) <= CODE_BYTES
+                or len(image) % 4
+            ):
+                raise InvalidModel("linked execution requires the link-v1 loader and image")
+            if (
+                type(budget_ms) not in (int, float)
+                or not math.isfinite(budget_ms)
+                or not 1 <= round(budget_ms * TICKS_PER_MS) <= BUDGET_TICKS_MAX
+            ):
+                raise InvalidModel("linked request budget must be within (0, 25] ms")
+            if self.plan["high_water_offset"] > CODE or CODE + CODE_BYTES > SCRATCH:
+                raise InvalidModel("resident tensors overlap the linked image reservation")
+            self.budget_ticks = round(budget_ms * TICKS_PER_MS)
+            self.image = image.ljust(CODE_BYTES, b"\0")
+            self.image_bytes = len(image)
+            jobs = {"loader": loader}
+        elif budget_ms != 5.0:
+            raise InvalidModel("only linked execution has a selectable request budget")
+        elif set(jobs) != set(JOB_KINDS.values()) or any(
             not isinstance(j, Job) or not j.requires_hmx or not j.supports_direct
             for j in jobs.values()
         ):
             raise InvalidModel("all resident HMX/direct modules are required")
-        if cached_code and any(
+        elif cached_code and any(
             job.name != f"resident_graph_{name}_cache_v1" for name, job in jobs.items()
         ):
             raise InvalidModel("cached execution requires the resident cache-v1 entry modules")
         self._cached_code = cached_code
         self.jobs = dict(jobs)
+        self.code_live = False
         self.specs = specifications(graph)
         self.records = tuple(tuple(r) for r in self.plan["records"])
         self.program = self.plan["program"]
@@ -432,7 +559,10 @@ class ResidentLandmark:
         self.roots = dict(self.plan["roots"])
         self.allocations = {k: dict(v) for k, v in self.plan["allocations"].items()}
         self.identity = hashlib.sha256(
-            self.immutable + b"".join(jobs[k].code for k in sorted(jobs)) + bytes([cached_code])
+            self.immutable
+            + b"".join(jobs[k].code for k in sorted(jobs))
+            + bytes([cached_code])
+            + (b"link-v1" + self.image if self.linked else b"")
         ).digest()
         self.nonce = secrets.token_bytes(16)
         if not any(self.nonce):
@@ -448,6 +578,8 @@ class ResidentLandmark:
         self._lock = threading.RLock()
         self.metrics = {
             "cached_code": cached_code,
+            "linked": self.linked,
+            "budget_ticks": self.budget_ticks,
             "plan_and_weight_pack_ms": (time.monotonic_ns() - planning_started) / 1e6,
             "commands": [],
             "runs": [],
@@ -468,7 +600,7 @@ class ResidentLandmark:
         if bytes(t.memory[CONTROL : CONTROL + 56]) != RECORD + self.nonce + self.identity:
             raise RecoveryRequired("resident graph arena ownership changed")
 
-    def _descriptor(self, op, kind=0, *, units=0, offset=0, length=0, fault=False):
+    def _descriptor(self, op, kind=0, *, units=0, offset=0, length=0, fault=False, stop=(63, 0)):
         seq = self.sequence + 1
         if not 0 < seq < (1 << 64) - 1:
             raise ValueError("resident sequence exhausted")
@@ -482,8 +614,13 @@ class ResidentLandmark:
             seq >> 32,
             *struct.unpack("<8I", self.identity),
         ]
-        progress = self.native[18] if kind in (8, 9, 10) else self.native[20]
+        first = kind
+        if kind == BATCH and self.native[19] < len(self.records):
+            first = _kind(self.native, self.records[self.native[19]])
+        progress = self.native[18] if first in (8, 9, 10) else self.native[20]
         words += [self.native[19], units, progress, offset, length] + [0] * 9
+        if kind == BATCH:
+            words[23:26] = [self.budget_ticks, *stop]
         words[30] = int(fault)
         return words
 
@@ -500,18 +637,21 @@ class ResidentLandmark:
         fault=False,
         descriptor=None,
         reject=False,
+        stop=(63, 0),
     ):
         if data is not None:
-            if op not in (2, 4):
-                raise ValueError("only immutable/input phases may upload resident data")
+            if op not in (2, 4, 7) or (op == 7 and data != self.image):
+                raise ValueError("only immutable/input/code phases may upload resident data")
             expected = (
                 PROGRAM + self.native[26]
                 if op == 2
                 else ACTIVATIONS + self.native[27]
                 if op == 4
-                else -1
+                else CODE
             )
-            limit = ACTIVATIONS if op == 2 else ACTIVATIONS + 602112
+            limit = (
+                ACTIVATIONS if op == 2 else ACTIVATIONS + 602112 if op == 4 else CODE + CODE_BYTES
+            )
             if offset != expected or not 0 < len(data) <= 32768 or offset + len(data) > limit:
                 raise ValueError("resident upload is outside its phase/range")
         words = (
@@ -522,16 +662,32 @@ class ResidentLandmark:
                 offset=offset,
                 length=len(data) if data is not None else length,
                 fault=fault,
+                stop=stop,
             )
             if descriptor is None
             else list(descriptor)
         )
         before = list(self.native)
-        record = self.records[before[19]] if op == 5 else None
+        record = self.records[before[19]] if op == 5 and before[19] < len(self.records) else None
         phases = {}
         captured = []
         completions = []
-        code_base = 0x87A92000 if self.cached_code else 0xF0A92000
+        if self.linked:
+            # The slot loader always runs uncached; only the operator image
+            # executes through the selected alias, with no per-request cleanup.
+            job = self.jobs["loader"]
+            in_image = op == 5
+            code_base = (
+                (0x87000000 if self.cached_code else 0xF0000000) + CODE if in_image else 0xF0A92000
+            )
+            code_end = code_base + (self.image_bytes if in_image else len(job.code))
+            markers = (0, 0)
+        else:
+            job = self.jobs[JOB_KINDS[kind]]
+            code_base = 0x87A92000 if self.cached_code else 0xF0A92000
+            code_end = code_base + len(job.code)
+            markers = (1, 1) if self.cached_code else (0, 0)
+        code_live = self.code_live
         started = time.monotonic_ns()
         program_live = self.sealed and not (before[0] == 6 and before[25] < PROGRAM + PROGRAM_BYTES)
         expected_guard = bytes(self.saved[GUARD - ARENA_START :]) if before[0] == 6 else self.guard
@@ -554,6 +710,8 @@ class ResidentLandmark:
                 raise RecoveryRequired("resident program changed")
             if self.guard_ready and bytes(t.memory[GUARD:ARENA_END]) != expected_guard:
                 raise RecoveryRequired("resident end guard changed")
+            if code_live and bytes(t.memory[CODE : CODE + CODE_BYTES]) != self.image:
+                raise RecoveryRequired("resident linked image changed")
             if data is not None:
                 stamp = time.monotonic_ns()
                 t.memory[offset : offset + len(data)] = data
@@ -586,12 +744,10 @@ class ResidentLandmark:
                         or row[7] != SSR[i]
                     ):
                         raise ValueError("resident worker identity/SSR/error differs")
-                    if tuple(row[14:16]) != ((1, 1) if i == 0 and self.cached_code else (0, 0)):
+                    if tuple(row[14:16]) != (markers if i == 0 else (0, 0)):
                         raise ValueError("resident cache cleanup was not confirmed")
                     if i == 0 and fault and not reject:
-                        if row[3] & 255 != 37 or not code_base <= row[4] < code_base + len(
-                            self.jobs[JOB_KINDS[kind]].code
-                        ):
+                        if row[3] & 255 != 37 or not code_base <= row[4] < code_end:
                             raise ValueError("resident guarded fault differs")
                     elif any(row[3:6]):
                         raise ValueError("unexpected resident fault")
@@ -601,14 +757,14 @@ class ResidentLandmark:
                 if result.kernel_reference_ticks is None or result.kernel_reference_ticks >= 768000:
                     raise ValueError("resident wrapper exceeds 40ms")
                 meta = list(struct.unpack("<64I", result.output))
-                if meta[:31] != words[:31] or not code_base <= meta[31] < code_base + len(
-                    self.jobs[JOB_KINDS[kind]].code
-                ):
+                if meta[:31] != words[:31] or not code_base <= meta[31] < code_end:
                     raise ValueError("resident descriptor echo/PC differs")
                 actual = meta[32:]
                 expected = (
                     before
                     if reject
+                    else _batch_transition(before, words, actual[30], self.records)
+                    if op == 5 and kind == BATCH
                     else _transition(before, words, actual[30] if op == 5 else 0, record)
                 )
                 if actual != expected or struct.unpack_from("<32I", t.memory, STATE) != tuple(
@@ -629,6 +785,10 @@ class ResidentLandmark:
                     and bytes(t.memory[PROGRAM : PROGRAM + PROGRAM_BYTES]) != self.program
                 ):
                     raise ValueError("resident immutable program changed")
+                if (code_live or op == 7 and not reject) and (
+                    bytes(t.memory[CODE : CODE + CODE_BYTES]) != self.image
+                ):
+                    raise ValueError("resident linked image changed")
                 if (
                     op == 6
                     and before[0] != 6
@@ -648,7 +808,7 @@ class ResidentLandmark:
                         raise ValueError("resident trap sentinel/continuation differs")
                 elif check is not None:
                     check(before, actual, actual[30], t)
-                if getattr(self, "_tearing_down", False):
+                if getattr(self, "_tearing_down", False) and op == 6:
                     # Bound each write/readback to one completed submission;
                     # retire the refusal prefix after dispatch removal.
                     if words[22]:
@@ -674,9 +834,9 @@ class ResidentLandmark:
 
         try:
             self.device._submit(
-                self.jobs[JOB_KINDS[kind]],
+                job,
                 struct.pack("<32I", *words),
-                opcode=31,
+                opcode=32 if self.linked and op == 5 else 31,
                 params=(int(self.cached_code),),
                 output_size=256,
                 use_direct=True,
@@ -695,6 +855,8 @@ class ResidentLandmark:
         if not reject:
             self.native = captured[0]
             self.sequence = words[8] | words[9] << 32
+            if op in (7, 8):
+                self.code_live = op == 7
             if fault:
                 self.invalid = True
         returned, pc, cleanup = completions[0]
@@ -738,6 +900,8 @@ class ResidentLandmark:
                 if bytes(self.device._transport.memory[PROGRAM:ACTIVATIONS]) != self.immutable:
                     raise RecoveryRequired("resident immutable upload readback differs")
                 self.sealed = True
+                if self.linked:
+                    self._command(7, offset=CODE, data=self.image)
                 self.metrics["weight_loads"] = 1
                 self.metrics["open_ms"] = (time.monotonic_ns() - started) / 1e6
                 return self
@@ -757,6 +921,9 @@ class ResidentLandmark:
             started = time.monotonic_ns()
             try:
                 if self.device is not None and self.owned and not self.device._transport.poisoned:
+                    if self.native[31] == SEAL:
+                        # Retire cached instructions before any byte is restored.
+                        self._command(8, offset=CODE, length=CODE_BYTES)
                     self._tearing_down = True
                     cursor = ARENA_START + self.saved_bytes
                     while cursor > PROGRAM:
@@ -840,6 +1007,59 @@ class ResidentLandmark:
             return [(0, record[3])]
         return []
 
+    def _drive(self, stop, fault_kind=None):
+        """Run linked requests until the host stop point; replay bounds the units."""
+        s = list(self.native)
+        remaining = 0
+        while True:
+            record = self.records[s[19]]
+            remaining += 1
+            terminal = _unit(s, _kind(s, record), record, 0)
+            if s[0] != 3 or terminal and (s[19], s[24]) == tuple(stop):
+                break
+        while remaining:
+            target, fault = stop, False
+            if fault_kind is not None:
+                # Step one phase at a time so the trap lands in the named module.
+                fault = _kind(self.native, self.records[self.native[19]]) == fault_kind
+                target = _phase_end(self.native, self.records)
+            self._command(5, BATCH, units=remaining, stop=target, fault=fault)
+            if fault:
+                raise JobFailed("confirmed resident graph trap; close session")
+            remaining -= self.native[30]
+
+    def _linked_layer(self, spec, record, index, checker, fault_at):
+        """One layer in as few requests as the budget allows.
+
+        Extra stops exist only where a later phase overwrites what qualification
+        must read: the strided in-place downsample and the pre-sigmoid logit.
+        """
+        key = spec["output"][0]
+        fault_kind = fault_at[1] if fault_at and fault_at[0] == spec["name"] else None
+
+        def read(**layout):
+            values = self._read_tensor(key, **layout)
+            self.metrics["qualification_readback_bytes"] += len(values) * 4
+            return values
+
+        shadow = None
+        if record[23] == 1:
+            self._drive((index, 1), fault_kind)
+            if checker:
+                shadow = read(strided=True)
+                checker(range(len(shadow)), shadow, True, "output")
+        elif record[18] == 2:
+            self._drive((index, 2), fault_kind)
+            if checker:
+                checker([0], read(), False, "logits")
+        self._drive((index + 1, 0), fault_kind)
+        if checker:
+            output = read()
+            if shadow is None:
+                checker(range(len(output)), output, True, "output")
+            elif output.tobytes() != shadow.tobytes():
+                raise ValueError("resident in-place compaction changed values")
+
     def run(self, chw, *, validator_factory=None, stop_after=None, _fault_at=None):
         with self._lock:
             try:
@@ -880,7 +1100,13 @@ class ResidentLandmark:
                 self._command(4, offset=ACTIVATIONS + at, data=raw[at : at + 32768])
             self.metrics["input_loads"] += 1
             arithmetic = 0
-            for spec in self.specs:
+            specs = self.specs
+            if self.linked and validator_factory is None and not stop_after and not _fault_at:
+                # Unqualified execution: each request runs until its tick budget.
+                while self.native[0] == 3:
+                    self._command(5, BATCH, units=UNIT_LIMIT)
+                specs = ()
+            for spec in specs:
                 op = spec["operator"]
                 key = spec["output"][0]
                 qualification_started = time.monotonic_ns()
@@ -901,7 +1127,12 @@ class ResidentLandmark:
                     record = self.records[arithmetic]
                     if self.native[19] != arithmetic:
                         raise RecoveryRequired("resident layer ordering differs")
-                    while self.native[19] == arithmetic and self.native[0] == 3:
+                    if self.linked:
+                        try:
+                            self._linked_layer(spec, record, arithmetic, checker, _fault_at)
+                        except ValueError as exc:
+                            raise RecoveryRequired("resident layer qualification failed") from exc
+                    while not self.linked and self.native[19] == arithmetic and self.native[0] == 3:
                         kind = _kind(self.native, record)
 
                         def validate_chunk(old, new, count, t):

@@ -1,0 +1,1054 @@
+{
+  "format": "framenpu-resident-link-validation",
+  "version": 1,
+  "date": "2026-11-16",
+  "status": "qualified_with_unchanged_four_crop_policy",
+  "baseline_revision": "4c8cd87452d4a6e2d72fb37242733429105a30a0",
+  "baseline_evidence": "resident-cache-validation.json",
+  "scope": "Linked operator image in owned DDR with cross-layer batch requests; data aliases, arithmetic, layout, HMX ownership, VTCM/arena spans and 40 ms timeout unchanged.",
+  "timeout_ms": 40,
+  "native_budget_ticks_max": 480000,
+  "qualified_budget_ms": 20.0,
+  "code_offset": 33488896,
+  "code_reservation_bytes": 12288,
+  "build": {
+    "loader": {
+      "bytes": 3832,
+      "sha256": "33d12234b3b6a25c244388a698baef8e47c7236e580989e5af58b8721ef8ca4f"
+    },
+    "linked": {
+      "bytes": 9336,
+      "sha256": "b600714e03c3231c41d86cafbeea2da609a3cc4999d7f81499c1ce280ac8384a"
+    },
+    "flags": [
+      "--target=hexagon",
+      "-mcpu=hexagonv75",
+      "-mhvx",
+      "-mhvx-length=128b",
+      "-Os",
+      "-ffreestanding",
+      "-fno-builtin",
+      "-fno-stack-protector",
+      "-fno-unwind-tables",
+      "-fno-asynchronous-unwind-tables",
+      "-ffp-contract=off",
+      "-mllvm",
+      "-spill-func-threshold=100",
+      "-mllvm",
+      "-spill-func-threshold-Os=100",
+      "-G0",
+      "-fno-jump-tables"
+    ],
+    "toolchain": {
+      "clang": "clang version 23.1.4",
+      "linker": "LLD 23.1.4 (compatible with GNU linkers)",
+      "objcopy": "llvm-objcopy, compatible with GNU objcopy"
+    },
+    "sources": {
+      "src/framenpu/sdk/hmx.S": "ca725000e846c220cdf709a82ce61d223dd0862d66687fa968e41be18f262fb6",
+      "src/framenpu/sdk/link.ld": "c0b7dd53a7e254de549280ead79f303db3ab657e13e8565e5be3852c29a08e82",
+      "src/framenpu/sdk/include/framenpu.h": "4e65f4b8fb82586428a810714d91540685cc4895810ad5bb753b178e1db62754",
+      "src/framenpu/sdk/include/fnpu_readback.h": "4c5fd740bcc9269a64d7923d51cedd11bda2a1b4ed5430dcd796332e20a8f820",
+      "tests/resident_graph_entry.S": "bb0b48aaf26908b7feccb7eacac98a93bfa1e483cb3cc84a25c060c60f5f1c14",
+      "tests/resident_link.ld": "8394031dec95c547c55baf807a132a2c6397d703da0d5385e65a847f9c31b6de",
+      "tests/resident_graph_link.c": "3b310776fc0b8e651aa2f6d56bd7b20269cd8a5c9054b6592ab13e47cc8bd301",
+      "tests/resident_graph.h": "23ab6a7fb9ce4d3593ac3e5ca59f2dc07fbeb433c50d050a259426ea623f8b4f",
+      "tests/resident_graph_gather.h": "476345cd526a8f05a59c169341b0af3e3b05936eb51abe2632ff6cd2b8d75748",
+      "tests/resident_fp16.h": "cd16b320173b0208629b0faf78168327ecb6dda0c7d086f33a07f90b1fcbf68c",
+      "tests/landmark_common.h": "e2e922baaf80e217350ee3926e445449430ccbdb7cf3f55ed8409d73e89909bb",
+      "tests/resident_graph_admin.c": "9d41a9106e266c82cfc73fd04f3c1b267e8248f0970d14982e21c9ffb1c5115b",
+      "tests/resident_graph_hmx.c": "8242726aafcce00f50d0200373bde24d04b358e15d7e9a8806a038477ebbd048",
+      "tests/resident_graph_dw.c": "252926802d5931fbb6035916a832471a53677f91ede6c5d9f2958a90e5cde65f",
+      "tests/resident_graph_add.c": "3d4be55d83ae4e9e97ea0779851e6cf4ad459592e8136587df4af193ab452838",
+      "tests/resident_graph_pool.c": "11807b62c834ff3ed8af0e29828c9c8ae2daf687a3b029639025cfc0b0725b79",
+      "tests/resident_graph_sigmoid.c": "4c3be90fd2dedf62791afb000942ea15ea2d386d0f9d138bd303cbf0ffcfb279",
+      "tests/resident_graph_compact.c": "697dfc0eeb6dcf1be5a4e801dfa9eaff807e1f912494992cacc2daf112b550db",
+      "tests/resident_graph_post.c": "404acddd924326dfc85cf7d3a54669316d7c9fe0b8abdf4bd995d2aac263a835",
+      "tests/resident_graph_pack.c": "a5d06317a6a71f15e520b80749949d4fe6d05c11c2ae6d72f5b6372fe27eec0c",
+      "tests/resident_graph_stem.c": "759da76b824291f08074aeebd674aaa4f683a9ce2d49a0bd08cf71a9ee658e5b",
+      "tests/resident_graph_avg.c": "4aa4da607bb3b15691d256633854c9a8e3d1e4fe97343cc113786846e439415a"
+    }
+  },
+  "verification": {
+    "loader": {
+      "bytes": 3832,
+      "code_sha256": "33d12234b3b6a25c244388a698baef8e47c7236e580989e5af58b8721ef8ca4f",
+      "elf_sha256": "b73e6ad1f1a74ff6432268fdd9e36be7822e647f92a8ed13fdfb056d8bbe084e",
+      "all_C_code_relocations_pc_relative": true
+    },
+    "linked": {
+      "bytes": 9336,
+      "code_sha256": "b600714e03c3231c41d86cafbeea2da609a3cc4999d7f81499c1ce280ac8384a",
+      "elf_sha256": "2d83bc3782008ff19916358311fc6d887f46866b44d73d9e01e8ad042d0823c6",
+      "all_C_code_relocations_pc_relative": true
+    }
+  },
+  "legacy_cache_modules_byte_identical": true,
+  "model_sha256": "b7c3d1be232725a5a143e2648858ec5aec9596c7b83c6a3c508479b04057e00c",
+  "param_sha256": "54e08f284ff6f121ff00f4a9c65afc38c0dbb22a32f4af44fc4e0fde6c4a1bbd",
+  "tolerances_sha256": "381a033d6f4c10047998dfe42abb8cd6b18a756741c8a21690a3e6d6dc951f7b",
+  "manifest_sha256": "576a357658e5a22a5177f40138500111aa5e78934a47736be2e2069a3bd0b060",
+  "source_sha256": {
+    "src/framenpu/resident_landmark.py": "a25a77999164d7995234eff4fc27ff126323aa4a53f266b1e0e9c4609c6084df",
+    "src/framenpu/convolution.py": "3c9bdc996064257021c377e9203f55a40eb762dba61fa9a7ecb8a7c9d5559dd7",
+    "src/framenpu/landmark.py": "d412dd46346ac8c848564587b645960614c9990bf0cf57b960ba89c3ff2e88f0",
+    "tests/hardware_resident_landmark.py": "18a3a32098c62563f4933f19a2112e77c2d3d68f577e8d3c206ecd65ebd424ef",
+    "tools/landmark_reference.py": "13d929c35e0a30754a95062816a4dd877acce3b603f2beaed63d61406e33ce01",
+    "src/framenpu/sdk/entry.S": "fce39ec1dfb601ab37be23addc3570af9b662c09dfb2a59b3cb41ef62a614dd8",
+    "tools/build_resident_landmark.py": "12e8f62a176d7cc141ae1634a608ceba3d002a045c20fbd2a6be0f8fb3e8eafd",
+    "tests/resident_graph_entry.S": "bb0b48aaf26908b7feccb7eacac98a93bfa1e483cb3cc84a25c060c60f5f1c14",
+    "tests/resident_graph.h": "23ab6a7fb9ce4d3593ac3e5ca59f2dc07fbeb433c50d050a259426ea623f8b4f",
+    "tests/resident_graph_gather.h": "476345cd526a8f05a59c169341b0af3e3b05936eb51abe2632ff6cd2b8d75748",
+    "tests/resident_fp16.h": "cd16b320173b0208629b0faf78168327ecb6dda0c7d086f33a07f90b1fcbf68c",
+    "tests/landmark_common.h": "e2e922baaf80e217350ee3926e445449430ccbdb7cf3f55ed8409d73e89909bb",
+    "tests/resident_graph_link.c": "3b310776fc0b8e651aa2f6d56bd7b20269cd8a5c9054b6592ab13e47cc8bd301",
+    "tests/resident_link.ld": "8394031dec95c547c55baf807a132a2c6397d703da0d5385e65a847f9c31b6de",
+    "tests/resident_graph_admin.c": "9d41a9106e266c82cfc73fd04f3c1b267e8248f0970d14982e21c9ffb1c5115b",
+    "tests/resident_graph_hmx.c": "8242726aafcce00f50d0200373bde24d04b358e15d7e9a8806a038477ebbd048",
+    "tests/resident_graph_dw.c": "252926802d5931fbb6035916a832471a53677f91ede6c5d9f2958a90e5cde65f",
+    "tests/resident_graph_add.c": "3d4be55d83ae4e9e97ea0779851e6cf4ad459592e8136587df4af193ab452838",
+    "tests/resident_graph_pool.c": "11807b62c834ff3ed8af0e29828c9c8ae2daf687a3b029639025cfc0b0725b79",
+    "tests/resident_graph_sigmoid.c": "4c3be90fd2dedf62791afb000942ea15ea2d386d0f9d138bd303cbf0ffcfb279",
+    "tests/resident_graph_compact.c": "697dfc0eeb6dcf1be5a4e801dfa9eaff807e1f912494992cacc2daf112b550db",
+    "tests/resident_graph_post.c": "404acddd924326dfc85cf7d3a54669316d7c9fe0b8abdf4bd995d2aac263a835",
+    "tests/resident_graph_pack.c": "a5d06317a6a71f15e520b80749949d4fe6d05c11c2ae6d72f5b6372fe27eec0c",
+    "tests/resident_graph_stem.c": "759da76b824291f08074aeebd674aaa4f683a9ce2d49a0bd08cf71a9ee658e5b",
+    "tests/resident_graph_avg.c": "4aa4da607bb3b15691d256633854c9a8e3d1e4fe97343cc113786846e439415a"
+  },
+  "firmware_boot": "unchanged; DSP service PID and restart count identical before and after every run",
+  "main": {
+    "calibration": {
+      "all_checks_passed": true,
+      "qualification_complete": true,
+      "cached_code": true,
+      "budget_ms": 20.0,
+      "audits": {
+        "restored_jobs": 6656,
+        "restored_hmx_jobs": 6654
+      },
+      "arena_restored": true,
+      "service_unchanged": true,
+      "frames": [
+        {
+          "qualified_readback": true,
+          "complete": true,
+          "body_ms": 51198.715,
+          "requests": 1566,
+          "batch_requests": 1546,
+          "work_units": 240786,
+          "native_wrapper_ms": 30774.299,
+          "max_wrapper_ms": 21.1656,
+          "max_publication_ms": 22.4194
+        },
+        {
+          "qualified_readback": true,
+          "complete": true,
+          "body_ms": 51381.787,
+          "requests": 1567,
+          "batch_requests": 1547,
+          "work_units": 240786,
+          "native_wrapper_ms": 30759.472,
+          "max_wrapper_ms": 21.0235,
+          "max_publication_ms": 22.448
+        },
+        {
+          "qualified_readback": false,
+          "complete": true,
+          "body_ms": 48772.988,
+          "requests": 1532,
+          "batch_requests": 1512,
+          "work_units": 240786,
+          "native_wrapper_ms": 30748.964,
+          "max_wrapper_ms": 20.9696,
+          "max_publication_ms": 22.2003
+        },
+        {
+          "qualified_readback": false,
+          "complete": true,
+          "body_ms": 48864.989,
+          "requests": 1533,
+          "batch_requests": 1513,
+          "work_units": 240786,
+          "native_wrapper_ms": 30756.06,
+          "max_wrapper_ms": 21.139,
+          "max_publication_ms": 22.0528
+        }
+      ],
+      "crops": [
+        {
+          "name": "calibration_controller",
+          "outputs": {
+            "out0": {
+              "values": 63,
+              "sha256": "1dd95907b1234a17264ca39191174714bc840cd0ef9d2513b1c78e97e1af73d2"
+            },
+            "out1": {
+              "values": 1,
+              "sha256": "16c144e50bb96195325c5b72c6da277f61c91eb7cca4a71d0eca6b59ba4e7655"
+            },
+            "out2": {
+              "values": 1,
+              "sha256": "c6d1607ba8a8eca2cde964ff4e2cc89d49662d7b14467fa988c762c1eb8b2ce7"
+            },
+            "out3": {
+              "values": 63,
+              "sha256": "70339eb65c6e5a8bfc649f58d16349dd5018b491fd13db6d673267cad95fe1cd"
+            }
+          },
+          "layer_checks": 77,
+          "values": 5087840,
+          "max_local_ratio": 0.8085458917972395
+        },
+        {
+          "name": "calibration_open",
+          "outputs": {
+            "out0": {
+              "values": 63,
+              "sha256": "e06d351b08514f48edccd60f1a99539e4cbfd14bc864d2f430de9a214f983f8d"
+            },
+            "out1": {
+              "values": 1,
+              "sha256": "e26e09ce4c4c8ebd5d732dab96a9222edbdc4b4c3eb2019acbdf3d0560e04643"
+            },
+            "out2": {
+              "values": 1,
+              "sha256": "64a2d78a7b677f483da064181ebd38b96735613fa007213b45558f1c14094406"
+            },
+            "out3": {
+              "values": 63,
+              "sha256": "85feb31654215e990b919360e60bdf1eaa1fece40a74726ca00f4daa870ae790"
+            }
+          },
+          "layer_checks": 77,
+          "values": 5087840,
+          "max_local_ratio": 0.5490365540252173
+        }
+      ],
+      "controls": [
+        {
+          "name": "stale_sequence",
+          "unchanged": true
+        },
+        {
+          "name": "nonce",
+          "unchanged": true
+        },
+        {
+          "name": "identity",
+          "unchanged": true
+        },
+        {
+          "name": "reserved",
+          "unchanged": true
+        },
+        {
+          "name": "wrong_module",
+          "unchanged": true
+        },
+        {
+          "name": "wrong_version",
+          "unchanged": true
+        },
+        {
+          "name": "batch_outside_frame",
+          "unchanged": true
+        },
+        {
+          "name": "batch_zero_budget",
+          "unchanged": true
+        },
+        {
+          "name": "batch_excess_budget",
+          "unchanged": true
+        },
+        {
+          "name": "batch_stop_layer",
+          "unchanged": true
+        },
+        {
+          "name": "batch_stop_phase",
+          "unchanged": true
+        },
+        {
+          "name": "batch_zero_units",
+          "unchanged": true
+        },
+        {
+          "name": "batch_reserved",
+          "unchanged": true
+        },
+        {
+          "name": "exclusive_arena_lease",
+          "refused": true
+        }
+      ],
+      "heads_bit_identical_to_cache_entry_baseline": [
+        true,
+        true
+      ]
+    },
+    "heldout": {
+      "all_checks_passed": true,
+      "qualification_complete": true,
+      "cached_code": true,
+      "budget_ms": 20.0,
+      "audits": {
+        "restored_jobs": 6643,
+        "restored_hmx_jobs": 6641
+      },
+      "arena_restored": true,
+      "service_unchanged": true,
+      "frames": [
+        {
+          "qualified_readback": true,
+          "complete": true,
+          "body_ms": 51263.123,
+          "requests": 1566,
+          "batch_requests": 1546,
+          "work_units": 240786,
+          "native_wrapper_ms": 30761.584,
+          "max_wrapper_ms": 21.0813,
+          "max_publication_ms": 22.2827
+        },
+        {
+          "qualified_readback": true,
+          "complete": true,
+          "body_ms": 51245.369,
+          "requests": 1567,
+          "batch_requests": 1547,
+          "work_units": 240786,
+          "native_wrapper_ms": 30762.698,
+          "max_wrapper_ms": 21.1736,
+          "max_publication_ms": 22.4972
+        },
+        {
+          "qualified_readback": false,
+          "complete": true,
+          "body_ms": 48955.825,
+          "requests": 1532,
+          "batch_requests": 1512,
+          "work_units": 240786,
+          "native_wrapper_ms": 30750.933,
+          "max_wrapper_ms": 20.8696,
+          "max_publication_ms": 22.1032
+        },
+        {
+          "qualified_readback": false,
+          "complete": true,
+          "body_ms": 48790.289,
+          "requests": 1533,
+          "batch_requests": 1513,
+          "work_units": 240786,
+          "native_wrapper_ms": 30750.171,
+          "max_wrapper_ms": 21.2664,
+          "max_publication_ms": 22.0622
+        }
+      ],
+      "crops": [
+        {
+          "name": "heldout_left_controller",
+          "outputs": {
+            "out0": {
+              "values": 63,
+              "sha256": "48f17ab142ea55bb8fd265e5d69c5f6f4d3c4988da95807050f2d57b62bd5d45"
+            },
+            "out1": {
+              "values": 1,
+              "sha256": "0cfdf0a1b0547b671c0c24f544ef516e1887c814e9cf465907acea612c80d2ee"
+            },
+            "out2": {
+              "values": 1,
+              "sha256": "1a247e0d479ab3e6b6076881d207739b8782f549ec64eabce9f8f99f178c382f"
+            },
+            "out3": {
+              "values": 63,
+              "sha256": "b3ae3f35b46c453778e1bde5a621c32a1bef4b9d248ed2a080d355cebfe0bb98"
+            }
+          },
+          "layer_checks": 77,
+          "values": 5087840,
+          "max_local_ratio": 0.6702840187521132
+        },
+        {
+          "name": "heldout_right_controller",
+          "outputs": {
+            "out0": {
+              "values": 63,
+              "sha256": "40d69eba495c15a80a13408a6f6abc78cc379b2998d5291a63bff57a6424ecea"
+            },
+            "out1": {
+              "values": 1,
+              "sha256": "5eb5007f0c45877a9744f5b3fa43d49fe9083cb19ea7028862f9a9177f1fe7cb"
+            },
+            "out2": {
+              "values": 1,
+              "sha256": "35c41834d7a84f49213adb9675e9e27440300a50fc59a9710e3033bd1a0a03fa"
+            },
+            "out3": {
+              "values": 63,
+              "sha256": "fc40c72838a60504689b6712c122f076c32366d6d07e7d797cd13beba8231373"
+            }
+          },
+          "layer_checks": 77,
+          "values": 5087840,
+          "max_local_ratio": 0.7986715391474106
+        }
+      ],
+      "heads_bit_identical_to_cache_entry_baseline": [
+        true,
+        true
+      ]
+    }
+  },
+  "supplemental": {
+    "load_only_uncached": {
+      "all_checks_passed": true,
+      "qualification_complete": false,
+      "cached_code": false,
+      "budget_ms": 5.0,
+      "audits": {
+        "restored_jobs": 445,
+        "restored_hmx_jobs": 443
+      },
+      "arena_restored": true,
+      "service_unchanged": true,
+      "frames": [],
+      "crops": []
+    },
+    "controls_uncached": {
+      "all_checks_passed": true,
+      "qualification_complete": false,
+      "cached_code": false,
+      "budget_ms": 5.0,
+      "audits": {
+        "restored_jobs": 458,
+        "restored_hmx_jobs": 456
+      },
+      "arena_restored": true,
+      "service_unchanged": true,
+      "frames": [],
+      "crops": [],
+      "controls": [
+        {
+          "name": "stale_sequence",
+          "unchanged": true
+        },
+        {
+          "name": "nonce",
+          "unchanged": true
+        },
+        {
+          "name": "identity",
+          "unchanged": true
+        },
+        {
+          "name": "reserved",
+          "unchanged": true
+        },
+        {
+          "name": "wrong_module",
+          "unchanged": true
+        },
+        {
+          "name": "wrong_version",
+          "unchanged": true
+        },
+        {
+          "name": "batch_outside_frame",
+          "unchanged": true
+        },
+        {
+          "name": "batch_zero_budget",
+          "unchanged": true
+        },
+        {
+          "name": "batch_excess_budget",
+          "unchanged": true
+        },
+        {
+          "name": "batch_stop_layer",
+          "unchanged": true
+        },
+        {
+          "name": "batch_stop_phase",
+          "unchanged": true
+        },
+        {
+          "name": "batch_zero_units",
+          "unchanged": true
+        },
+        {
+          "name": "batch_reserved",
+          "unchanged": true
+        },
+        {
+          "name": "exclusive_arena_lease",
+          "refused": true
+        }
+      ]
+    },
+    "controls_cached": {
+      "all_checks_passed": true,
+      "qualification_complete": false,
+      "cached_code": true,
+      "budget_ms": 5.0,
+      "audits": {
+        "restored_jobs": 458,
+        "restored_hmx_jobs": 456
+      },
+      "arena_restored": true,
+      "service_unchanged": true,
+      "frames": [],
+      "crops": [],
+      "controls": [
+        {
+          "name": "stale_sequence",
+          "unchanged": true
+        },
+        {
+          "name": "nonce",
+          "unchanged": true
+        },
+        {
+          "name": "identity",
+          "unchanged": true
+        },
+        {
+          "name": "reserved",
+          "unchanged": true
+        },
+        {
+          "name": "wrong_module",
+          "unchanged": true
+        },
+        {
+          "name": "wrong_version",
+          "unchanged": true
+        },
+        {
+          "name": "batch_outside_frame",
+          "unchanged": true
+        },
+        {
+          "name": "batch_zero_budget",
+          "unchanged": true
+        },
+        {
+          "name": "batch_excess_budget",
+          "unchanged": true
+        },
+        {
+          "name": "batch_stop_layer",
+          "unchanged": true
+        },
+        {
+          "name": "batch_stop_phase",
+          "unchanged": true
+        },
+        {
+          "name": "batch_zero_units",
+          "unchanged": true
+        },
+        {
+          "name": "batch_reserved",
+          "unchanged": true
+        },
+        {
+          "name": "exclusive_arena_lease",
+          "refused": true
+        }
+      ]
+    },
+    "early_layers_5ms": {
+      "all_checks_passed": true,
+      "qualification_complete": false,
+      "cached_code": true,
+      "budget_ms": 5.0,
+      "audits": {
+        "restored_jobs": 1548,
+        "restored_hmx_jobs": 1546
+      },
+      "arena_restored": true,
+      "service_unchanged": true,
+      "frames": [
+        {
+          "qualified_readback": true,
+          "complete": false,
+          "body_ms": 16841.809,
+          "requests": 1103,
+          "batch_requests": 1083,
+          "work_units": 87640,
+          "native_wrapper_ms": 5651.101,
+          "max_wrapper_ms": 5.3599,
+          "max_publication_ms": 7.1081
+        }
+      ],
+      "crops": [
+        {
+          "name": "calibration_controller",
+          "outputs": {},
+          "layer_checks": 7,
+          "values": 2157568,
+          "max_local_ratio": 0.8085458917972395
+        }
+      ]
+    },
+    "calibration_5ms": {
+      "all_checks_passed": true,
+      "qualification_complete": true,
+      "cached_code": true,
+      "budget_ms": 5.0,
+      "audits": {
+        "restored_jobs": 24280,
+        "restored_hmx_jobs": 24278
+      },
+      "arena_restored": true,
+      "service_unchanged": true,
+      "frames": [
+        {
+          "qualified_readback": true,
+          "complete": true,
+          "body_ms": 89693.168,
+          "requests": 5974,
+          "batch_requests": 5954,
+          "work_units": 240786,
+          "native_wrapper_ms": 31596.047,
+          "max_wrapper_ms": 5.8639,
+          "max_publication_ms": 7.249
+        },
+        {
+          "qualified_readback": true,
+          "complete": true,
+          "body_ms": 89617.715,
+          "requests": 5974,
+          "batch_requests": 5954,
+          "work_units": 240786,
+          "native_wrapper_ms": 31595.511,
+          "max_wrapper_ms": 6.0164,
+          "max_publication_ms": 7.2703
+        },
+        {
+          "qualified_readback": false,
+          "complete": true,
+          "body_ms": 86419.045,
+          "requests": 5936,
+          "batch_requests": 5916,
+          "work_units": 240786,
+          "native_wrapper_ms": 31584.712,
+          "max_wrapper_ms": 6.4147,
+          "max_publication_ms": 7.1019
+        },
+        {
+          "qualified_readback": false,
+          "complete": true,
+          "body_ms": 87219.483,
+          "requests": 5938,
+          "batch_requests": 5918,
+          "work_units": 240786,
+          "native_wrapper_ms": 31587.031,
+          "max_wrapper_ms": 5.983,
+          "max_publication_ms": 7.1862
+        }
+      ],
+      "crops": [
+        {
+          "name": "calibration_controller",
+          "outputs": {
+            "out0": {
+              "values": 63,
+              "sha256": "1dd95907b1234a17264ca39191174714bc840cd0ef9d2513b1c78e97e1af73d2"
+            },
+            "out1": {
+              "values": 1,
+              "sha256": "16c144e50bb96195325c5b72c6da277f61c91eb7cca4a71d0eca6b59ba4e7655"
+            },
+            "out2": {
+              "values": 1,
+              "sha256": "c6d1607ba8a8eca2cde964ff4e2cc89d49662d7b14467fa988c762c1eb8b2ce7"
+            },
+            "out3": {
+              "values": 63,
+              "sha256": "70339eb65c6e5a8bfc649f58d16349dd5018b491fd13db6d673267cad95fe1cd"
+            }
+          },
+          "layer_checks": 77,
+          "values": 5087840,
+          "max_local_ratio": 0.8085458917972395
+        },
+        {
+          "name": "calibration_open",
+          "outputs": {
+            "out0": {
+              "values": 63,
+              "sha256": "e06d351b08514f48edccd60f1a99539e4cbfd14bc864d2f430de9a214f983f8d"
+            },
+            "out1": {
+              "values": 1,
+              "sha256": "e26e09ce4c4c8ebd5d732dab96a9222edbdc4b4c3eb2019acbdf3d0560e04643"
+            },
+            "out2": {
+              "values": 1,
+              "sha256": "64a2d78a7b677f483da064181ebd38b96735613fa007213b45558f1c14094406"
+            },
+            "out3": {
+              "values": 63,
+              "sha256": "85feb31654215e990b919360e60bdf1eaa1fece40a74726ca00f4daa870ae790"
+            }
+          },
+          "layer_checks": 77,
+          "values": 5087840,
+          "max_local_ratio": 0.5490365540252173
+        }
+      ],
+      "controls": [
+        {
+          "name": "stale_sequence",
+          "unchanged": true
+        },
+        {
+          "name": "nonce",
+          "unchanged": true
+        },
+        {
+          "name": "identity",
+          "unchanged": true
+        },
+        {
+          "name": "reserved",
+          "unchanged": true
+        },
+        {
+          "name": "wrong_module",
+          "unchanged": true
+        },
+        {
+          "name": "wrong_version",
+          "unchanged": true
+        },
+        {
+          "name": "batch_outside_frame",
+          "unchanged": true
+        },
+        {
+          "name": "batch_zero_budget",
+          "unchanged": true
+        },
+        {
+          "name": "batch_excess_budget",
+          "unchanged": true
+        },
+        {
+          "name": "batch_stop_layer",
+          "unchanged": true
+        },
+        {
+          "name": "batch_stop_phase",
+          "unchanged": true
+        },
+        {
+          "name": "batch_zero_units",
+          "unchanged": true
+        },
+        {
+          "name": "batch_reserved",
+          "unchanged": true
+        },
+        {
+          "name": "exclusive_arena_lease",
+          "refused": true
+        }
+      ],
+      "heads_bit_identical_to_cache_entry_baseline": [
+        true,
+        true
+      ]
+    },
+    "one_crop_10ms": {
+      "all_checks_passed": true,
+      "qualification_complete": false,
+      "cached_code": true,
+      "budget_ms": 10.0,
+      "audits": {
+        "restored_jobs": 6528,
+        "restored_hmx_jobs": 6526
+      },
+      "arena_restored": true,
+      "service_unchanged": true,
+      "frames": [
+        {
+          "qualified_readback": true,
+          "complete": true,
+          "body_ms": 65351.595,
+          "requests": 3058,
+          "batch_requests": 3038,
+          "work_units": 240786,
+          "native_wrapper_ms": 31042.099,
+          "max_wrapper_ms": 11.6844,
+          "max_publication_ms": 12.3859
+        },
+        {
+          "qualified_readback": false,
+          "complete": true,
+          "body_ms": 62707.009,
+          "requests": 3025,
+          "batch_requests": 3005,
+          "work_units": 240786,
+          "native_wrapper_ms": 31035.552,
+          "max_wrapper_ms": 11.5404,
+          "max_publication_ms": 12.2488
+        }
+      ],
+      "crops": [
+        {
+          "name": "calibration_controller",
+          "outputs": {
+            "out0": {
+              "values": 63,
+              "sha256": "1dd95907b1234a17264ca39191174714bc840cd0ef9d2513b1c78e97e1af73d2"
+            },
+            "out1": {
+              "values": 1,
+              "sha256": "16c144e50bb96195325c5b72c6da277f61c91eb7cca4a71d0eca6b59ba4e7655"
+            },
+            "out2": {
+              "values": 1,
+              "sha256": "c6d1607ba8a8eca2cde964ff4e2cc89d49662d7b14467fa988c762c1eb8b2ce7"
+            },
+            "out3": {
+              "values": 63,
+              "sha256": "70339eb65c6e5a8bfc649f58d16349dd5018b491fd13db6d673267cad95fe1cd"
+            }
+          },
+          "layer_checks": 77,
+          "values": 5087840,
+          "max_local_ratio": 0.8085458917972395
+        }
+      ]
+    },
+    "one_crop_20ms": {
+      "all_checks_passed": true,
+      "qualification_complete": false,
+      "cached_code": true,
+      "budget_ms": 20.0,
+      "audits": {
+        "restored_jobs": 3544,
+        "restored_hmx_jobs": 3542
+      },
+      "arena_restored": true,
+      "service_unchanged": true,
+      "frames": [
+        {
+          "qualified_readback": true,
+          "complete": true,
+          "body_ms": 51465.31,
+          "requests": 1566,
+          "batch_requests": 1546,
+          "work_units": 240786,
+          "native_wrapper_ms": 30768.587,
+          "max_wrapper_ms": 21.0907,
+          "max_publication_ms": 22.4343
+        },
+        {
+          "qualified_readback": false,
+          "complete": true,
+          "body_ms": 48891.619,
+          "requests": 1533,
+          "batch_requests": 1513,
+          "work_units": 240786,
+          "native_wrapper_ms": 30750.182,
+          "max_wrapper_ms": 20.67,
+          "max_publication_ms": 22.0688
+        }
+      ],
+      "crops": [
+        {
+          "name": "calibration_controller",
+          "outputs": {
+            "out0": {
+              "values": 63,
+              "sha256": "1dd95907b1234a17264ca39191174714bc840cd0ef9d2513b1c78e97e1af73d2"
+            },
+            "out1": {
+              "values": 1,
+              "sha256": "16c144e50bb96195325c5b72c6da277f61c91eb7cca4a71d0eca6b59ba4e7655"
+            },
+            "out2": {
+              "values": 1,
+              "sha256": "c6d1607ba8a8eca2cde964ff4e2cc89d49662d7b14467fa988c762c1eb8b2ce7"
+            },
+            "out3": {
+              "values": 63,
+              "sha256": "70339eb65c6e5a8bfc649f58d16349dd5018b491fd13db6d673267cad95fe1cd"
+            }
+          },
+          "layer_checks": 77,
+          "values": 5087840,
+          "max_local_ratio": 0.8085458917972395
+        }
+      ]
+    },
+    "uncached_control_20ms": {
+      "all_checks_passed": true,
+      "qualification_complete": false,
+      "cached_code": false,
+      "budget_ms": 20.0,
+      "audits": {
+        "restored_jobs": 3290,
+        "restored_hmx_jobs": 3288
+      },
+      "arena_restored": true,
+      "service_unchanged": true,
+      "frames": [
+        {
+          "qualified_readback": true,
+          "complete": true,
+          "body_ms": 92785.642,
+          "requests": 2832,
+          "batch_requests": 2812,
+          "work_units": 240786,
+          "native_wrapper_ms": 57220.73,
+          "max_wrapper_ms": 23.2772,
+          "max_publication_ms": 24.1604
+        }
+      ],
+      "crops": [
+        {
+          "name": "calibration_controller",
+          "outputs": {
+            "out0": {
+              "values": 63,
+              "sha256": "1dd95907b1234a17264ca39191174714bc840cd0ef9d2513b1c78e97e1af73d2"
+            },
+            "out1": {
+              "values": 1,
+              "sha256": "16c144e50bb96195325c5b72c6da277f61c91eb7cca4a71d0eca6b59ba4e7655"
+            },
+            "out2": {
+              "values": 1,
+              "sha256": "c6d1607ba8a8eca2cde964ff4e2cc89d49662d7b14467fa988c762c1eb8b2ce7"
+            },
+            "out3": {
+              "values": 63,
+              "sha256": "70339eb65c6e5a8bfc649f58d16349dd5018b491fd13db6d673267cad95fe1cd"
+            }
+          },
+          "layer_checks": 77,
+          "values": 5087840,
+          "max_local_ratio": 0.8085458917972395
+        }
+      ],
+      "controls": [
+        {
+          "name": "stale_sequence",
+          "unchanged": true
+        },
+        {
+          "name": "nonce",
+          "unchanged": true
+        },
+        {
+          "name": "identity",
+          "unchanged": true
+        },
+        {
+          "name": "reserved",
+          "unchanged": true
+        },
+        {
+          "name": "wrong_module",
+          "unchanged": true
+        },
+        {
+          "name": "wrong_version",
+          "unchanged": true
+        },
+        {
+          "name": "batch_outside_frame",
+          "unchanged": true
+        },
+        {
+          "name": "batch_zero_budget",
+          "unchanged": true
+        },
+        {
+          "name": "batch_excess_budget",
+          "unchanged": true
+        },
+        {
+          "name": "batch_stop_layer",
+          "unchanged": true
+        },
+        {
+          "name": "batch_stop_phase",
+          "unchanged": true
+        },
+        {
+          "name": "batch_zero_units",
+          "unchanged": true
+        },
+        {
+          "name": "batch_reserved",
+          "unchanged": true
+        },
+        {
+          "name": "exclusive_arena_lease",
+          "refused": true
+        }
+      ]
+    },
+    "fault_after_one_hmx_transaction": {
+      "all_checks_passed": true,
+      "qualification_complete": false,
+      "cached_code": true,
+      "budget_ms": 20.0,
+      "audits": {
+        "restored_jobs": 467,
+        "restored_hmx_jobs": 465
+      },
+      "arena_restored": true,
+      "service_unchanged": true,
+      "frames": [],
+      "crops": [],
+      "confirmed_fault": {
+        "at": [
+          "convclip_0",
+          1
+        ],
+        "invalidated": true,
+        "reuse_refused": true,
+        "native_state": 4
+      }
+    },
+    "fault_after_one_inplace_depthwise_unit": {
+      "all_checks_passed": true,
+      "qualification_complete": false,
+      "cached_code": true,
+      "budget_ms": 20.0,
+      "audits": {
+        "restored_jobs": 667,
+        "restored_hmx_jobs": 665
+      },
+      "arena_restored": true,
+      "service_unchanged": true,
+      "frames": [],
+      "crops": [],
+      "confirmed_fault": {
+        "at": [
+          "convdwclip_1",
+          3
+        ],
+        "invalidated": true,
+        "reuse_refused": true,
+        "native_state": 4
+      }
+    },
+    "ordinary_sdk_regression": {
+      "audits": {
+        "restored_jobs": 72,
+        "restored_hmx_jobs": 38
+      },
+      "all_checks_passed": true
+    }
+  },
+  "main_audits": 13299
+}

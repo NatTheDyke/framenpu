@@ -14,7 +14,7 @@ from framenpu import Job
 from framenpu.resident_landmark import JOB_KINDS
 
 
-def verify_entry(disassembly, symbols):
+def verify_vectors(disassembly, symbols):
     instructions = {
         int(m[1], 16): m[2]
         for line in disassembly.splitlines()
@@ -38,6 +38,10 @@ def verify_entry(disassembly, symbols):
         or re.search(r"\br(?:[1-9]|[12][0-9]|3[01])\s*=", common)
     ):
         raise ValueError("firmware forwarding target/register contract differs")
+
+
+def verify_entry(disassembly, symbols):
+    verify_vectors(disassembly, symbols)
     dispatch = disassembly.split("<resident_dispatch>:", 1)[1].split("<frame_job>:", 1)[0]
     target = symbols["frame_job"] - 0x69000000
     constants = [

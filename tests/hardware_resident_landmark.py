@@ -19,7 +19,9 @@ from framenpu.resident_landmark import (
     ARENA_START,
     ARENA_END,
     SPAN,
+    BATCH,
     _lease,
+    load_linked,
 )
 from hardware_hmx import PowerSnapshot, audited_device
 from hardware_resident import settled_health
@@ -162,6 +164,29 @@ def metadata_controls(owner):
         ):
             raise ValueError("rejected request changed resident state")
         rows.append({"name": name, "unchanged": True})
+    if owner.linked:
+        # Batch requests outside a frame, or with an invalid budget/stop/unit
+        # field, are refused by the linked image itself.
+        for name, index, value in (
+            ("batch_outside_frame", 19, 1),
+            ("batch_zero_budget", 23, 0),
+            ("batch_excess_budget", 23, 480001),
+            ("batch_stop_layer", 24, 64),
+            ("batch_stop_phase", 25, 4),
+            ("batch_zero_units", 19, 0),
+            ("batch_reserved", 26, 1),
+        ):
+            before = bytes(owner.device._transport.memory[ARENA_START:ARENA_END])
+            seq = owner.sequence
+            words = owner._descriptor(5, BATCH, units=1)
+            words[index] = value
+            owner._command(5, BATCH, descriptor=words, reject=True)
+            if (
+                owner.sequence != seq
+                or bytes(owner.device._transport.memory[ARENA_START:ARENA_END]) != before
+            ):
+                raise ValueError("rejected batch changed resident state")
+            rows.append({"name": name, "unchanged": True})
     try:
         second = _lease()
     except DeviceBusy:
@@ -183,6 +208,9 @@ def main():
     p.add_argument("--stop-after")
     p.add_argument("--load-only", action="store_true")
     p.add_argument("--cached-code", action="store_true")
+    p.add_argument("--linked", action="store_true")
+    p.add_argument("--budget-ms", type=float, default=5.0)
+    p.add_argument("--unqualified-frames", type=int, default=0)
     p.add_argument("--controls", action="store_true")
     p.add_argument("--fault-at", nargs=2, metavar=("LAYER", "KIND"))
     args = p.parse_args()
@@ -193,10 +221,18 @@ def main():
     graph = load_landmark_graph(args.model / "hand.ncnn.param", args.model / "hand.ncnn.bin")
     manifest = json.loads((args.corpus / "manifest.json").read_text())
     policy = json.loads((args.corpus / "tolerances.json").read_text())
-    jobs = {
-        key: Job.load(args.jobs / ("resident_graph_" + key + ".fjob")) for key in JOB_KINDS.values()
-    }
-    identity = {key: hashlib.sha256(job.code).hexdigest() for key, job in jobs.items()}
+    if args.linked:
+        jobs = load_linked(args.jobs)
+        identity = {
+            "loader": hashlib.sha256(jobs.loader.code).hexdigest(),
+            "linked": hashlib.sha256(jobs.image).hexdigest(),
+        }
+    else:
+        jobs = {
+            key: Job.load(args.jobs / ("resident_graph_" + key + ".fjob"))
+            for key in JOB_KINDS.values()
+        }
+        identity = {key: hashlib.sha256(job.code).hexdigest() for key, job in jobs.items()}
     source_paths = [
         "src/framenpu/resident_landmark.py",
         "src/framenpu/convolution.py",
@@ -209,6 +245,9 @@ def main():
         "tests/resident_graph.h",
         "tests/resident_graph_gather.h",
         "tests/resident_fp16.h",
+        "tests/landmark_common.h",
+        "tests/resident_graph_link.c",
+        "tests/resident_link.ld",
     ] + ["tests/resident_graph_" + name + ".c" for name in JOB_KINDS.values()]
     sources = {name: digest(ROOT / name) for name in source_paths}
     manifest_sha = digest(args.corpus / "manifest.json")
@@ -260,6 +299,8 @@ def main():
         if (
             not prior.get("qualification_complete")
             or prior.get("cached_code", False) != args.cached_code
+            or prior.get("linked", False) != args.linked
+            or prior.get("budget_ms", 5.0) != args.budget_ms
             or not prior.get("all_checks_passed")
             or prior["jobs_sha256"] != identity
             or prior["tolerances_sha256"] != manifest["tolerances_sha256"]
@@ -270,6 +311,8 @@ def main():
     report = {
         "format": "framenpu-resident-landmark-validation",
         "cached_code": args.cached_code,
+        "linked": args.linked,
+        "budget_ms": args.budget_ms,
         "jobs_sha256": identity,
         "model_sha256": graph.weights_sha256,
         "param_sha256": graph.param_sha256,
@@ -291,7 +334,11 @@ def main():
                 original = bytes(observer._transport.memory[ARENA_START:ARENA_END])
             report["arena_before_sha256"] = hashlib.sha256(original).hexdigest()
             owner = ResidentLandmark(
-                graph, jobs, cached_code=args.cached_code, _device_factory=factory
+                graph,
+                jobs,
+                cached_code=args.cached_code,
+                budget_ms=args.budget_ms,
+                _device_factory=factory,
             )
             report["plan"] = {
                 k: v for k, v in owner.plan.items() if k not in ("program", "packed_weights")
@@ -366,6 +413,25 @@ def main():
                             }
                         )
                         args.output.write_text(json.dumps(report, indent=2) + "\n")
+                    # Timing-only repeats without intermediate readback. Heads must
+                    # reproduce the qualified frame of the same crop bit for bit.
+                    for index in range(args.unqualified_frames if not args.fault_at else 0):
+                        crop = crops[index % len(crops)]
+                        outputs = owner.run(
+                            np.fromfile(args.corpus / crop["name"] / "in0.f32", dtype="<f4")
+                        )
+                        hashes = {
+                            k: hashlib.sha256(v.tobytes()).hexdigest() for k, v in outputs.items()
+                        }
+                        expected = {
+                            k: v["sha256"]
+                            for k, v in report["crops"][index % len(crops)]["outputs"].items()
+                        }
+                        if hashes != expected:
+                            raise ValueError("unqualified frame heads differ from qualified frame")
+                        report.setdefault("unqualified_frames", []).append(
+                            {"name": crop["name"], "execution": owner.metrics["runs"][-1]}
+                        )
             report["metrics"] = owner.metrics
             with Device() as observer:
                 restored = bytes(observer._transport.memory[ARENA_START:ARENA_END])

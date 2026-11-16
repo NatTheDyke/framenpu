@@ -5,6 +5,11 @@
  * normal and guarded fault return, before code/power may be reclaimed.
  * Tail jumps preserve the uncached entry return address. Forwarding stubs
  * preserve the original r0 target and clobber no additional registers.
+ *
+ * RG_LINK_ENTRY builds the loader variant instead: the slot image always runs
+ * uncached and performs no per-request publication or cleanup. Opcode 32 with
+ * a sealed operator image tail-jumps to that image in owned DDR through the
+ * selected alias; everything else reaches the loader's own frame_job.
  */
 #define FNPU_ENTRY_FRAME_BYTES 80
 .section .text.entry,"ax",@progbits
@@ -64,11 +69,13 @@ execute:
  { memw(r16+#8) = r0 }
 recover:
  { r16 = ##0xf0a93400 }
+#ifndef RG_LINK_ENTRY
  { r0 = memw(r16+#56) }
  { p0 = cmp.eq(r0,#0) }
  { if (p0) jump resident_cache_recovered }
  { call resident_cache_cleanup }
 resident_cache_recovered:
+#endif
  { r1:0 = c31:30 }
  { memd(r16+#48) = r1:0 }
  { r29 = memw(r16+#24) }
@@ -307,6 +314,26 @@ resident_cache_fault_return:
  { memw(r16+#8) = r0 }
  { jump recover }
 
+#ifdef RG_LINK_ENTRY
+/* Resident state word 31 holds the seal only between the loader's seal and
+ * retire commands, so an unsealed or retired image is never entered. The
+ * uncached return address in r31 is preserved for the image's return. */
+resident_dispatch:
+ { r1 = memw(r19+#36) }
+ { p0 = cmp.eq(r1,#32) }
+ { if (!p0) jump frame_job }
+ { r1 = ##0xf1a230fc }
+ { r1 = memw(r1+#0) }
+ { r2 = ##0x434f4445 }
+ { p0 = cmp.eq(r1,r2) }
+ { if (!p0) jump frame_job }
+ { r1 = ##0xf1ff0000 }
+ { r2 = ##0x88ff0000 }
+ { r3 = memw(r19+#40) }
+ { p0 = cmp.eq(r3,#1) }
+ { r1 = mux(p0,r2,r1) }
+ { jumpr r1 }
+#else
 /* Called only from uncached recover, with the entry return saved by allocframe.
  * Its r31 is disposable; deallocframe restores the firmware caller's return. */
 resident_cache_cleanup:
@@ -381,3 +408,4 @@ resident_publish_instruction:
  { r0 = r19 }
  { r1 = ##(frame_job-0x69000000) }
  { jumpr r1 }
+#endif
