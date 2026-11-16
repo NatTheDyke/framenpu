@@ -207,7 +207,7 @@ sudo .venv/bin/python tests/hardware_smoke.py --run-on-device
 ~~~
 
 Configured CI covers Python 3.11–3.14. [Validation notes](docs/VALIDATION.md)
-record 152 passing offline tests and distinguish local results from the
+record 157 passing offline tests and distinguish local results from the
 configured CI matrix.
 
 ## Hand tracking and contributions
@@ -238,6 +238,10 @@ and takes 71–79 seconds per crop with audits. The subsequent resident executor
 keeps weights and FP32 intermediates in the verified arena, uploads weights once
 and streams changing inputs. Its uncached depthwise/submission costs are higher;
 useful tracking performance and broader accuracy qualification remain open.
+[Depthwise gather optimization](docs/DEPTHWISE_GATHER.md) now reduces audited
+resident frames from about 326 to 184–187 seconds, preserving every head bit.
+Depthwise native time improves 2.38× and its request count falls 54.5%; the
+complete-frame improvement is 1.76×.
 The [accumulator isolation tests](docs/HMX_ACCUMULATOR.md) show shared HMX state
 across workers with the recovered primitives. Keep each complete clear/load/store
 transaction under one HMX owner; use HVX workers for other work.
@@ -260,8 +264,8 @@ establish full-model throughput. Cached publication/cleanup costs roughly
 commands still take roughly 12.4–12.6 ms median with per-request power and
 full-window cleanup. Real convolution is now numerically qualified in the bounded
 proof. Complete graph correctness now also passes in the streamed executor.
-Next are faster resident depthwise gathers and bounded submission overhead
-reduction while preserving the frozen rules. See
+Next are further uncached native execution and bounded submission overhead
+reductions while preserving the frozen rules. See
 [HAND_TRACKING.md](docs/HAND_TRACKING.md) for the roadmap and
 [HMX_THROUGHPUT.md](docs/HMX_THROUGHPUT.md) for research context.
 

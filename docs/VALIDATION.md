@@ -335,6 +335,25 @@ Audited resident bodies take 325.8–326.6 seconds, slower than the streamed
 dominate. This establishes resident dataflow and reuse, without useful tracking
 latency, broad accuracy, coexistence or thermal qualification.
 
+## Resident gather optimization — 2026-11-16
+
+The [depthwise/max-pool gather change](DEPTHWISE_GATHER.md) passes the same four
+crops and frozen policy. All 20,351,360 layer-output values pass; all 512 saved
+head values independently match the resident baseline byte for byte. The main
+matrix passes 57,800 restoration audits, one weight load per two-input session,
+full-arena restoration and unchanged firmware/power/service state.
+
+Depthwise native time falls from 397.1 to 167.2 seconds across four crops
+(2.38×), with requests reduced from 66,030 to 30,074 (54.5%). Audited frame bodies
+fall from 325.8–326.6 to 183.6–187.1 seconds, a 1.76× overall improvement. Paired
+raw-bit/bounds controls compare 40,500 cases per helper, plus ten rejected
+descriptors and alternating timing samples; all 3,038 audits pass. The guarded
+in-place depthwise fault refuses reuse and restores the arena. Ordinary SDK
+regression passes another 72 audits. No reset, widened tolerance, timeout change
+or cached alias was needed. The depthwise/pool modules shrink to 4,060/4,004
+bytes; the other nine modules and public SDK payloads are byte-identical.
+See [sanitized evidence](../evidence/depthwise-gather-validation.json).
+
 ## Publication audit
 
 The repository provides an MIT license, self-contained examples, SDK/compiler
@@ -343,7 +362,7 @@ machine paths, credentials and proprietary firmware are excluded from the
 public source; the numerical summary is intentionally sanitized.
 
 The initial publication suite passed 29 offline tests; the current suite passes
-152. Seven cache-diagnostic tests additionally cover alias identity, every output,
+157. Seven cache-diagnostic tests additionally cover alias identity, every output,
 cleanup confirmation before resource reclamation, confirmed-fault restoration,
 clock drift and timeout behavior. These host tests do not establish that the
 experimental DSP cache cleanup works on hardware.
@@ -383,6 +402,10 @@ restoration, interruption during close, program corruption and crash-record
 refusal, plus explicit opt-in before artifact/device access in all three new
 hardware tools. Lifecycle emulation does not establish native arithmetic or cache
 behavior; those require the separate resident hardware qualification.
+Five gather-qualification regressions additionally cover the independent
+word oracle, signed-zero/NaN preservation, leading/trailing zero fill, the last
+input row, borrowed-arena/work budgets, boundary-case coverage and explicit
+opt-in. Native copy/bounds behavior has the separate paired hardware proof.
 
 Local verification uses Python 3.14.9 and LLVM 23.1.4. The GitHub Actions
 matrix is configured for Python 3.11–3.14; this local run does not establish

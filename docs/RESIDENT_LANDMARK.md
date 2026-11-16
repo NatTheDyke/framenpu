@@ -70,6 +70,10 @@ power cleanup, replay or service restart is added.
 
 ## Numerical qualification and timing
 
+The original resident baseline below is preserved for comparison. The subsequent
+[gather optimization](DEPTHWISE_GATHER.md) reduces audited frame bodies to
+183.6–187.1 seconds with bit-identical heads, unchanged limits and clean teardown.
+
 Qualification uses the same pinned model, strict ncnn references, four recorded
 infrared crops and frozen policy as [the streamed graph](LANDMARK.md). Policy
 SHA256 is `381a033d6f4c10047998dfe42abb8cd6b18a756741c8a21690a3e6d6dc951f7b`.
@@ -98,7 +102,7 @@ its vector. The numerical checker retained resources and stopped; read-only
 evidence was captured before an explicitly authorized reboot. Skipping the mask
 for a full vector fixed the issue. No numerical limit or timeout was changed.
 
-Audited frames take **325.8–326.6 seconds**, with 23,209–23,215 requests each.
+The original audited frames take **325.8–326.6 seconds**, with 23,209–23,215 requests each.
 This is slower than the 71–79-second streamed baseline. Direct uncached
 depthwise gathering dominates native time and command count; per-request power
 setup/cleanup adds substantial wall time. The baseline also submits packing,

@@ -213,7 +213,9 @@ residuals, native sigmoid and 26 storage aliases are implemented. The subsequent
 in the verified DDR arena. Four crops pass all layers and heads, with two
 changing inputs sharing one weight upload per session and full-arena teardown.
 This closes the resident-intermediate correctness gap. Its uncached baseline
-takes about 326 seconds per audited crop; performance remains far from integration.
+takes about 326 seconds per audited crop. The [gather optimization](DEPTHWISE_GATHER.md)
+reduces that to 184–187 seconds with the same head bits; performance remains far
+from integration.
 
 Add direct HVX depthwise kernels for 3x3 and 5x5, including stride 2 and
 asymmetric padding. Add max/global-average pooling, residual add, fused clip,
@@ -308,8 +310,10 @@ The complete streamed graph adds the remaining operators and passes propagated
 output checks in 71–79 seconds per audited crop. The resident implementation
 now passes the same four crops and produces bit-identical heads with weights
 and FP32 intermediates in DDR. Its uncached depthwise gathers and many bounded
-requests raise audited latency to about 326 seconds. Optimize those measured
-costs under the frozen rules, then benchmark more crops sharing weights.
+requests initially raised audited latency to about 326 seconds. Optimized gathers
+now reduce that to 184–187 seconds: 2.38× faster depthwise native work and
+54.5% fewer depthwise requests. Reduce the remaining uncached execution and
+power/submission costs under the frozen rules, then benchmark more crops sharing weights.
 Evaluate accuracy on a larger independent corpus before sustained integration.
 
 Qualcomm's

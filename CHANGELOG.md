@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Optimized resident depthwise/max-pool gathers with HVX padding masks and
+  bounded scalar tensor-edge copies. Four crops retain bit-identical heads
+  under the unchanged numerical/ownership/timeout rules. Audited frames fall
+  from about 326 to 184–187 seconds (1.76×); depthwise native time improves
+  2.38× with 54.5% fewer requests. Added paired baseline/current bit-preservation,
+  bounds and timing probes plus five offline regressions. The unchanged-policy
+  graph matrix passes 57,800 restoration audits and full-arena teardown.
 - Added a pinned resident landmark executor: weights upload once per session,
   FP32 intermediates stay in the verified DDR arena, and packing/operators run
   on DSP. Lossless weight-row packing and a proven in-place downsample plus
