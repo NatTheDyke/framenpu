@@ -105,6 +105,14 @@ class FakePower:
     def abandon(self):
         self.events.append("abandon")
 
+    def hold(self):
+        self.events.append("power_hold")
+
+    def verify(self):
+        self.events.append("power_verify")
+        if getattr(self, "verify_error", None):
+            raise self.verify_error
+
 
 class LifecycleTests(unittest.TestCase):
     def test_all_uploaded_spans_restore_before_ack(self):

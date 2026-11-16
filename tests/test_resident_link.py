@@ -12,7 +12,7 @@ from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "src"), str(ROOT / "tools")]
-from framenpu import Device, Job, RecoveryRequired
+from framenpu import Device, DeviceBusy, Job, RecoveryRequired
 from framenpu.errors import InvalidModel
 from framenpu.profile import PROFILE
 import framenpu.resident_landmark as rg
@@ -184,11 +184,21 @@ class LinkTransport(AdminTransport):
             struct.pack_into("<16I", self.memory, PROFILE.status + 64 * worker, *row)
 
 
-def linked_owner(transport, *, cached=True, budget_ms=5.0, loader="resident_graph_loader_link_v1"):
+def linked_owner(
+    transport,
+    *,
+    cached=True,
+    budget_ms=5.0,
+    loader="resident_graph_loader_link_v1",
+    hold_power=False,
+):
+    def power():
+        made = FakePower(transport.events)
+        transport.power = made
+        return made
+
     def factory(**kwargs):
-        device = Device(
-            _transport=transport, _power_factory=lambda: FakePower(transport.events), **kwargs
-        )
+        device = Device(_transport=transport, _power_factory=power, **kwargs)
         device._direct = Mock(installed=True)
         return device
 
@@ -215,9 +225,14 @@ def linked_owner(transport, *, cached=True, budget_ms=5.0, loader="resident_grap
             rg.LinkedJobs(Job(bytes(2048), loader, True, True), image),
             cached_code=cached,
             budget_ms=budget_ms,
+            hold_power=hold_power,
             _device_factory=factory,
             _lease_factory=Mock,
         )
+
+
+def power_events(transport):
+    return [e for e in transport.events if e.startswith("power") or e == "abandon"]
 
 
 def begin_frame(owner):
@@ -290,6 +305,63 @@ class LinkedLifecycleTests(unittest.TestCase):
         self.assertEqual(owner.metrics["commands"][-1]["pc"] >> 24, 0xF1)
         owner.close()
         self.assertEqual(bytes(t.memory[rg.ARENA_START : rg.ARENA_END]), original)
+
+
+class HeldPowerTests(unittest.TestCase):
+    def test_default_powers_every_request_and_never_holds(self):
+        t = LinkTransport(program())
+        with linked_owner(t) as owner:
+            begin_frame(owner)
+            owner._command(5, rg.BATCH, units=8)
+        events = power_events(t)
+        self.assertEqual(events.count("power_on"), t.events.count("publish"))
+        self.assertEqual(events.count("power_on"), events.count("power_off"))
+        self.assertNotIn("power_hold", events)
+        self.assertNotIn("power_verify", events)
+
+    def test_held_power_starts_once_is_verified_per_request_and_stops_last(self):
+        t = LinkTransport(program())
+        original = bytes(t.memory[rg.ARENA_START : rg.ARENA_END])
+        with linked_owner(t, hold_power=True) as owner:
+            self.assertEqual(power_events(t)[:2], ["power_on", "power_hold"])
+            begin_frame(owner)
+            while owner.native[0] == 3:
+                owner._command(5, rg.BATCH, units=rg.UNIT_LIMIT)
+            self.assertEqual(power_events(t).count("power_on"), 1)
+            self.assertNotIn("power_off", power_events(t))
+        events = power_events(t)
+        requests = t.events.count("publish")
+        # One read-only verification per request, one more before power-off.
+        self.assertEqual(
+            events, ["power_on", "power_hold"] + ["power_verify"] * (requests + 1) + ["power_off"]
+        )
+        self.assertEqual(bytes(t.memory[rg.ARENA_START : rg.ARENA_END]), original)
+        self.assertFalse(t.poisoned)
+        self.assertFalse(t.owned)
+
+    def test_changed_held_power_refuses_before_publication_and_retains_clocks(self):
+        t = LinkTransport(program())
+        owner = linked_owner(t, hold_power=True).__enter__()
+        begin_frame(owner)
+        published = t.events.count("publish")
+        t.power.verify_error = RecoveryRequired("held HMX power configuration changed")
+        with self.assertRaises(RecoveryRequired):
+            owner._command(5, rg.BATCH, units=8)
+        owner.close()
+        self.assertEqual(t.events.count("publish"), published)
+        self.assertEqual(power_events(t)[-1], "abandon")
+        self.assertNotIn("power_off", power_events(t))
+        self.assertTrue(t.poisoned)
+        self.assertEqual(bytes(t.memory[rg.CONTROL : rg.CONTROL + 8]), rg.RECORD)
+
+    def test_failed_open_before_ownership_still_powers_off(self):
+        t = LinkTransport(program())
+        owner = linked_owner(t, hold_power=True)
+        with patch.object(owner, "_command", side_effect=DeviceBusy("gate busy")):
+            with self.assertRaises(DeviceBusy):
+                owner.__enter__()
+        self.assertEqual(power_events(t), ["power_on", "power_hold", "power_verify", "power_off"])
+        self.assertFalse(t.poisoned)
 
 
 @unittest.skipUnless(

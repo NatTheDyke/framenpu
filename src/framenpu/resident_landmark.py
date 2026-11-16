@@ -503,12 +503,15 @@ class ResidentLandmark:
         *,
         cached_code=False,
         budget_ms=5.0,
+        hold_power=False,
         _device_factory=Device,
         _lease_factory=_lease,
     ):
         planning_started = time.monotonic_ns()
-        if type(cached_code) is not bool:
-            raise InvalidModel("cached_code must be boolean")
+        if type(cached_code) is not bool or type(hold_power) is not bool:
+            raise InvalidModel("cached_code and hold_power must be boolean")
+        # Opt-in: keep HMX powered from open to close instead of per request.
+        self.hold_power, self.power = hold_power, None
         self.graph = graph
         self.plan = resident_landmark_plan(graph)
         self.linked = isinstance(jobs, LinkedJobs)
@@ -849,6 +852,7 @@ class ResidentLandmark:
                 _prepare=prepare,
                 _phase_times=phases,
                 _completion_validator=validate,
+                _held_power=self.power,
             )
             if fault or reject:
                 raise RecoveryRequired("resident expected error did not fail")
@@ -898,6 +902,8 @@ class ResidentLandmark:
                     raise RecoveryRequired(
                         "resident refusal record remains; establish reset/recovery before reuse"
                     )
+                if self.hold_power:
+                    self.power = self.device._hold_power()
                 self._command(0)
                 for at in range(PROGRAM, ARENA_END, 32768):
                     self._command(1, offset=at, length=min(32768, ARENA_END - at))
@@ -948,12 +954,20 @@ class ResidentLandmark:
                         != self.saved[: self.saved_bytes]
                     ):
                         raise RecoveryRequired("resident final arena restore differs")
+                if self.power is not None and not self.device._transport.poisoned:
+                    # Also after an open that failed cleanly before ownership.
+                    held, self.power = self.power, None
+                    self.device._release_power(held)
             except BaseException:
                 if self.owned and self.device is not None:
                     self.device._transport.poisoned = True
                     self.device._transport.memory[CONTROL : CONTROL + 24] = RECORD + self.nonce
                 raise
             finally:
+                if self.power is not None:
+                    # Uncertain state: unmap only, never gate clocks.
+                    self.power.abandon()
+                    self.power = None
                 if self.device is not None:
                     self.device.close()
                 if self.lease is not None:

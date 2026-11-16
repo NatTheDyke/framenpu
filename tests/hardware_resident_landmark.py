@@ -7,10 +7,11 @@ import math
 import os
 from pathlib import Path
 import sys
+import time
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "src"), str(ROOT / "tools")]
-from framenpu import Device, DeviceBusy, Job, JobFailed
+from framenpu import Device, DeviceBusy, Job, JobFailed, RecoveryRequired
 from framenpu.convolution import load_landmark_graph
 from framenpu.landmark import OUTPUTS, ALIASES, specifications
 from framenpu.resident_landmark import (
@@ -210,6 +211,8 @@ def main():
     p.add_argument("--cached-code", action="store_true")
     p.add_argument("--linked", action="store_true")
     p.add_argument("--budget-ms", type=float, default=5.0)
+    p.add_argument("--hold-power", action="store_true")
+    p.add_argument("--hold-idle-s", type=float, default=0.0)
     p.add_argument("--unqualified-frames", type=int, default=0)
     p.add_argument("--controls", action="store_true")
     p.add_argument("--fault-at", nargs=2, metavar=("LAYER", "KIND"))
@@ -301,6 +304,7 @@ def main():
             or prior.get("cached_code", False) != args.cached_code
             or prior.get("linked", False) != args.linked
             or prior.get("budget_ms", 5.0) != args.budget_ms
+            or prior.get("hold_power", False) != args.hold_power
             or not prior.get("all_checks_passed")
             or prior["jobs_sha256"] != identity
             or prior["tolerances_sha256"] != manifest["tolerances_sha256"]
@@ -313,6 +317,7 @@ def main():
         "cached_code": args.cached_code,
         "linked": args.linked,
         "budget_ms": args.budget_ms,
+        "hold_power": args.hold_power,
         "jobs_sha256": identity,
         "model_sha256": graph.weights_sha256,
         "param_sha256": graph.param_sha256,
@@ -338,6 +343,7 @@ def main():
                 jobs,
                 cached_code=args.cached_code,
                 budget_ms=args.budget_ms,
+                hold_power=args.hold_power,
                 _device_factory=factory,
             )
             report["plan"] = {
@@ -353,6 +359,14 @@ def main():
                         }
                     ),
                     flush=True,
+                )
+                held = power.read()
+                if (held != baseline) != args.hold_power:
+                    raise ValueError("HMX power between requests differs from the selected policy")
+                report["held_power_sha256"] = (
+                    hashlib.sha256(json.dumps(held, sort_keys=True).encode()).hexdigest()
+                    if args.hold_power
+                    else None
                 )
                 if args.controls:
                     report["controls"] = metadata_controls(owner)
@@ -415,6 +429,16 @@ def main():
                         args.output.write_text(json.dumps(report, indent=2) + "\n")
                     # Timing-only repeats without intermediate readback. Heads must
                     # reproduce the qualified frame of the same crop bit for bit.
+                    if args.hold_idle_s and not args.fault_at:
+                        # Idle with the gate released; held power must not move.
+                        deadline = time.monotonic() + args.hold_idle_s
+                        samples = 0
+                        while time.monotonic() < deadline:
+                            if power.read() != held:
+                                raise RecoveryRequired("HMX power changed while idle")
+                            samples += 1
+                            time.sleep(0.05)
+                        report["hold_idle"] = {"seconds": args.hold_idle_s, "samples": samples}
                     for index in range(args.unqualified_frames if not args.fault_at else 0):
                         crop = crops[index % len(crops)]
                         outputs = owner.run(
@@ -432,6 +456,8 @@ def main():
                         report.setdefault("unqualified_frames", []).append(
                             {"name": crop["name"], "execution": owner.metrics["runs"][-1]}
                         )
+                if power.read() != held:
+                    raise RecoveryRequired("HMX power changed during the session")
             report["metrics"] = owner.metrics
             with Device() as observer:
                 restored = bytes(observer._transport.memory[ARENA_START:ARENA_END])

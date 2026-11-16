@@ -221,8 +221,10 @@ instructions with checked normal/fault cleanup. Data stays uncached and all
 existing resource, ownership and timeout limits remain in force.
 [Linked operators](RESIDENT_LINK.md) now run from one image in owned DDR with
 cross-layer requests and VTCM working copies: 52 requests and 1.66–1.69
-seconds per frame at a 20 ms budget, .99 seconds of it native. Per-request
-HMX power start and close on the host is the largest remaining cost.
+seconds per frame at a 20 ms budget, .99 seconds of it native; opt-in
+session-held HMX power brings the frame to 1.36–1.39 seconds. Native time
+(depthwise and 1×1 convolution, about .45 seconds each) is again the largest
+cost.
 
 Add direct HVX depthwise kernels for 3x3 and 5x5, including stride 2 and
 asymmetric padding. Add max/global-average pooling, residual add, fused clip,

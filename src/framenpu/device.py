@@ -141,6 +141,7 @@ class Device:
         _completion_validator=None,
         _prepare=None,
         _phase_times=None,
+        _held_power=None,
     ):
         if not isinstance(job, Job):
             raise TypeError("job must be a Job")
@@ -223,8 +224,13 @@ class Device:
                 t.memory[p.arena : p.arena + used] = input_data.ljust(used, b"\0")
                 mark("job_upload_ms")
                 if job.requires_hmx:
-                    power = self._power_factory()
-                    power.start()
+                    if _held_power is not None:
+                        # Session-held power: read-only proof, under the gate,
+                        # that the configuration is still the one we set.
+                        _held_power.verify()
+                    else:
+                        power = self._power_factory()
+                        power.start()
                 mark("power_start_ms")
                 started = time.monotonic()
                 # Mark before publishing: an interrupted send may already have woken the DSP.
@@ -266,6 +272,8 @@ class Device:
                     t.poisoned = True
                     if power is not None:
                         power.abandon()
+                    if _held_power is not None:
+                        _held_power.abandon()
                     raise RecoveryRequired(
                         "DSP state requires recovery; payload and clocks were retained, but the stock operation gate may expire"
                     ) from exc
@@ -281,6 +289,49 @@ class Device:
                     t.memory[off : off + len(saved)] = saved
                 t.release_unsubmitted()
                 raise
+
+    def _hold_power(self):
+        """Power HMX on under the operation gate and keep it on after release.
+
+        The returned owner is passed to each later _submit as _held_power and
+        must be given back to _release_power. Nothing is published to the DSP.
+        Until release, any other HMX power user on this device finds HMX on.
+        """
+        with self._lock:
+            t = self._connect()
+            t.claim(self.claim_timeout)
+            try:
+                power = self._power_factory()
+                power.start()
+                try:
+                    power.hold()
+                except BaseException:
+                    power.abandon()
+                    raise RecoveryRequired("held HMX power could not be recorded")
+            except RecoveryRequired:
+                t.poisoned = True
+                raise
+            except BaseException:
+                t.release_unsubmitted()
+                raise
+            t.release_unsubmitted()
+            return power
+
+    def _release_power(self, power):
+        """Under the gate: prove the held configuration, then power HMX off."""
+        with self._lock:
+            t = self._connect()
+            t.claim(self.claim_timeout)
+            try:
+                power.verify()
+                power.close()
+            except BaseException as exc:
+                t.poisoned = True
+                power.abandon()
+                raise RecoveryRequired(
+                    "held HMX power could not be released; clocks were retained"
+                ) from exc
+            t.release_unsubmitted()
 
     def _matmul_tile(
         self, a, b, *, bias=None, activation="none", tiles_per_job=1, accumulator=None

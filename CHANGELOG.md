@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Added opt-in session-held HMX power for the resident landmark executor
+  (`hold_power=True`): one power-on under the operation gate at open, a
+  read-only register proof under the gate before every request, one verified
+  power-off at close. A linked frame falls from 1.66–1.69 to 1.36–1.39 seconds
+  for the same 52 requests. Four crops keep bit-identical heads across 1,495
+  main audits including 30-second idle holds; guarded faults and rejections
+  pass. The default remains per-request power; coexistence with another HMX
+  power user is not established. Four offline regressions and an idle-hold
+  hardware check were added.
 - Linked resident operators now read resident state, layer records and staged
   tensor rows from saved VTCM instead of word-by-word or unaligned from
   uncached DDR, keep no HVX register on the stack in per-unit paths, and take

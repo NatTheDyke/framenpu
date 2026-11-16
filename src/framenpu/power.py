@@ -129,6 +129,33 @@ class HmxPower:
                 self.close()
             raise
 
+    def _held(self):
+        r = self._r
+        return (
+            tuple(r(self.p, o) for o in (0, 4, 0x10, 0x14, 0x18)),
+            tuple(r(self.c, o) for o in (0x180, 0x184, 0x1A0, 0x200)),
+            tuple(r(self.s, o) for o in (0x404, 0x410, 0x460, 0x464, 0x4BC, 0x4C0)),
+            tuple(r(self.s, o) for o in range(0x550, 0x680, 4)),
+        )
+
+    def hold(self):
+        """Record the powered configuration this owner established.
+
+        A session that keeps HMX powered between requests calls this once
+        after start(), still under the operation gate, and verify() under the
+        gate before every later request.
+        """
+        if not self.triggered or self.abandoned:
+            raise RecoveryRequired("HMX power is not held by this owner")
+        self.held = self._held()
+
+    def verify(self):
+        """Caller must hold the CDSP operation gate. Read-only."""
+        if not self.maps or self.abandoned or not self.triggered:
+            raise RecoveryRequired("HMX power is not held by this owner")
+        if self._held() != self.held:
+            raise RecoveryRequired("held HMX power configuration changed")
+
     def abandon(self):
         """Unmap host views only. Never gate clocks under a possibly running DSP."""
         self.abandoned = True

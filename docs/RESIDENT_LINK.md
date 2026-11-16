@@ -204,7 +204,8 @@ changes measured 6.07 s (state and record copies), 2.49 s (inlined gather,
 bias window, vector stem), 1.57 s (aligned loads and staged rows), 1.06 s
 (call-free unit paths) and .99 s. Of the 1.66 s frame body, roughly .65 s is
 host work around the requests, mostly HMX power start (about 5 ms) and close
-(1.6 ms) per request; that, not native arithmetic, is the next cost.
+(1.6 ms) per request; [session-held power](#session-held-hmx-power) removes
+that part.
 
 Supplemental runs, each restoring the full arena:
 
@@ -235,6 +236,53 @@ table are in
 These are audited graph runs on four crops, not sustained tracking latency,
 coexistence, thermal or broader accuracy results.
 
+## Session-held HMX power
+
+By default every request powers HMX on under the firmware operation gate and
+off again before acknowledging, about 5 ms and 1.6 ms of host time each.
+`ResidentLandmark(..., hold_power=True)` instead keeps HMX powered from open to
+close:
+
+- **On once.** Open claims the gate, runs the unchanged power-on sequence,
+  records the resulting PLL, clock and sequencer registers and the uploaded
+  sequencer program, and releases the gate without publishing anything.
+- **Proof per request.** Under the gate and before publication, every request
+  re-reads those registers. Any difference raises `RecoveryRequired` before
+  the DSP is woken; clocks are then left alone, as for any uncertain state.
+- **Off last.** Close retires the image and restores the arena as before, then
+  claims the gate, repeats the proof and runs the unchanged power-off sequence
+  with its restoration check. An open that fails cleanly before ownership
+  powers off the same way.
+
+The native images, arithmetic, budget and 40 ms window are unchanged; this is
+host-side only. With it a frame takes **1.36–1.39 seconds** for the same 52
+requests (1.66–1.69 seconds with per-request power).
+
+Qualification used the same build, crops and frozen policy as above. An idle
+hold with no request published showed no register change in 1,193 samples over
+three seconds. Calibration and heldout each held power through two qualified
+crops, a 30-second idle interval with the gate released (595 and 594 samples,
+no change) and two timing frames: all 308 layer checks pass, heads are
+bit-identical, 1,495 main audits pass and the power configuration after close
+equals the initial one. Guarded faults after one HMX transaction and after one
+in-place depthwise unit still invalidate the session, refuse reuse, restore the
+arena and power off (449 and 462 audits). Fourteen rejection controls pass
+under held power (458 audits). A per-request-power control and the ordinary
+SDK regression pass afterwards. Results are in
+[resident-power-validation.json](../evidence/resident-power-validation.json).
+
+Holding power is opt-in because it changes what other software on the device
+can observe: between requests the gate is free while HMX is on. The per-request
+proof detects a changed configuration before this session uses it, but nothing
+here establishes how the stock firmware or another client behaves if it wants
+HMX power meanwhile, and idle power draw and thermals were not measured. The
+default therefore remains per-request power.
+
+```sh
+sudo .venv/bin/python tests/hardware_power_hold.py --run-on-device --seconds 3 --output /path/to/hold.json
+sudo .venv/bin/python tests/hardware_resident_landmark.py --run-on-device --linked --cached-code --budget-ms 20 --hold-power --hold-idle-s 30 --jobs /path/to/link-jobs --model /private/model --corpus /private/corpus --controls --unqualified-frames 2 --output /path/to/calibration.json
+```
+
 ## Running
 
 ```sh
@@ -249,6 +297,8 @@ budget, sources, corpus and policy.
 ```python
 from framenpu.resident_landmark import ResidentLandmark, load_linked
 
-with ResidentLandmark(graph, load_linked("link-jobs"), cached_code=True, budget_ms=20) as session:
+with ResidentLandmark(
+    graph, load_linked("link-jobs"), cached_code=True, budget_ms=20, hold_power=True
+) as session:
     heads = session.run(chw)
 ```

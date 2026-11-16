@@ -386,7 +386,8 @@ machine paths, credentials and proprietary firmware are excluded from the
 public source; the numerical summary is intentionally sanitized.
 
 The initial publication suite passed 29 offline tests; the current suite passes
-173. Nine [linked-operator](RESIDENT_LINK.md) tests cover batch replay against
+177. Thirteen [linked-operator](RESIDENT_LINK.md) tests cover held-power
+ordering and refusal before publication, batch replay against
 the single-module state machine, stop-point/fault bounds, seal/retire ordering,
 image and alias checks before reclamation, and the linked-build verifier; the
 hardware results are in [resident-link-validation.json](../evidence/resident-link-validation.json)

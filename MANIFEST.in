@@ -30,6 +30,7 @@ include evidence/depthwise-gather-validation.json
 include evidence/resident-cache-validation.json
 include evidence/resident-link-validation.json
 include evidence/resident-link-fast-validation.json
+include evidence/resident-power-validation.json
 global-exclude *.pyc
 include .gitignore .gitattributes
 recursive-include .github *.yml

@@ -207,7 +207,7 @@ sudo .venv/bin/python tests/hardware_smoke.py --run-on-device
 ~~~
 
 Configured CI covers Python 3.11–3.14. [Validation notes](docs/VALIDATION.md)
-record 173 passing offline tests and distinguish local results from the
+record 177 passing offline tests and distinguish local results from the
 configured CI matrix.
 
 ## Hand tracking and contributions
@@ -251,8 +251,8 @@ The default stays uncached.
 operators in one image in the owned arena and let a request cross layers up to
 a tick budget. With operator state and staged rows read from saved VTCM, a
 frame needs 52 requests instead of about 10,960 and takes 1.66–1.69 seconds
-at a 20 ms budget, with identical heads; host power cycling around each
-request is now the largest remaining cost.
+at a 20 ms budget, with identical heads. Opt-in session-held HMX power removes
+the per-request power cycling and brings a frame to 1.36–1.39 seconds.
 The [accumulator isolation tests](docs/HMX_ACCUMULATOR.md) show shared HMX state
 across workers with the recovered primitives. Keep each complete clear/load/store
 transaction under one HMX owner; use HVX workers for other work.

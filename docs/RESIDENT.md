@@ -59,7 +59,10 @@ process-local lock disappearance must not erase that record.
 The initial executor keeps borrowed VTCM and power scoped to each bounded
 segment. Persistent weights do not justify holding the firmware gate or power
 configuration across idle intervals. Any later power/session amortization
-needs its own coexistence and ownership qualification.
+needs its own coexistence and ownership qualification. The linked landmark
+executor has since gained an opt-in, ownership-qualified
+[session-held power mode](RESIDENT_LINK.md#session-held-hmx-power); coexistence
+with another HMX power user remains unestablished.
 
 ## Offline schedule and allocation
 
