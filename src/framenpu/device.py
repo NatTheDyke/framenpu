@@ -139,9 +139,15 @@ class Device:
         params=(),
         use_direct=False,
         _completion_validator=None,
+        _prepare=None,
+        _phase_times=None,
     ):
         if not isinstance(job, Job):
             raise TypeError("job must be a Job")
+        if _prepare is not None and not callable(_prepare):
+            raise TypeError("private prepare hook must be callable")
+        if _phase_times is not None and type(_phase_times) is not dict:
+            raise TypeError("private phase timing output must be a dict")
         if use_direct and not job.supports_direct:
             raise ValueError("job lacks the direct master entry; rebuild it with the current SDK")
         input_data = bytes(input_data)
@@ -168,7 +174,17 @@ class Device:
                     if not t.poisoned:
                         self._direct = None
                     raise
+            phase = time.monotonic_ns()
+
+            def mark(name):
+                nonlocal phase
+                now = time.monotonic_ns()
+                if _phase_times is not None:
+                    _phase_times[name] = (now - phase) / 1e6
+                phase = now
+
             t.claim(self.claim_timeout)
+            mark("claim_ms")
             power = None
             backup = []
             published = False
@@ -180,6 +196,10 @@ class Device:
                 if job.requires_hmx:
                     spans.append((p.backup, 8192))
                 backup = [(off, bytes(t.memory[off : off + length])) for off, length in spans]
+                mark("backup_ms")
+                if _prepare is not None:
+                    _prepare(t)
+                mark("prepare_ms")
                 self._sequence = (self._sequence + 1) & 0xFFFFFFFF or 1
                 seq = self._sequence
                 words = [
@@ -201,9 +221,11 @@ class Device:
                 struct.pack_into("<16I", t.memory, p.header, *words)
                 t.memory[p.status : p.status + 192] = bytes(192)
                 t.memory[p.arena : p.arena + used] = input_data.ljust(used, b"\0")
+                mark("job_upload_ms")
                 if job.requires_hmx:
                     power = self._power_factory()
                     power.start()
+                mark("power_start_ms")
                 started = time.monotonic()
                 # Mark before publishing: an interrupted send may already have woken the DSP.
                 published = True
@@ -212,6 +234,7 @@ class Device:
                 else:
                     t.publish()
                 t.wait_complete(seq, self.timeout)
+                mark("publish_wait_ms")
                 returned = True
                 statuses = tuple(
                     struct.unpack_from("<16I", t.memory, p.status + 64 * i) for i in range(3)
@@ -220,14 +243,18 @@ class Device:
                 result = JobResult(output, (time.monotonic() - started) * 1000, statuses)
                 if _completion_validator is not None:
                     _completion_validator(result)
+                mark("read_validate_ms")
                 t.put(p.callback, 0)
                 if power is not None:
                     power.close()
                     power = None
+                mark("power_close_ms")
                 for off, saved in backup:
                     t.memory[off : off + len(saved)] = saved
                 backup = []
+                mark("restore_ms")
                 t.acknowledge(self.timeout)
+                mark("ack_ms")
                 failed = [(row[1], row[2], row[3:6]) for row in statuses if row[2]]
                 if failed:
                     raise JobFailed(

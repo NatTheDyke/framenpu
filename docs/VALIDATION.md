@@ -229,6 +229,33 @@ traps do not qualify arbitrary exception, memory-corruption or stall recovery.
 Existing custom FJOBs embed the old entry and must be rebuilt to get the fix.
 Earlier measurement reports retain their measured payload/source hashes.
 
+## Repeated resident GEMM — 2026-11-15
+
+The fixed resident proof passes 100 measured inputs and four checked warmups
+at each K=32/64/128, plus six checked reuse/replacement jobs: 318 full outputs,
+325,632 FP32 values. All A/B depth tiles are distinct, weights upload/prepack
+once per session, and complete output bytes match an integer-derived reference.
+The arithmetic is a full-depth HMX transaction with a final FP16 result promoted
+to FP32; it does not qualify model error tolerances.
+
+Twenty-one native command rejections preserve sequence/output and permit valid
+reuse. Three cached traps flush a dirty output sentinel, confirm code/data
+cleanup and invalidate mutable session state. Each is followed by full-span
+restoration and a successful fresh session with different weights and a different
+tagged instruction image. All 372 restoration audits pass (360 HMX, 12 dispatch
+helpers), with original gate/callback, code prefix and power snapshots restored.
+The service retains its PID and zero restarts. The subsequent ordinary public
+GEMM/activation/custom-job/XOR regression adds 78 passing audits, 39 HMX.
+
+Median audited resident command time is 12.4–12.6 ms; maximum native wrapper
+span is 4.613 ms and publication-to-completion 5.674 ms. Full-window cache cleanup
+and per-request power dominate. The 40 ms timeout, existing executable slot,
+single HMX owner and 8 KiB VTCM scope are preserved. Initial claim-only controls
+are excluded; the qualified host initializes/restores within real submissions.
+See [RESIDENT_GEMM.md](RESIDENT_GEMM.md) and the
+[sanitized evidence](../evidence/resident-gemm-validation.json) for hashes,
+all phase records, timing definitions, limits and reproduction.
+
 ## Publication audit
 
 The repository provides an MIT license, self-contained examples, SDK/compiler
@@ -237,7 +264,7 @@ machine paths, credentials and proprietary firmware are excluded from the
 public source; the numerical summary is intentionally sanitized.
 
 The initial publication suite passed 29 offline tests; the current suite passes
-109. Seven cache-diagnostic tests additionally cover alias identity, every output,
+121. Seven cache-diagnostic tests additionally cover alias identity, every output,
 cleanup confirmation before resource reclamation, confirmed-fault restoration,
 clock drift and timeout behavior. These host tests do not establish that the
 experimental DSP cache cleanup works on hardware.
@@ -252,6 +279,12 @@ JSON and the CLI. Eighty seeded varied schedules additionally check every pair
 of live allocations for overlap and independently recompute peak memory. The
 synthetic residual example needs 187,392 bytes versus 297,984 without reuse.
 These are host storage checks; no resident loader or device execution was added.
+That planner step is followed by 12 resident-GEMM lifecycle tests covering
+one-time weight loading, changing inputs, cache/numerical/guard validation before
+reclamation, stale identities, fault invalidation, retained timeout state, crash
+record refusal, no claim-only windows, sequence wrap, opt-in and bounded idle
+observation. They simulate host lifecycle; actual native/cache behavior is
+qualified by the separate hardware matrix above.
 
 Local verification uses Python 3.14.9 and LLVM 23.1.4. The GitHub Actions
 matrix is configured for Python 3.11–3.14; this local run does not establish

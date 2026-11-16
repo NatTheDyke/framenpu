@@ -69,6 +69,8 @@ def main(argv=None):
             "data/dispatch_patch.bin",
             "data/runtime.bin",
             "data/runtime.json",
+            "resident.py",
+            "resident_gemm.py",
         ):
             if f"framenpu/{suffix}" not in names:
                 raise ValueError(f"wheel is missing SDK/payload resource: {suffix}")
@@ -126,6 +128,15 @@ def main(argv=None):
         )
         if resident["execution_supported"] is not False or resident["required_bytes"] != 187392:
             raise ValueError("installed-wheel resident storage planning failed")
+        run(
+            [
+                python,
+                "-c",
+                "from framenpu.resident_gemm import proof_layout; assert proof_layout()['required_bytes'] == 32768",
+            ],
+            cwd=work,
+            env=env,
+        )
         for example in ("run_custom.py", "run_xor.py"):
             run([python, source / "examples" / example, "--help"], cwd=work, env=env)
         print(

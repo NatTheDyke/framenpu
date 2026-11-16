@@ -258,13 +258,22 @@ in its uncached diagnostic. Preserve the distinction between the two results.
 
 The [resident design and offline planner](RESIDENT.md) now define the memory,
 session and cache contract, and produce a checked residual-block allocation map.
-The planner does not load or execute a model. Implement the minimal resident
-GEMM proof next. Amortize cached publication/cleanup
+The planner does not load or execute a model. The separate
+[resident GEMM proof](RESIDENT_GEMM.md) now uploads weights once and streams
+distinct inputs through 32×K×32 products for K=32/64/128. It passes 300 measured
+jobs plus warmup/reuse checks, 21 native rejections, three guarded traps and
+code replacement/teardown, with 372 restoration audits. Ordinary SDK numerical
+regressions pass another 78 audits, with no service restart. Its fixed layout
+does not establish arbitrary graph support or model accuracy.
+
+The measured resident commands still take 12.4–12.6 ms median: per-request power
+and conservative whole-window cache cleanup dominate. Amortize cached publication/cleanup
 (roughly 1.5 ms per job) and fresh-session overhead (about 33 ms even for the
 cached diagnostic), while preserving bounded ownership and cache publication.
 The [public SDK unwind fix](FAULT_UNWIND.md) is now rebuilt and qualified with
-nested guarded traps and numerical regressions. Validate distinct operand
-staging and a real convolution against ncnn before completing the graph.
+nested guarded traps and numerical regressions. Distinct operand staging is now
+qualified in the bounded resident proof. Validate a real convolution against
+ncnn before completing the graph.
 
 The benchmark-free dispatcher, two-depth-tile GEMM jobs, full-tile HVX packing
 and HVX output unpacking/conversion now have numerical and restoration validation.

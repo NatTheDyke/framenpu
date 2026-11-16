@@ -3,13 +3,15 @@
 Step 1 implements an **offline storage planner** and defines the contract for
 the next executor prototype. `framenpu plan-resident` reads a declarative JSON
 schedule, validates storage dependencies, and emits a bounded allocation map.
-It opens no device. Resident loading, cached execution and graph submission
-remain future work; the output explicitly sets `execution_supported=false`.
+It opens no device; its generic schedule output sets `execution_supported=false`.
+Step 2 now implements a separate [bounded resident GEMM proof](RESIDENT_GEMM.md)
+with fixed descriptors, weights loaded once, changing inputs and qualified
+cache/fault teardown. General graph loading/submission remains future work.
 
 The design targets the exact firmware hash in [profile.py](../src/framenpu/profile.py).
 Its evidence is the [memory map](MEMMAP.md), [direct dispatcher](DISPATCH.md),
 [cached-code experiment](HMX_CACHE.md) and [fault-unwind qualification](FAULT_UNWIND.md).
-No new hardware qualification is claimed here.
+The fixed proof's new hardware qualification is documented separately.
 
 ## Memory and ownership
 
@@ -224,12 +226,12 @@ host write → DSP cached read, DSP write → host read, different-input reuse,
 code replacement, stale completion rejection and guarded-fault cleanup on the
 actual resident path before reporting its performance.
 
-## Next hardware milestone
+## Hardware milestone and next work
 
-Implement one bounded resident GEMM path using this ownership model. Upload
-distinct, independently checked weights once; stream changing inputs and keep
-the output/carry in owned storage. Measure upload, packing, execution, cache
-handoff and teardown separately. Require repeated correctness, rejected stale
-identities, fault/clean-close restoration and unchanged service/control state
-before proceeding to real convolutions. Sustained gaze quality still needs
-its separate tracking qualification.
+The [bounded GEMM proof](RESIDENT_GEMM.md) now qualifies distinct weight/input
+depth tiles, session reuse, stale identity/bounds rejection, cached dirty-fault
+cleanup, code replacement and full-span teardown. Its native descriptor encoding
+implements the fixed subset of this design; arbitrary planner output is still
+an offline report. Next validate a real convolution against pinned ncnn data
+and document numerical tolerances and packing buffers before extending the graph.
+Sustained gaze quality still needs its separate tracking qualification.

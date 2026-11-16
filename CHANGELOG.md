@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Qualified bounded resident 32×K×32 GEMM for K=32/64/128 with distinct operands:
+  weights upload/prepack once per session, changing inputs, checked generations
+  and descriptor bounds, cached execution and fault-safe cache teardown. All
+  300 measured jobs plus warmups/reuse match 325,632 values; 21 rejections,
+  three guarded faults and code replacements pass 372 restoration audits.
+  Ordinary GEMM/XOR regressions add 78 passing audits with no service restart.
+  Added separate host/DSP phase timings and 12 offline lifecycle regressions.
 - Added offline resident-DDR storage planning with explicit tensor layouts,
   strides, aliases and graph-derived lifetimes. The CLI reports bounded aligned
   allocations, scratch costs and reuse for a residual example. Documented the

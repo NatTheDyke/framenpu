@@ -207,7 +207,7 @@ sudo .venv/bin/python tests/hardware_smoke.py --run-on-device
 ~~~
 
 Configured CI covers Python 3.11–3.14. [Validation notes](docs/VALIDATION.md)
-record 109 passing offline tests and distinguish local results from the
+record 121 passing offline tests and distinguish local results from the
 configured CI matrix.
 
 ## Hand tracking and contributions
@@ -218,8 +218,12 @@ implemented with validated HVX input packing and output conversion.
 
 A [5.87 MiB persistent DDR region](docs/MEMMAP.md) is mapped and canary-checked;
 an [offline resident allocation planner](docs/RESIDENT.md) now checks tensor
-lifetimes, aliases and storage bounds. Device loading and graph execution remain
-unimplemented. The [accumulator isolation tests](docs/HMX_ACCUMULATOR.md) show shared HMX state
+lifetimes, aliases and storage bounds. A [bounded resident GEMM proof](docs/RESIDENT_GEMM.md)
+now loads weights once and streams changing inputs for 32×K×32 products,
+K=32/64/128. Three hundred measured jobs plus checked warmups/reuse match all
+325,632 output values; fault, replacement and teardown checks pass 372 audits.
+General graph loading/execution remains unimplemented.
+The [accumulator isolation tests](docs/HMX_ACCUMULATOR.md) show shared HMX state
 across workers with the recovered primitives. Keep each complete clear/load/store
 transaction under one HMX owner; use HVX workers for other work.
 
@@ -236,8 +240,10 @@ jobs and 32 warmups, with about 2.52x improvement in its uncached loop.
 These remain experimental fixtures; public matrix execution still uses its
 existing uncached path. The experiments reuse blocks within a job and do not
 establish full-model throughput. Cached publication/cleanup costs roughly
-1.5 ms per job, and fresh sessions still take about 33 ms. Next are implementing
-the resident ownership contract, repeated resident GEMM, real convolution
+1.5 ms per experimental job, and fresh sessions in that experiment take about
+33 ms. The resident proof qualifies a fixed ownership/cache contract; its
+commands still take roughly 12.4–12.6 ms median with per-request power and
+full-window cleanup. Next are real convolution
 and HVX depthwise kernels, then a validated ncnn converter. See
 [HAND_TRACKING.md](docs/HAND_TRACKING.md) for the roadmap and
 [HMX_THROUGHPUT.md](docs/HMX_THROUGHPUT.md) for research context.
