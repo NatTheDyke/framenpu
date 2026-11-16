@@ -289,6 +289,29 @@ The final host revision normalizes all checker exceptions to RecoveryRequired;
 a full repeated matrix produces identical output hashes. Earlier raw-report
 digests are retained separately from final audit counts.
 
+## Complete streamed landmark graph — 2026-11-15
+
+The pinned v20a graph passes all 77 layers, 90 blobs and four outputs on four
+recorded infrared crops (two calibration, two heldout). The final matrix checks
+20,351,360 layer-output values and passes 25,455 restoration audits, including
+seven guarded traps and seven native rejections. Saved head tensors independently
+reproduce hashes/error statistics for all 512 final output values. No tolerance was
+widened after device/heldout observation. See [LANDMARK.md](LANDMARK.md) and the
+[sanitized evidence](../evidence/landmark-validation.json) for per-layer results,
+frozen provisional limits, source/model/reference pins and debugging/reset history.
+
+HVX depthwise/pooling/residual kernels, native sigmoid and 26 tensor aliases are
+implemented; HMX handles full-depth convolution/dense work. Intermediate tensors
+remain on the host and audited bodies take 71–79 seconds per crop. This establishes
+complete graph correctness within the small corpus, not resident execution,
+broad tracking accuracy, real-time performance, coexistence or thermals.
+
+The final same-source matrix and following 78-audit ordinary SDK regression
+restore firmware, gate/callback and power with the service PID unchanged and
+zero restarts. Earlier numerical identity failures stopped and retained resources;
+explicitly authorized device reboots preceded further tests. They are excluded
+from final matrix counts. The public SDK payload remains 3672 bytes.
+
 ## Publication audit
 
 The repository provides an MIT license, self-contained examples, SDK/compiler
@@ -297,7 +320,7 @@ machine paths, credentials and proprietary firmware are excluded from the
 public source; the numerical summary is intentionally sanitized.
 
 The initial publication suite passed 29 offline tests; the current suite passes
-134. Seven cache-diagnostic tests additionally cover alias identity, every output,
+141. Seven cache-diagnostic tests additionally cover alias identity, every output,
 cleanup confirmation before resource reclamation, confirmed-fault restoration,
 clock drift and timeout behavior. These host tests do not establish that the
 experimental DSP cache cleanup works on hardware.
@@ -324,6 +347,11 @@ lazy input preflight, proof limits, partial spatial/channel tails, opt-in and
 the rule that held-out errors cannot widen frozen limits, and checker exceptions
 retaining resources before reclamation. NumPy/Pillow/ncnn are
 optional reference-preparation tools, not dependencies of the offline suite.
+Seven complete-graph tests additionally exercise alias lifetimes, shared storage,
+depthwise/residual/pooling orchestration, K704 reduction and 33-output dense-head
+tails, all four outputs/sigmoid, host validation before reclamation, input/model
+preflight and heldout exclusion from tolerance fitting. They emulate native I/O;
+actual operator arithmetic and all-layer results have the separate hardware proof.
 
 Local verification uses Python 3.14.9 and LLVM 23.1.4. The GitHub Actions
 matrix is configured for Python 3.11–3.14; this local run does not establish

@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Qualified an experimental pinned complete landmark graph executor: full-depth
+  HMX convolutions/heads through K704, HVX depthwise/pooling/residual operations,
+  native sigmoid and lifetime-aware tensor aliases. Intermediate tensors remain
+  on the host. All 77 layers, 90 blobs and four outputs pass frozen ncnn/local
+  checks on four recorded crops: 20,351,360 values and 25,455 restoration audits,
+  including seven guarded traps and seven native rejections. Added exact zero-add/sigmoid
+  identities, all-blob reference tooling and seven offline regressions. Debug
+  failures retained resources and were followed by explicitly approved resets;
+  the final matrix and ordinary SDK regression restore cleanly. Audited graph
+  bodies take 71–79 seconds per crop; residency and real-time tracking remain open.
 - Qualified real-weight `convclip_0`, pointwise `conv_10` and K=64 `conv_12`
   against hash-pinned ncnn/v20a references and recorded infrared crops.
   Added strict whole-graph/binary preflight, bounded patch lowering, native FP32
@@ -97,4 +107,4 @@
 - Real-device custom-job, tiled-GEMM and serialized XOR validation.
 - Standalone packaging, development docs, CI and provenance checks.
 
-Full FrameTop/ncnn graph inference and real-time hand tracking are unsupported.
+General FrameTop/ncnn import and real-time hand tracking remain unsupported.

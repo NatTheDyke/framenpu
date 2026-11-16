@@ -69,8 +69,10 @@ ownership and cooperative cancellation. The [resident design](RESIDENT.md) and
 offline planner define the proposed contract; they do not change the current
 wire ABI. A [fixed resident GEMM proof](RESIDENT_GEMM.md) uses private prepare,
 completion-validation and phase-timing hooks on the existing bounded submit path;
-general graph execution remains future work. This release exposes a version-pinned
-research interface.
+general resident graph execution remains future work. A separate
+[pinned landmark executor](LANDMARK.md) streams complete graphs through the same
+bounded job interface with host intermediate tensors. This release exposes a
+version-pinned research interface.
 
 The public entry now restores both SP and FP when abandoning nested C frames
 after a guarded exception. [Fault-unwind qualification](FAULT_UNWIND.md) covers

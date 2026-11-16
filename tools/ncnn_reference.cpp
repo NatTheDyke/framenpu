@@ -25,7 +25,8 @@ static void save(const std::string& path, const ncnn::Mat& m) {
 
 int main(int argc,char** argv) {
     try {
-        if(argc!=12) throw std::runtime_error("usage: reference param bin gray width height cx cy size rotation output_dir contrast_none");
+        if(argc!=12 && argc!=13) throw std::runtime_error("usage: reference param bin gray width height cx cy size rotation output_dir contrast_none [all]");
+        if(argc==13 && std::string(argv[12])!="all") throw std::runtime_error("unknown export mode");
         int w=std::stoi(argv[4]),h=std::stoi(argv[5]);
         double cx=std::stod(argv[6]),cy=std::stod(argv[7]),size=std::stod(argv[8]),rotation=std::stod(argv[9]);
         if(w<=0||h<=0||w>8192||h>8192||size<=0||!std::isfinite(size)||std::string(argv[11])!="none") throw std::runtime_error("invalid frame/ROI/contrast");
@@ -54,7 +55,13 @@ int main(int argc,char** argv) {
         if(net.load_param(argv[1])||net.load_model(argv[2])) throw std::runtime_error("ncnn model load failed");
         ncnn::Extractor ex=net.create_extractor();ex.set_light_mode(false);
         if(ex.input("in0",m)) throw std::runtime_error("reference input failed");
-        for(const char* blob:{"2","3","4","8","9"}) {
+        std::vector<std::string> names={"2","3","4","8","9"};
+        if(argc==13) {
+            names.clear();
+            for(const auto& blob:net.blobs()) if(blob.name!="in0") names.push_back(blob.name);
+        }
+        for(const auto& name:names) {
+            const char* blob=name.c_str();
             ncnn::Mat result;
             if(ex.extract(blob,result)) throw std::runtime_error("reference extraction failed");
             save(out+"/blob_"+blob+".f32",result);

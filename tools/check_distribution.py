@@ -72,6 +72,7 @@ def main(argv=None):
             "resident.py",
             "resident_gemm.py",
             "convolution.py",
+            "landmark.py",
         ):
             if f"framenpu/{suffix}" not in names:
                 raise ValueError(f"wheel is missing SDK/payload resource: {suffix}")
@@ -107,7 +108,7 @@ def main(argv=None):
             [
                 python,
                 "-c",
-                "import framenpu.convolution; from framenpu.provenance import verify_kernel; verify_kernel()",
+                "import framenpu.convolution, framenpu.landmark; from framenpu.provenance import verify_kernel; verify_kernel()",
             ],
             cwd=work,
             env=env,

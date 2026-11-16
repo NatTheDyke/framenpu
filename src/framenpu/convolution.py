@@ -347,6 +347,7 @@ def load_landmark_graph(param_path, weight_path, *, input_shape=(3, 224, 224)):
                     "only none, clip[0,6] and sigmoid activations are supported"
                 )
             item = None
+            metadata = {}
             if op == "Input":
                 if bottoms or tops != 1 or shapes or p:
                     raise UnsupportedOperator("require one externally shaped Input")
@@ -404,6 +405,19 @@ def load_landmark_graph(param_path, weight_path, *, input_shape=(3, 224, 224)):
                     )
                 )
                 offset, size, dtype, bias_offset, segment = read_weights(count, n if bias else 0)
+                metadata = {
+                    "weight_offset": offset,
+                    "weight_bytes": size,
+                    "weight_dtype": dtype,
+                    "bias_offset": bias_offset,
+                    "segment": segment,
+                    "kernel": (kh, kw),
+                    "stride": (sh, sw),
+                    "dilation": (dh, dw),
+                    "padding": (pt, pb, pl, pr),
+                    "activation": {0: "none", 3: "clip", 4: "sigmoid"}[activation],
+                    "groups": group,
+                }
                 if op == "Convolution":
                     item = ConvLayer(
                         name,
@@ -475,7 +489,15 @@ def load_landmark_graph(param_path, weight_path, *, input_shape=(3, 224, 224)):
                 count = _int(p, 2)
                 if n <= 0 or bias not in (0, 1) or count != n * math.prod(shapes[inputs[0]]):
                     raise InvalidModel("InnerProduct weight shape mismatch")
-                read_weights(count, n if bias else 0)
+                offset, size, dtype, bias_offset, segment = read_weights(count, n if bias else 0)
+                metadata = {
+                    "weight_offset": offset,
+                    "weight_bytes": size,
+                    "weight_dtype": dtype,
+                    "bias_offset": bias_offset,
+                    "segment": segment,
+                    "activation": {0: "none", 3: "clip", 4: "sigmoid"}[activation],
+                }
                 shape = _shape((n,))
             else:
                 raise UnsupportedOperator(f"unsupported ncnn operator: {op}")
@@ -489,6 +511,8 @@ def load_landmark_graph(param_path, weight_path, *, input_shape=(3, 224, 224)):
                     "input": inputs,
                     "output": outputs,
                     "shape": shape,
+                    "params": p,
+                    **metadata,
                 }
             )
         if len(shapes) != blobs or position != len(raw):

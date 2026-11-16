@@ -207,14 +207,15 @@ sudo .venv/bin/python tests/hardware_smoke.py --run-on-device
 ~~~
 
 Configured CI covers Python 3.11–3.14. [Validation notes](docs/VALIDATION.md)
-record 134 passing offline tests and distinguish local results from the
+record 141 passing offline tests and distinguish local results from the
 configured CI matrix.
 
 ## Hand tracking and contributions
 
-The full FrameTop v20a graph is not implemented. Use inspect-ncnn with your
-own hand.ncnn.param file to inventory it. Bounded two-depth-tile jobs are
-implemented with validated HVX input packing and output conversion.
+The pinned FrameTop v20a landmark graph now has an experimental streamed DSP
+executor. General ncnn import remains unsupported; inspect-ncnn inventories
+your own param file without execution. Bounded two-depth-tile jobs also have
+validated HVX input packing and output conversion.
 
 A [5.87 MiB persistent DDR region](docs/MEMMAP.md) is mapped and canary-checked;
 an [offline resident allocation planner](docs/RESIDENT.md) now checks tensor
@@ -227,7 +228,13 @@ comparisons on recorded infrared crops: the stem, a pointwise layer and K=64.
 All 2,207,744 values pass the frozen arithmetic and total-error limits, including
 held-out crops, with 3,558 restoration audits. Input quantization dominates the
 stem's error. The current one-tile-per-request prototype takes several seconds
-per layer; general graph loading/execution remains unimplemented.
+per layer. A [pinned complete-graph prototype](docs/LANDMARK.md) now adds HVX
+depthwise/pooling/residual kernels and tensor aliases through bounded streamed
+submissions. All 77 layers, 90 blobs and four outputs pass on four recorded
+crops under frozen provisional limits: 20,351,360 layer-output values and
+25,455 restoration audits. Its intermediate tensors live on the host and each
+crop takes 71–79 seconds with audits; resident graph execution, useful tracking
+performance and broader accuracy qualification remain future work.
 The [accumulator isolation tests](docs/HMX_ACCUMULATOR.md) show shared HMX state
 across workers with the recovered primitives. Keep each complete clear/load/store
 transaction under one HMX owner; use HVX workers for other work.
@@ -249,8 +256,9 @@ establish full-model throughput. Cached publication/cleanup costs roughly
 33 ms. The resident proof qualifies a fixed ownership/cache contract; its
 commands still take roughly 12.4–12.6 ms median with per-request power and
 full-window cleanup. Real convolution is now numerically qualified in the bounded
-proof. Next are spatial batching/overhead reduction while preserving the frozen
-rules, HVX depthwise kernels and complete graph execution. See
+proof. Complete graph correctness now also passes in the streamed executor.
+Next are resident intermediates, weight reuse and bounded overhead reduction
+while preserving the frozen rules. See
 [HAND_TRACKING.md](docs/HAND_TRACKING.md) for the roadmap and
 [HMX_THROUGHPUT.md](docs/HMX_THROUGHPUT.md) for research context.
 
