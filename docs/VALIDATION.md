@@ -256,6 +256,39 @@ See [RESIDENT_GEMM.md](RESIDENT_GEMM.md) and the
 [sanitized evidence](../evidence/resident-gemm-validation.json) for hashes,
 all phase records, timing definitions, limits and reproduction.
 
+## Real-weight convolution — 2026-11-15
+
+The [convolution proof](CONVOLUTION.md) pins ncnn `20260526`/`e54f7b1`, the v20a
+param/bin hashes and four private recorded IR crops. Strict preflight validates
+the complete 77-layer/90-blob graph, tagged weights, shapes and exact binary EOF.
+An independent FP64 lowering checks the full/FP16-input ncnn references within
+`1e-4`. Native tag-2 code adds FP32 bias/clip within a 3,796-byte payload.
+
+The stem K=27/N=24, pointwise K=24/N=16 and deeper K=64/N=16 pass 2,207,744
+values across final calibration and held-out runs. Both use the same frozen
+arithmetic rules and total-FP32-error limits. Held-out max absolute / worst-crop
+RMS errors are 0.0140700/0.000785676, 0.00543642/0.000328457 and
+0.00533867/0.000662564, respectively. Input quantization dominates the stem.
+Limits depend only on weight/bias precision and calibration CPU estimates,
+with 25% total-error margin; held-out errors cannot widen them.
+
+All 3,558 final restoration audits pass (3,546 HMX commands, 12 helpers), with
+original gate/callback/firmware-prefix/power state and the same service PID,
+zero restarts. Three guarded traps add 24 pilot audits; earlier resident API
+compatibility passes 63 audits and public GEMM/activation/vector/XOR passes 78.
+These are separate from final counts. Maximum wrapper/publication-to-completion
+times are 5.644/7.260 ms, within the existing limit. The one-tile-per-request
+prototype still takes several seconds per layer; no tracking-speed claim is made.
+
+See the [evidence](../evidence/convolution-validation.json) for reference/source
+hashes, crop metadata, tolerance derivation, errors, timings and raw-report
+digests. Models/images/tensors remain private. Inputs to later layers come from
+ncnn intermediates; full graph error propagation, production ARM-FP16 equivalence,
+landmark accuracy and a broader independent corpus remain unqualified.
+The final host revision normalizes all checker exceptions to RecoveryRequired;
+a full repeated matrix produces identical output hashes. Earlier raw-report
+digests are retained separately from final audit counts.
+
 ## Publication audit
 
 The repository provides an MIT license, self-contained examples, SDK/compiler
@@ -264,7 +297,7 @@ machine paths, credentials and proprietary firmware are excluded from the
 public source; the numerical summary is intentionally sanitized.
 
 The initial publication suite passed 29 offline tests; the current suite passes
-121. Seven cache-diagnostic tests additionally cover alias identity, every output,
+134. Seven cache-diagnostic tests additionally cover alias identity, every output,
 cleanup confirmation before resource reclamation, confirmed-fault restoration,
 clock drift and timeout behavior. These host tests do not establish that the
 experimental DSP cache cleanup works on hardware.
@@ -285,6 +318,12 @@ reclamation, stale identities, fault invalidation, retained timeout state, crash
 record refusal, no claim-only windows, sequence wrap, opt-in and bounded idle
 observation. They simulate host lifecycle; actual native/cache behavior is
 qualified by the separate hardware matrix above.
+Thirteen convolution tests cover weight/bias tags and alignment, transposition,
+asymmetric padding/patch order, malformed DAGs/binaries/attributes, finite values,
+lazy input preflight, proof limits, partial spatial/channel tails, opt-in and
+the rule that held-out errors cannot widen frozen limits, and checker exceptions
+retaining resources before reclamation. NumPy/Pillow/ncnn are
+optional reference-preparation tools, not dependencies of the offline suite.
 
 Local verification uses Python 3.14.9 and LLVM 23.1.4. The GitHub Actions
 matrix is configured for Python 3.11–3.14; this local run does not establish

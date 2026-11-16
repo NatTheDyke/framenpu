@@ -204,6 +204,10 @@ sudo python3 tests/hardware_resident.py --run-on-device --probe build/resident.f
     --iterations 100 --warmups 4 --output /tmp/resident-full.json
 ~~~
 
+The later [convolution extension](CONVOLUTION.md) adds a separately qualified
+tag-2 image with native FP32 bias/clip. The original timing/evidence hashes above
+remain those of this GEMM comparison.
+
 The native jobs remain trusted supervisor code. A guarded software trap does
 not establish arbitrary corruption or pipeline-stall recovery. The next model
 milestone is a real convolution against pinned ncnn references, with explicit

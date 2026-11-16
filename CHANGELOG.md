@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Qualified real-weight `convclip_0`, pointwise `conv_10` and K=64 `conv_12`
+  against hash-pinned ncnn/v20a references and recorded infrared crops.
+  Added strict whole-graph/binary preflight, bounded patch lowering, native FP32
+  bias/clip and frozen arithmetic plus total-error limits. All 2,207,744 values
+  pass calibration/held-out checks and 3,558 restoration audits with no restart.
+  Added external reference builders and 13 offline regressions; raw models/images
+  stay private. This remains a slow layer-local proof, not full landmark inference.
 - Qualified bounded resident 32×K×32 GEMM for K=32/64/128 with distinct operands:
   weights upload/prepack once per session, changing inputs, checked generations
   and descriptor bounds, cached execution and fault-safe cache teardown. All

@@ -207,7 +207,7 @@ sudo .venv/bin/python tests/hardware_smoke.py --run-on-device
 ~~~
 
 Configured CI covers Python 3.11–3.14. [Validation notes](docs/VALIDATION.md)
-record 121 passing offline tests and distinguish local results from the
+record 134 passing offline tests and distinguish local results from the
 configured CI matrix.
 
 ## Hand tracking and contributions
@@ -222,7 +222,12 @@ lifetimes, aliases and storage bounds. A [bounded resident GEMM proof](docs/RESI
 now loads weights once and streams changing inputs for 32×K×32 products,
 K=32/64/128. Three hundred measured jobs plus checked warmups/reuse match all
 325,632 output values; fault, replacement and teardown checks pass 372 audits.
-General graph loading/execution remains unimplemented.
+Three [real-weight convolution layers](docs/CONVOLUTION.md) now pass pinned ncnn
+comparisons on recorded infrared crops: the stem, a pointwise layer and K=64.
+All 2,207,744 values pass the frozen arithmetic and total-error limits, including
+held-out crops, with 3,558 restoration audits. Input quantization dominates the
+stem's error. The current one-tile-per-request prototype takes several seconds
+per layer; general graph loading/execution remains unimplemented.
 The [accumulator isolation tests](docs/HMX_ACCUMULATOR.md) show shared HMX state
 across workers with the recovered primitives. Keep each complete clear/load/store
 transaction under one HMX owner; use HVX workers for other work.
@@ -243,8 +248,9 @@ establish full-model throughput. Cached publication/cleanup costs roughly
 1.5 ms per experimental job, and fresh sessions in that experiment take about
 33 ms. The resident proof qualifies a fixed ownership/cache contract; its
 commands still take roughly 12.4–12.6 ms median with per-request power and
-full-window cleanup. Next are real convolution
-and HVX depthwise kernels, then a validated ncnn converter. See
+full-window cleanup. Real convolution is now numerically qualified in the bounded
+proof. Next are spatial batching/overhead reduction while preserving the frozen
+rules, HVX depthwise kernels and complete graph execution. See
 [HAND_TRACKING.md](docs/HAND_TRACKING.md) for the roadmap and
 [HMX_THROUGHPUT.md](docs/HMX_THROUGHPUT.md) for research context.
 

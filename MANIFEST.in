@@ -2,6 +2,7 @@ include README.md LICENSE THIRD_PARTY_NOTICES.md
 include CONTRIBUTING.md SECURITY.md CHANGELOG.md
 recursive-include docs *.md
 recursive-include tools *.py
+recursive-include tools *.cpp
 recursive-include examples *.py *.c *.param *.fjob *.fnpu *.json
 recursive-include tests *.py *.c *.S
 exclude HANDOFF.md
@@ -22,6 +23,7 @@ include evidence/hmx-cache-validation.json
 include evidence/hmx-batch2-validation.json
 include evidence/fault-unwind-validation.json
 include evidence/resident-gemm-validation.json
+include evidence/convolution-validation.json
 global-exclude *.pyc
 include .gitignore .gitattributes
 recursive-include .github *.yml

@@ -71,6 +71,7 @@ def main(argv=None):
             "data/runtime.json",
             "resident.py",
             "resident_gemm.py",
+            "convolution.py",
         ):
             if f"framenpu/{suffix}" not in names:
                 raise ValueError(f"wheel is missing SDK/payload resource: {suffix}")
@@ -103,7 +104,11 @@ def main(argv=None):
         run([python, "-m", "pip", "install", "--no-index", "--no-deps", rebuilt], cwd=work, env=env)
         version = run([cli, "--version"], cwd=work, env=env).strip()
         run(
-            [python, "-c", "from framenpu.provenance import verify_kernel; verify_kernel()"],
+            [
+                python,
+                "-c",
+                "import framenpu.convolution; from framenpu.provenance import verify_kernel; verify_kernel()",
+            ],
             cwd=work,
             env=env,
         )

@@ -13,7 +13,7 @@ import struct
 import threading
 import time
 
-from .device import Device, _matrix
+from .device import Device, _matrix, _fp32
 from .errors import DeviceBusy, JobFailed, RecoveryRequired
 from .job import Job
 from .resident import ARENA_START, plan_resident
@@ -104,7 +104,17 @@ class ResidentGemm:
     open a fresh session. Timeout or invalid completion retains resources.
     """
 
-    def __init__(self, job, weights, *, _device_factory=Device, _lease_factory=_lease, _tag=0):
+    def __init__(
+        self,
+        job,
+        weights,
+        *,
+        _device_factory=Device,
+        _lease_factory=_lease,
+        _tag=0,
+        _bias=None,
+        _clip=False,
+    ):
         if not isinstance(job, Job) or not job.requires_hmx or not job.supports_direct:
             raise ValueError("resident proof requires its HMX/direct FJOB")
         weights = _matrix(weights)
@@ -112,13 +122,23 @@ class ResidentGemm:
         if self.k not in (32, 64, 128) or len(weights[0]) != 32:
             raise ValueError("resident proof weights must be 32/64/128 by 32")
         self.layout = proof_layout()
-        if type(_tag) is not int or _tag not in (0, 1):
+        if type(_tag) is not int or _tag not in (0, 1, 2):
             raise ValueError("unknown resident proof image tag")
         self.tag = _tag
+        if type(_clip) is not bool or (_tag == 2) != (_bias is not None) or _clip and _tag != 2:
+            raise ValueError("bias/clip require the convolution proof image")
+        self.bias_data = b"" if _bias is None else _fp32(_bias)
+        if _tag == 2 and len(self.bias_data) != 128:
+            raise ValueError("convolution proof requires 32 padded FP32 biases")
+        self.clip = _clip
         self.job = job
         self.raw_weights = struct.pack(f"<{self.k * 32}e", *(v for row in weights for v in row))
         self.identity = hashlib.sha256(
-            job.code + struct.pack("<I", self.k) + self.raw_weights
+            job.code
+            + struct.pack("<I", self.k)
+            + self.raw_weights
+            + self.bias_data
+            + (struct.pack("<I", int(self.clip)) if self.tag == 2 else b"")
         ).digest()
         self.nonce = secrets.token_bytes(16)
         if not any(self.nonce):
@@ -176,19 +196,31 @@ class ResidentGemm:
         words += [WEIGHTS, self.k * 64, INPUT, self.k * 64, OUTPUT, 4096]
         words += [0] * 8
         words[24] = self.tag
+        words[25] = int(self.clip)
         return words
 
     def _check_owner(self, transport):
         if bytes(transport.memory[CONTROL : CONTROL + 56]) != RECORD + self.nonce + self.identity:
             raise RecoveryRequired("resident arena ownership changed")
 
-    def _command(self, op, *, upload=None, expected=None, descriptor=None, reject=False):
+    def _command(
+        self, op, *, upload=None, expected=None, descriptor=None, reject=False, check=None
+    ):
         with self._lock:
             return self._execute_command(
-                op, upload=upload, expected=expected, descriptor=descriptor, reject=reject
+                op,
+                upload=upload,
+                expected=expected,
+                descriptor=descriptor,
+                reject=reject,
+                check=check,
             )
 
-    def _execute_command(self, op, *, upload=None, expected=None, descriptor=None, reject=False):
+    def _execute_command(
+        self, op, *, upload=None, expected=None, descriptor=None, reject=False, check=None
+    ):
+        if check is not None and not callable(check):
+            raise ValueError("resident completion check must be callable")
         if (
             op not in range(5)
             or upload is not None
@@ -222,6 +254,12 @@ class ResidentGemm:
                 t.memory[STATE : STATE + 128] = bytes(128)
                 t.memory[ARENA_START : ARENA_START + 4096] = self.job.code.ljust(4096, b"\0")
             self._check_owner(t)
+            if (
+                self.bias_data
+                and self.weight_digest is not None
+                and bytes(t.memory[CONTROL + 256 : CONTROL + 384]) != self.bias_data
+            ):
+                raise RecoveryRequired("resident bias changed before submission")
             if bytes(t.memory[ARENA_START : ARENA_START + 4096]) != self.job.code.ljust(
                 4096, b"\0"
             ):
@@ -230,6 +268,8 @@ class ResidentGemm:
                 start = time.monotonic_ns()
                 offset = WEIGHTS if op == 1 else INPUT
                 t.memory[offset : offset + len(upload)] = upload
+                if op == 1 and self.bias_data:
+                    t.memory[CONTROL + 256 : CONTROL + 384] = self.bias_data
                 phase["resident_upload_ms"] = (time.monotonic_ns() - start) / 1e6
                 key = "weight" if op == 1 else "input"
                 self.metrics[f"{key}_uploads"] += 1
@@ -290,8 +330,16 @@ class ResidentGemm:
                 ):
                     raise ValueError("resident weights changed after loading")
                 output = bytes(t.memory[OUTPUT : OUTPUT + 4096])
+                if (
+                    op != 0
+                    and self.bias_data
+                    and bytes(t.memory[CONTROL + 256 : CONTROL + 384]) != self.bias_data
+                ):
+                    raise ValueError("resident bias changed after loading")
                 if expected is not None and output != expected:
                     raise ValueError("resident numerical output differs")
+                if check is not None:
+                    check(output)
                 if (
                     op == 3
                     and not reject
@@ -355,7 +403,7 @@ class ResidentGemm:
                         != self.saved[4096 + 128 :]
                     ):
                         raise ValueError("resident teardown body readback differs")
-            except (ValueError, IndexError, struct.error) as exc:
+            except BaseException as exc:
                 raise RecoveryRequired(
                     "resident completion invalid; retain code, arena and power"
                 ) from exc
@@ -395,11 +443,11 @@ class ResidentGemm:
         self.metrics["commands"].append(record)
         return output
 
-    def run(self, inputs, *, _expected=None, _fault=False):
+    def run(self, inputs, *, _expected=None, _fault=False, _check=None):
         with self._lock:
-            return self._run(inputs, _expected=_expected, _fault=_fault)
+            return self._run(inputs, _expected=_expected, _fault=_fault, _check=_check)
 
-    def _run(self, inputs, *, _expected=None, _fault=False):
+    def _run(self, inputs, *, _expected=None, _fault=False, _check=None):
         if self.invalid or self.closed:
             raise RuntimeError("resident session is invalid or closed")
         start = time.monotonic_ns()
@@ -416,7 +464,7 @@ class ResidentGemm:
             ),
         )
         encoded = (time.monotonic_ns() - start) / 1e6
-        output = self._command(3 if _fault else 2, upload=raw, expected=_expected)
+        output = self._command(3 if _fault else 2, upload=raw, expected=_expected, check=_check)
         self.metrics["commands"][-1]["host_input_encoding_ms"] = encoded
         if _fault:
             raise JobFailed(

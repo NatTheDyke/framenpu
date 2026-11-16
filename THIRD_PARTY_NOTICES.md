@@ -14,6 +14,14 @@ The XOR model and small ncnn graph fixture are original synthetic examples.
 LLVM, Python, libatomic and GitHub Actions are external tools/services with
 their own licenses; they are not vendored.
 
+The [convolution reference workflow](docs/CONVOLUTION.md) builds external ncnn
+(BSD-3-Clause) and follows FrameTop's MIT-licensed crop transform. The v20a
+weights are attributed to **Frametop (DeeJanuz)** and licensed CC BY-NC 4.0;
+they are not redistributed or covered by this repository's MIT license.
+The recorded source frames/crops and generated tensor dumps remain private.
+Only source adapters, hashes, ROI metadata and sanitized numerical summaries
+are included. Optional NumPy/Pillow preparation dependencies are external.
+
 ## Primary research references
 
 Referenced projects are not redistributed here.

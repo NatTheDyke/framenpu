@@ -5,9 +5,11 @@ landmark graph described below. Bounded [two-depth-tile execution](MULTITILE.md)
 now passes numerical, timing and restoration checks, as do
 [HVX packing for full aligned tiles](HVX.md) and [HVX output conversion](READBACK.md).
 The [cached-code investigation](HMX_CACHE.md) identifies uncached instruction
-fetch as the earlier resident loop's bottleneck. The next priority is owned
-resident code/model memory and a real convolution checked against ncnn. A
-persistent DDR region is verified, but its allocator and executor remain unimplemented.
+fetch as the earlier resident loop's bottleneck. The offline resident planner,
+bounded resident GEMM and [three real-weight convolutions](CONVOLUTION.md) now
+have separate validation. The next priority is bounded spatial batching and
+remaining graph operators while preserving the frozen numerical rules. General
+resident graph execution remains unimplemented.
 Full landmark inference and its sustained frame rate
 remain unverified. An opt-in [direct dispatcher](DISPATCH.md) now passes CPU/DSP
 and HMX device tests with a worker join and reversible installation. Median
@@ -160,9 +162,17 @@ because a memory span currently contains zeros.
 
 ## 3. Validate real convolutions and numerical behavior
 
+The [bounded convolution proof](CONVOLUTION.md) now pins the v20a weights,
+strict ncnn CPU reference and four real recorded IR crops. Stem `convclip_0`,
+pointwise `conv_10` and K=64 `conv_12` pass all 2,207,744 values under frozen
+arithmetic and full-FP32-reference limits, including held-out crops. The final
+runs pass 3,558 restoration audits without a service restart. This validates
+isolated layers fed by reference intermediates; full-graph error propagation
+and landmark/confidence tolerances remain to be established.
+
 Pin the ncnn reference build, param/bin hashes and a deterministic crop corpus.
-The current [ncnn tool](../src/framenpu/ncnn.py) only inventories operator
-names. Extend preflight to check graph connectivity, inferred shapes,
+The [inventory command](../src/framenpu/ncnn.py) remains separate from the
+new [strict preflight](../src/framenpu/convolution.py), which checks graph connectivity, inferred shapes,
 attributes, binary lengths and supported semantics before device writes.
 Decode tagged FP16/FP32 weights and FP32 biases, then transpose/prepack for
 the chosen kernel layout. ncnn's
@@ -266,21 +276,25 @@ code replacement/teardown, with 372 restoration audits. Ordinary SDK numerical
 regressions pass another 78 audits, with no service restart. Its fixed layout
 does not establish arbitrary graph support or model accuracy.
 
-The measured resident commands still take 12.4–12.6 ms median: per-request power
+The measured resident GEMM commands take 12.4–12.6 ms median: per-request power
 and conservative whole-window cache cleanup dominate. Amortize cached publication/cleanup
 (roughly 1.5 ms per job) and fresh-session overhead (about 33 ms even for the
 cached diagnostic), while preserving bounded ownership and cache publication.
 The [public SDK unwind fix](FAULT_UNWIND.md) is now rebuilt and qualified with
 nested guarded traps and numerical regressions. Distinct operand staging is now
-qualified in the bounded resident proof. Validate a real convolution against
-ncnn before completing the graph.
+qualified in the bounded resident proof. The subsequent real-weight convolution
+proof also passes the stem/pointwise/deeper-reduction milestone against pinned
+ncnn references and frozen limits.
 
 The benchmark-free dispatcher, two-depth-tile GEMM jobs, full-tile HVX packing
 and HVX output unpacking/conversion now have numerical and restoration validation.
 FP32 accumulation, initialization and bias/ReLU remain scalar. Enforce the
-allocation/ownership map before keeping weights across separate jobs. Offline
-companion work is a pinned ncnn reference corpus and shape/liveness preflight.
-The next model milestone is one real convolution through that path.
+allocation/ownership map before keeping weights across separate jobs. The offline
+reference corpus and shape/binary preflight now exist. The current convolution
+body still takes about 6.3–6.6 seconds for a 112×112 layer with 392 requests.
+Reduce bounded spatial-request overhead and scalar bias/clip work while keeping
+the frozen rules, then add the remaining graph operators and evaluate propagated
+landmark/presence/handedness/world-output error on a larger corpus.
 
 Qualcomm's
 [XNNPACK/HVX work](https://www.qualcomm.com/developer/blog/2026/03/bringing-xnnpack-hexagon-npu)

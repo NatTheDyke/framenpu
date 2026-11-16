@@ -6,7 +6,8 @@ schedule, validates storage dependencies, and emits a bounded allocation map.
 It opens no device; its generic schedule output sets `execution_supported=false`.
 Step 2 now implements a separate [bounded resident GEMM proof](RESIDENT_GEMM.md)
 with fixed descriptors, weights loaded once, changing inputs and qualified
-cache/fault teardown. General graph loading/submission remains future work.
+cache/fault teardown. Step 3 adds [three real-weight convolution layers](CONVOLUTION.md)
+with frozen ncnn numerical comparisons. General graph loading/submission remains future work.
 
 The design targets the exact firmware hash in [profile.py](../src/framenpu/profile.py).
 Its evidence is the [memory map](MEMMAP.md), [direct dispatcher](DISPATCH.md),
@@ -232,6 +233,7 @@ The [bounded GEMM proof](RESIDENT_GEMM.md) now qualifies distinct weight/input
 depth tiles, session reuse, stale identity/bounds rejection, cached dirty-fault
 cleanup, code replacement and full-span teardown. Its native descriptor encoding
 implements the fixed subset of this design; arbitrary planner output is still
-an offline report. Next validate a real convolution against pinned ncnn data
-and document numerical tolerances and packing buffers before extending the graph.
+an offline report. Three real convolutions now pass [pinned ncnn comparisons](CONVOLUTION.md)
+with frozen arithmetic/total-error rules. Next reduce spatial-request overhead
+and extend the graph while checking propagated numerical error.
 Sustained gaze quality still needs its separate tracking qualification.
