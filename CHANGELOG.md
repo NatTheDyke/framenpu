@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Ran the unchanged teacher in FP16 on the DSP from the 56x56 stage to the
+  heads ([TEACHER_TAIL_FP16.md](docs/TEACHER_TAIL_FP16.md)): 42 jobs per crop
+  (HMX 1x1 with fused bias, clip and residual; HVX QFloat16 depthwise, stride
+  1 and 2) on the four corpus crops. Every check passed. Each layer stayed
+  within its FP16 bound (worst ratio 0.49). The heads stayed within the frozen
+  ceilings: landmarks within 0.385 px, presence within 2.8e-3. Intermediate
+  tensors exceed the FP32-calibrated per-layer tolerances. Compute is 10.1 ms
+  per crop; activation copies and the 42 job wrappers dominate the rest.
 - Re-forecast the unchanged public teacher on HMX + HVX
   ([TEACHER_HMX_HVX.md](docs/TEACHER_HMX_HVX.md)). Measured single-thread HVX
   issue rates (1.84 GHz core; about 2 cycles per load, `valign` or QFloat16
