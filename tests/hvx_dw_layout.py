@@ -43,7 +43,9 @@ class DwLayer:
     @property
     def nbin(self):
         amax = self.pad + 2 * self.r * self.w + 2 * self.r
-        return max((amax >> 5) + self.nj + 1, math.ceil((self.pad + (self.h + 2 * self.r) * self.w) / 32))
+        return max(
+            (amax >> 5) + self.nj + 1, math.ceil((self.pad + (self.h + 2 * self.r) * self.w) / 32)
+        )
 
     @property
     def macs(self):
@@ -51,7 +53,13 @@ class DwLayer:
 
     def vtcm_vectors(self):
         cp = self.c // 2
-        return cp * self.nbin + cp * self.nj + (cp * self.k * self.k + 31) // 32 + (cp + 31) // 32 + self.nj
+        return (
+            cp * self.nbin
+            + cp * self.nj
+            + (cp * self.k * self.k + 31) // 32
+            + (cp + 31) // 32
+            + self.nj
+        )
 
 
 # Every stride-1 depthwise layer of the public v20a teacher (stride-2
@@ -80,7 +88,9 @@ def fixture(layer, seed=0):
 
     rng = np.random.default_rng(9000 + seed)
     x = (rng.integers(0, 49, size=(layer.c, layer.h, layer.w)) / 8).astype(np.float16)
-    wt = (rng.integers(-16, 17, size=(layer.c, layer.k, layer.k)) / (16 * layer.k)).astype(np.float16)
+    wt = (rng.integers(-16, 17, size=(layer.c, layer.k, layer.k)) / (16 * layer.k)).astype(
+        np.float16
+    )
     b = (rng.integers(-8, 9, size=layer.c) / 16).astype(np.float16)
     return x, wt, b
 
@@ -187,7 +197,10 @@ def oracle(layer, x, wt, b):
     mag = np.zeros_like(acc)
     for dy in range(layer.k):
         for dx in range(layer.k):
-            term = wt[:, dy, dx, None, None].astype(np.float64) * padded[:, dy : dy + layer.h, dx : dx + layer.w]
+            term = (
+                wt[:, dy, dx, None, None].astype(np.float64)
+                * padded[:, dy : dy + layer.h, dx : dx + layer.w]
+            )
             acc += term
             mag += np.abs(term)
     pre = acc + b.astype(np.float64)[:, None, None]
@@ -320,8 +333,17 @@ def v2_descriptor(layer, p):
     ws, nj, nbin = v2_shape(layer)
     words = np.zeros(32, "<u4")
     words[:11] = [
-        MAGIC2, layer.w, layer.h, layer.c, layer.k, nbin,
-        p["in"][0], p["coef"][0], p["bias"][0], p["mask"][0], p["out"][0],
+        MAGIC2,
+        layer.w,
+        layer.h,
+        layer.c,
+        layer.k,
+        nbin,
+        p["in"][0],
+        p["coef"][0],
+        p["bias"][0],
+        p["mask"][0],
+        p["out"][0],
     ]
     return words.tobytes()
 
@@ -370,6 +392,8 @@ def v2_emulate(layer, x, wt, b):
         acc = np.zeros(nj * 32)
         for dy in range(layer.k):
             for dx in range(layer.k):
-                acc += raw[c // 2, q + dy * ws + dx, c % 2].astype(np.float64) * float(wt[c, dy, dx])
+                acc += raw[c // 2, q + dy * ws + dx, c % 2].astype(np.float64) * float(
+                    wt[c, dy, dx]
+                )
         out[c] = np.where(ok, np.clip(acc + float(b[c]), 0, 6), 0)
     return out[:, : layer.h * ws].reshape(layer.c, layer.h, ws)[:, :, layer.r :]

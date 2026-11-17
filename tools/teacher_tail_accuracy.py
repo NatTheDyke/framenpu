@@ -73,21 +73,43 @@ def main():
     graph = load_landmark_graph(args.model / "hand.ncnn.param", args.model / "hand.ncnn.bin")
     specs = specifications(graph)
     manifest = json.loads((args.corpus / "manifest.json").read_text())
-    if manifest["param_sha256"] != graph.param_sha256 or manifest["weights_sha256"] != graph.weights_sha256:
+    if (
+        manifest["param_sha256"] != graph.param_sha256
+        or manifest["weights_sha256"] != graph.weights_sha256
+    ):
         p.error("corpus/model mismatch")
     shape_of = shapes(specs) | {"in0": (3, 224, 224)}
-    report = {"format": "framenpu-teacher-tail-accuracy", "contract": "FP16 storage, HMX FP16 1x1, QFloat16 depthwise (modelled)", "crops": {}}
+    report = {
+        "format": "framenpu-teacher-tail-accuracy",
+        "contract": "FP16 storage, HMX FP16 1x1, QFloat16 depthwise (modelled)",
+        "crops": {},
+    }
     for crop in manifest["crops"]:
         blob = load_crop(args.corpus, crop, shape_of)
         ops, t, h = run(graph, specs, blob)
-        report["crops"][crop["name"]] = {"split": crop["split"]} | summarize(graph, specs, ops, t, h, blob)
+        report["crops"][crop["name"]] = {"split": crop["split"]} | summarize(
+            graph, specs, ops, t, h, blob
+        )
     args.output.write_text(json.dumps(report, indent=1) + "\n")
     for name, c in report["crops"].items():
         worst = max(c["layers"].items(), key=lambda kv: kv[1]["max_abs"])
-        print(json.dumps({"crop": name, "landmarks": c["landmarks"], "world_max_abs": c["world_max_abs"],
-                          "presence": c["presence"], "handedness": c["handedness"],
-                          "host_heads_only": c["host_heads_only"],
-                          "worst_layer": [worst[1]["op"], worst[1]["max_abs"], worst[1]["reference_max_abs"]]}))
+        print(
+            json.dumps(
+                {
+                    "crop": name,
+                    "landmarks": c["landmarks"],
+                    "world_max_abs": c["world_max_abs"],
+                    "presence": c["presence"],
+                    "handedness": c["handedness"],
+                    "host_heads_only": c["host_heads_only"],
+                    "worst_layer": [
+                        worst[1]["op"],
+                        worst[1]["max_abs"],
+                        worst[1]["reference_max_abs"],
+                    ],
+                }
+            )
+        )
 
 
 if __name__ == "__main__":

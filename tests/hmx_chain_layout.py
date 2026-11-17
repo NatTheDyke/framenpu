@@ -61,7 +61,15 @@ class Layer:
 
     def geometry(self, gid=0):
         return Geometry(
-            f"chain{self.w}", gid, self.w, self.h, self.cin, self.cmid, self.cout, self.cmid, "chain"
+            f"chain{self.w}",
+            gid,
+            self.w,
+            self.h,
+            self.cin,
+            self.cmid,
+            self.cout,
+            self.cmid,
+            "chain",
         )
 
     def vtcm_vectors(self):
@@ -158,11 +166,12 @@ def fixture(layers, seed=0):
     weights = []
     for layer in layers:
         w1 = (
-            rng.integers(-8, 9, size=(layer.cmid, layer.cin, 3, 3)) / (16 * math.sqrt(9 * layer.cin))
+            rng.integers(-8, 9, size=(layer.cmid, layer.cin, 3, 3))
+            / (16 * math.sqrt(9 * layer.cin))
         ).astype(np.float16)
-        w2 = (rng.integers(-8, 9, size=(layer.cout, layer.cmid)) / (8 * math.sqrt(layer.cmid))).astype(
-            np.float16
-        )
+        w2 = (
+            rng.integers(-8, 9, size=(layer.cout, layer.cmid)) / (8 * math.sqrt(layer.cmid))
+        ).astype(np.float16)
         b1 = (rng.integers(-8, 9, size=layer.cmid) / 32).astype(np.float16)
         b2 = (rng.integers(-8, 9, size=layer.cout) / 32).astype(np.float16)
         weights.append((w1, w2, b1, b2))

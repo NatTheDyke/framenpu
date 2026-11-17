@@ -29,9 +29,9 @@ ROOT = Path(__file__).resolve().parents[1]
 NUMPY = importlib.util.find_spec("numpy") is not None
 
 
-def kernel_accepts(words, l):
+def kernel_accepts(words, index):
     """Python mirror of lc_get in tests/hmx_layer_chain_probe.c."""
-    d = [int(v) for v in words[32 + 32 * l : 48 + 32 * l]]
+    d = [int(v) for v in words[32 + 32 * index : 48 + 32 * index]]
     w, h, cin, nm, no, cout, pad, nbin = d[:8]
     nk1, zero = d[14], d[15]
     nj = (w * h + 31) >> 5
@@ -65,6 +65,7 @@ def kernel_accepts(words, l):
 
 
 class ChainLayoutTests(unittest.TestCase):
+    @unittest.skipUnless(NUMPY, "optional NumPy not installed")
     def test_chains_fit_window_vtcm_and_kernel_checks(self):
         import numpy as np
 
@@ -87,7 +88,9 @@ class ChainLayoutTests(unittest.TestCase):
             p = plan(layers)
             spans = [(o, o + n) for o, n in p["act"]]
             for i, layer in enumerate(layers):
-                spans.append((p["w"][i], p["w"][i] + (layer.nm * layer.nk1 + layer.no * layer.nm) * 2048))
+                spans.append(
+                    (p["w"][i], p["w"][i] + (layer.nm * layer.nk1 + layer.no * layer.nm) * 2048)
+                )
                 spans.append((p["bias"][i], p["bias"][i] + 128))
                 spans.append((p["tbl"][i], p["tbl"][i] + (layer.nk1 + 1) // 2 * 128))
                 spans.append((p["xt"][i], p["xt"][i] + layer.nj * 128))
@@ -135,8 +138,12 @@ class ChainLayoutTests(unittest.TestCase):
             g = layer.geometry()
             ref = oracle(g, band.astype(np.float16), w1, w2, b1, b2)
             a1, a2 = weight_tiles(g, w1, w2)
-            A1 = np.block([[unpack(a1[m * g.nk1 + t].tobytes()) for t in range(g.nk1)] for m in range(g.nm)])
-            A2 = np.block([[unpack(a2[o * g.nm + m].tobytes()) for m in range(g.nm)] for o in range(g.no)])
+            A1 = np.block(
+                [[unpack(a1[m * g.nk1 + t].tobytes()) for t in range(g.nk1)] for m in range(g.nm)]
+            )
+            A2 = np.block(
+                [[unpack(a2[o * g.nm + m].tobytes()) for m in range(g.nm)] for o in range(g.no)]
+            )
             b1p = np.zeros(g.nm * 32)
             b1p[: g.cmid] = h(b1.astype(np.float64))
             b2p = np.zeros(g.no * 32)

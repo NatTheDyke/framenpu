@@ -90,7 +90,10 @@ class Runner:
         import numpy as np
 
         for b in RL.INPUTS:
-            self.put(plan.where[b], T.grid_of(self.sh[b]).to_bytes(np.asarray(blob(b)).astype(np.float16)))
+            self.put(
+                plan.where[b],
+                T.grid_of(self.sh[b]).to_bytes(np.asarray(blob(b)).astype(np.float16)),
+            )
 
     # -- one job
     def submit(self, plan, job, *, fault=False, reject=False):
@@ -99,7 +102,11 @@ class Runner:
         kind = job.kind
         image, _ = self.jobs["rs" if kind == "rs" else "dw"]
         if kind == "rs":
-            data, opcode, params = RL.payload(plan), RL.RS_OPCODE, (1, job.first, job.end, 0, 0, int(fault))
+            data, opcode, params = (
+                RL.payload(plan),
+                RL.RS_OPCODE,
+                (1, job.first, job.end, 0, 0, int(fault)),
+            )
         else:
             data, opcode, params = job.desc, T.DW_OPCODE, (1, 0, 0, 0, 0, int(fault))
         seen = []
@@ -110,8 +117,15 @@ class Runner:
 
         t0 = time.perf_counter()
         try:
-            res = self.dev._submit(image, data, opcode=opcode, params=params, output_size=T.META_BYTES,
-                                   use_direct=True, _completion_validator=validate)
+            res = self.dev._submit(
+                image,
+                data,
+                opcode=opcode,
+                params=params,
+                output_size=T.META_BYTES,
+                use_direct=True,
+                _completion_validator=validate,
+            )
         except JobFailed:
             if not seen or not (fault or reject) or seen[0].workers[0][2] != (2 if fault else 1):
                 raise
@@ -126,18 +140,42 @@ class Runner:
         if kind == "rs":
             n = job.end - job.first
             ticks = list(m[96 : 96 + n])
-            if (m[0] != RL.RS_MAGIC or m[2] != n or any(m[3:64]) or any(m[96 + n :])
-                    or any(b < a for a, b in zip(ticks, ticks[1:])) or not 0 < ticks[-1] <= ref):
-                raise ValueError(f"{job.ops}: resident metadata/budget differs: {[hex(w) for w in m[:8]]}")
+            if (
+                m[0] != RL.RS_MAGIC
+                or m[2] != n
+                or any(m[3:64])
+                or any(m[96 + n :])
+                or any(b < a for a, b in zip(ticks, ticks[1:]))
+                or not 0 < ticks[-1] <= ref
+            ):
+                raise ValueError(
+                    f"{job.ops}: resident metadata/budget differs: {[hex(w) for w in m[:8]]}"
+                )
             per = [b - a for a, b in zip([0] + ticks, ticks)]
-            return {"kind": kind, "wall_ms": wall * 1e3, "wrapper_ms": ref / 19200, "body_ms": ticks[-1] / 19200,
-                    "op_us": [p / TICKS_PER_US for p in per]}
+            return {
+                "kind": kind,
+                "wall_ms": wall * 1e3,
+                "wrapper_ms": ref / 19200,
+                "body_ms": ticks[-1] / 19200,
+                "op_us": [p / TICKS_PER_US for p in per],
+            }
         gin = T.grid_of(self.sh[job.op.src])
-        if m[0] != T.DW_MAGIC or m[2] != gin.nj4 or any(m[7:32]) or not 0 < m[4] + m[5] + m[6] <= ref:
-            raise ValueError(f"{job.ops}: stride-2 metadata/budget differs: {[hex(w) for w in m[:8]]}")
-        return {"kind": kind, "wall_ms": wall * 1e3, "wrapper_ms": ref / 19200,
-                "body_ms": (m[4] + m[5] + m[6]) / 19200,
-                "op_us": [(m[4] + m[5] + m[6]) / TICKS_PER_US]}
+        if (
+            m[0] != T.DW_MAGIC
+            or m[2] != gin.nj4
+            or any(m[7:32])
+            or not 0 < m[4] + m[5] + m[6] <= ref
+        ):
+            raise ValueError(
+                f"{job.ops}: stride-2 metadata/budget differs: {[hex(w) for w in m[:8]]}"
+            )
+        return {
+            "kind": kind,
+            "wall_ms": wall * 1e3,
+            "wrapper_ms": ref / 19200,
+            "body_ms": (m[4] + m[5] + m[6]) / 19200,
+            "op_us": [(m[4] + m[5] + m[6]) / TICKS_PER_US],
+        }
 
     # -- phase A
     def qualify(self, blob):
@@ -212,6 +250,7 @@ def run(runner, corpus, manifest, rounds):
             if hashlib.sha256(raw).hexdigest() != crop["files"][name]["sha256"]:
                 raise ValueError(f"corpus blob hash differs: {crop['name']}/{name}")
             return np.frombuffer(raw, "<f4").reshape(shape_of[name]).astype(np.float64)
+
         return blob
 
     # phase A
@@ -224,12 +263,24 @@ def run(runner, corpus, manifest, rounds):
             "qualify": {
                 "max_bound_ratio": max(ratios.values()),
                 "bound_ratio_per_layer": ratios,
-                "drift_per_tensor": {o.dst: T.compare(t[o.dst], blob(o.dst)) | {"op": o.name}
-                                     for o in runner.plans["qualify"].ops},
-            } | heads_row(graph, specs, t[RL.FINAL], blob),
+                "drift_per_tensor": {
+                    o.dst: T.compare(t[o.dst], blob(o.dst)) | {"op": o.name}
+                    for o in runner.plans["qualify"].ops
+                },
+            }
+            | heads_row(graph, specs, t[RL.FINAL], blob),
         }
-        print(json.dumps({"phase": "qualify", "crop": crop["name"], "max_bound_ratio": max(ratios.values()),
-                          "landmarks": crops[crop["name"]]["qualify"]["landmarks"]}), flush=True)
+        print(
+            json.dumps(
+                {
+                    "phase": "qualify",
+                    "crop": crop["name"],
+                    "max_bound_ratio": max(ratios.values()),
+                    "landmarks": crops[crop["name"]]["qualify"]["landmarks"],
+                }
+            ),
+            flush=True,
+        )
 
     # phase B
     plan = runner.plans["resident"]
@@ -246,15 +297,29 @@ def run(runner, corpus, manifest, rounds):
                 if b in ref_raw[name] and data != ref_raw[name][b]:
                     raise ValueError(f"{name}: stored tensor {b} differs from qualification")
             frames.append({"jobs": rows, "host_wall_ms": wall})
-            print(json.dumps({"phase": "resident", "crop": name, "round": r,
-                              "wrapper_ms": sum(j["wrapper_ms"] for j in rows),
-                              "body_ms": sum(j["body_ms"] for j in rows), "host_wall_ms": wall}), flush=True)
+            print(
+                json.dumps(
+                    {
+                        "phase": "resident",
+                        "crop": name,
+                        "round": r,
+                        "wrapper_ms": sum(j["wrapper_ms"] for j in rows),
+                        "body_ms": sum(j["body_ms"] for j in rows),
+                        "host_wall_ms": wall,
+                    }
+                ),
+                flush=True,
+            )
         entry = {"frames": frames, "bit_identical_tensors": sorted(seen)}
         if i == 0:
             rs = next(j for j in plan.jobs if j.kind == "rs")
             runner.submit(plan, rs, fault=True)
             table = bytearray(plan.table)
-            k = next(n for n in range(rs.first, rs.end) if struct.unpack_from("<I", table, 128 * n)[0] == 1)
+            k = next(
+                n
+                for n in range(rs.first, rs.end)
+                if struct.unpack_from("<I", table, 128 * n)[0] == 1
+            )
             struct.pack_into("<I", table, 128 * k + 36, T.WIN_HI)  # dpar outside the window
             runner.put(plan.table_at, bytes(table))
             runner.submit(plan, rs, reject=True)
@@ -279,19 +344,28 @@ def summarize(crops, plan):
         "jobs_per_frame": len(kinds),
         "max_layer_bound_ratio": max(c["qualify"]["max_bound_ratio"] for c in crops.values()),
         "max_landmark_px": max(c["qualify"]["landmarks"]["max_px"] for c in crops.values()),
-        "max_presence_delta": max(abs(c["qualify"]["presence"][0] - c["qualify"]["presence"][1]) for c in crops.values()),
+        "max_presence_delta": max(
+            abs(c["qualify"]["presence"][0] - c["qualify"]["presence"][1]) for c in crops.values()
+        ),
         "resident_bit_identical_to_qualification": True,
         "median_ms_per_frame": {
             "wrapper_total": med([sum(j["wrapper_ms"] for j in f["jobs"]) for f in frames]),
             "body_total": med([sum(j["body_ms"] for j in f["jobs"]) for f in frames]),
-            "body_resident_jobs": med([sum(j["body_ms"] for j in f["jobs"] if j["kind"] == "rs") for f in frames]),
-            "body_stride2_jobs": med([sum(j["body_ms"] for j in f["jobs"] if j["kind"] == "s2") for f in frames]),
+            "body_resident_jobs": med(
+                [sum(j["body_ms"] for j in f["jobs"] if j["kind"] == "rs") for f in frames]
+            ),
+            "body_stride2_jobs": med(
+                [sum(j["body_ms"] for j in f["jobs"] if j["kind"] == "s2") for f in frames]
+            ),
             "host_wall": med([f["host_wall_ms"] for f in frames]),
         },
         "median_ms_per_job": [
-            {"kind": k, "ops": plan.jobs[n].ops[:1] + plan.jobs[n].ops[-1:],
-             "wrapper": med([f["jobs"][n]["wrapper_ms"] for f in frames]),
-             "body": med([f["jobs"][n]["body_ms"] for f in frames])}
+            {
+                "kind": k,
+                "ops": plan.jobs[n].ops[:1] + plan.jobs[n].ops[-1:],
+                "wrapper": med([f["jobs"][n]["wrapper_ms"] for f in frames]),
+                "body": med([f["jobs"][n]["body_ms"] for f in frames]),
+            }
             for n, k in enumerate(kinds)
         ],
     }
@@ -314,14 +388,22 @@ def main():
     graph = load_landmark_graph(args.model / "hand.ncnn.param", args.model / "hand.ncnn.bin")
     specs = specifications(graph)
     manifest = json.loads((args.corpus / "manifest.json").read_text())
-    if manifest["param_sha256"] != graph.param_sha256 or manifest["weights_sha256"] != graph.weights_sha256:
+    if (
+        manifest["param_sha256"] != graph.param_sha256
+        or manifest["weights_sha256"] != graph.weights_sha256
+    ):
         p.error("corpus/model mismatch")
     report = {
         "format": "framenpu-teacher-resident-run",
         "builds": {k: v[1] for k, v in jobs.items()},
-        "source_sha256": {n: digest(ROOT / n) for n in ("tests/hardware_teacher_resident.py",
-                                                       "tests/teacher_resident_layout.py",
-                                                       "tests/teacher_tail_layout.py")},
+        "source_sha256": {
+            n: digest(ROOT / n)
+            for n in (
+                "tests/hardware_teacher_resident.py",
+                "tests/teacher_resident_layout.py",
+                "tests/teacher_tail_layout.py",
+            )
+        },
         "manifest_sha256": digest(args.corpus / "manifest.json"),
         "scope": "conv_12 .. convdwclip_15 on the DSP from ncnn blobs 8/10; FP32 pooling and heads on the host",
         "window": [f"{T.WIN_LO:#x}", f"{T.WIN_HI:#x}"],
@@ -346,9 +428,18 @@ def main():
                     with audited_device(power, report["audits"])(dispatch="direct") as dev:
                         runner = Runner(dev, dev._transport.memory, jobs, graph, specs)
                         report["plans"] = {
-                            m: {"jobs": [{"kind": j.kind, "ops": len(j.ops), "descriptors": j.end - j.first,
-                                          "vtcm_peak_vectors": j.vtcm_peak} for j in pl.jobs],
-                                "window_end": f"{pl.end:#x}"}
+                            m: {
+                                "jobs": [
+                                    {
+                                        "kind": j.kind,
+                                        "ops": len(j.ops),
+                                        "descriptors": j.end - j.first,
+                                        "vtcm_peak_vectors": j.vtcm_peak,
+                                    }
+                                    for j in pl.jobs
+                                ],
+                                "window_end": f"{pl.end:#x}",
+                            }
                             for m, pl in runner.plans.items()
                         }
                         report["crops"] = run(runner, args.corpus, manifest, args.rounds)
@@ -358,7 +449,9 @@ def main():
                         mem = observer._transport.memory
                         mem[T.WIN_LO : T.WIN_HI] = saved
                         after = bytes(mem[ARENA_START:ARENA_END])
-                    report["arena_after_sha256"] = hashlib.sha256(after).hexdigest()  # also on failure
+                    report["arena_after_sha256"] = hashlib.sha256(
+                        after
+                    ).hexdigest()  # also on failure
                 if after != before:
                     raise ValueError("resident arena differs after window restoration")
                 report["final_health"] = settled_health(power, baseline)
@@ -374,8 +467,17 @@ def main():
     finally:
         lease.close()
         args.output.write_text(json.dumps(report, indent=1) + "\n")
-    print(json.dumps({"all_checks_passed": report.get("all_checks_passed", False), "error": report.get("error"),
-                      "summary": report.get("summary")}, indent=1), flush=True)
+    print(
+        json.dumps(
+            {
+                "all_checks_passed": report.get("all_checks_passed", False),
+                "error": report.get("error"),
+                "summary": report.get("summary"),
+            },
+            indent=1,
+        ),
+        flush=True,
+    )
     return int(failed)
 
 

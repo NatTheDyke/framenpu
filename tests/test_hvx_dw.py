@@ -79,9 +79,13 @@ class DepthwiseLayoutTests(unittest.TestCase):
         for tool in ("build_hvx_dw_probe.py", "build_hvx_dw2_probe.py", "build_hvx_rate_probe.py"):
             with self.subTest(tool), tempfile.TemporaryDirectory() as tmp:
                 subprocess.run(
-                    [sys.executable, str(ROOT / "tools" / tool), "--output", tmp], check=True, capture_output=True
+                    [sys.executable, str(ROOT / "tools" / tool), "--output", tmp],
+                    check=True,
+                    capture_output=True,
                 )
-                self.assertLessEqual(json.loads((Path(tmp) / "build.json").read_text())["bytes"], 4096)
+                self.assertLessEqual(
+                    json.loads((Path(tmp) / "build.json").read_text())["bytes"], 4096
+                )
 
 
 if __name__ == "__main__":

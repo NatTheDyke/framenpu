@@ -90,7 +90,11 @@ def main():
     p.add_argument("--output", required=True, type=Path)
     args = p.parse_args()
     r = build(args.output)
-    print(json.dumps({k: {"bytes": v["bytes"], "sha256": v["sha256"]} for k, v in r.items()}, indent=2))
+    print(
+        json.dumps(
+            {k: {"bytes": v["bytes"], "sha256": v["sha256"]} for k, v in r.items()}, indent=2
+        )
+    )
 
 
 if __name__ == "__main__":

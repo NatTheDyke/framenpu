@@ -25,7 +25,14 @@ from hardware_landmark import digest, service
 from hmx_multi_run import failure_snapshot
 
 MAGIC, OPCODE, META = 0x31544852, 107, 1024
-MODES = {0: "vadd_w", 1: "vtcm_load", 2: "valign", 3: "qf16_mpy_add_pair", 4: "vtcm_store", 5: "empty"}
+MODES = {
+    0: "vadd_w",
+    1: "vtcm_load",
+    2: "valign",
+    3: "qf16_mpy_add_pair",
+    4: "vtcm_store",
+    5: "empty",
+}
 OPS = {0: 8, 1: 8, 2: 8, 3: 4, 4: 8, 5: 1}
 
 
@@ -45,7 +52,11 @@ def main():
     for name, sha in build["sources"].items():
         if digest(ROOT / name) != sha:
             p.error(f"source pin differs: {name}")
-    report = {"format": "framenpu-hvx-rate-probe", "build": build, "audits": {"restored_jobs": 0, "restored_hmx_jobs": 0}}
+    report = {
+        "format": "framenpu-hvx-rate-probe",
+        "build": build,
+        "audits": {"restored_jobs": 0, "restored_hmx_jobs": 0},
+    }
     report["service_before"] = service()
     failed = False
     try:
@@ -73,7 +84,11 @@ def main():
                                 _completion_validator=validate,
                             )
                         except JobFailed:
-                            if not seen or not (fault or reject) or seen[0].workers[0][2] != (2 if fault else 1):
+                            if (
+                                not seen
+                                or not (fault or reject)
+                                or seen[0].workers[0][2] != (2 if fault else 1)
+                            ):
                                 raise
                             return None
                         if fault or reject:
@@ -100,12 +115,19 @@ def main():
                             "core_mhz": sorted(mhz)[len(mhz) // 2],
                             "samples": slopes,
                         }
-                        print(json.dumps({MODES[mode]: rows[MODES[mode]]["cycles_per_op"]}), flush=True)
+                        print(
+                            json.dumps({MODES[mode]: rows[MODES[mode]]["cycles_per_op"]}),
+                            flush=True,
+                        )
                     run(0, 256, fault=True)
                     run(9, 256, reject=True)
                     run(0, 256)
                     report["modes"] = rows
-                    report["controls"] = {"guarded_fault": 1, "mode_rejection": 1, "post_fault_valid": 1}
+                    report["controls"] = {
+                        "guarded_fault": 1,
+                        "mode_rejection": 1,
+                        "post_fault_valid": 1,
+                    }
                 report["final_health"] = settled_health(power, baseline)
                 report["service_after"] = service()
                 if report["service_before"] != report["service_after"]:
@@ -117,7 +139,14 @@ def main():
                 report["after_failure"] = failure_snapshot(power)
     finally:
         args.output.write_text(json.dumps(report, indent=1) + "\n")
-    print(json.dumps({"all_checks_passed": report.get("all_checks_passed", False), "error": report.get("error")}))
+    print(
+        json.dumps(
+            {
+                "all_checks_passed": report.get("all_checks_passed", False),
+                "error": report.get("error"),
+            }
+        )
+    )
     return int(failed)
 
 

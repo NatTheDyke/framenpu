@@ -72,12 +72,18 @@ def main():
     graph = load_landmark_graph(args.model / "hand.ncnn.param", args.model / "hand.ncnn.bin")
     specs = specifications(graph)
     manifest = json.loads((args.corpus / "manifest.json").read_text())
-    if manifest["param_sha256"] != graph.param_sha256 or manifest["weights_sha256"] != graph.weights_sha256:
+    if (
+        manifest["param_sha256"] != graph.param_sha256
+        or manifest["weights_sha256"] != graph.weights_sha256
+    ):
         p.error("corpus/model mismatch")
     report = {
         "format": "framenpu-teacher-tail-run",
         "builds": {k: v[1] for k, v in jobs.items()},
-        "source_sha256": {n: digest(ROOT / n) for n in ("tests/hardware_teacher_tail.py", "tests/teacher_tail_layout.py")},
+        "source_sha256": {
+            n: digest(ROOT / n)
+            for n in ("tests/hardware_teacher_tail.py", "tests/teacher_tail_layout.py")
+        },
         "manifest_sha256": digest(args.corpus / "manifest.json"),
         "scope": "conv_12 .. convdwclip_15 on the DSP from ncnn blobs 8/10; FP32 pooling and heads on the host",
         "window": [f"{T.WIN_LO:#x}", f"{T.WIN_HI:#x}"],
@@ -103,7 +109,9 @@ def main():
                     with audited_device(power, report["audits"])(dispatch="direct") as dev:
                         runner = Runner(dev, dev._transport.memory, jobs, graph, specs)
                         for i, crop in enumerate(manifest["crops"]):
-                            report["crops"][crop["name"]] = runner.crop(args.corpus, crop, args.rounds, controls=i == 0)
+                            report["crops"][crop["name"]] = runner.crop(
+                                args.corpus, crop, args.rounds, controls=i == 0
+                            )
                             args.output.write_text(json.dumps(report, indent=1) + "\n")
                 finally:
                     with Device() as observer:
@@ -127,8 +135,17 @@ def main():
     finally:
         lease.close()
         args.output.write_text(json.dumps(report, indent=1) + "\n")
-    print(json.dumps({"all_checks_passed": report.get("all_checks_passed", False), "error": report.get("error"),
-                      "summary": report.get("summary")}, indent=1), flush=True)
+    print(
+        json.dumps(
+            {
+                "all_checks_passed": report.get("all_checks_passed", False),
+                "error": report.get("error"),
+                "summary": report.get("summary"),
+            },
+            indent=1,
+        ),
+        flush=True,
+    )
     return int(failed)
 
 
@@ -147,17 +164,40 @@ class Runner:
         if op.kind == "pw":
             tiles, bias, nk, no = T.pw_weights(self.graph, s)
             staged = tiles + bias + gin.mask_bytes()[: gin.nj * 128]
-            desc = T.pw_descriptor(s, gin, nk, no, self.where[op.src][0], self.stage, [len(tiles), len(bias)],
-                                   self.where[op.res][0] if op.res else 0, self.where[op.dst][0])
+            desc = T.pw_descriptor(
+                s,
+                gin,
+                nk,
+                no,
+                self.where[op.src][0],
+                self.stage,
+                [len(tiles), len(bias)],
+                self.where[op.res][0] if op.res else 0,
+                self.where[op.dst][0],
+            )
         else:
             coef, bias = T.dw_weights(self.graph, s)
             staged = coef + bias + gin.mask_bytes()
-            desc = T.dw_descriptor(s, gin, gout, self.where[op.src][0], self.stage, [len(coef), len(bias)],
-                                   self.where[op.dst][0])
+            desc = T.dw_descriptor(
+                s,
+                gin,
+                gout,
+                self.where[op.src][0],
+                self.stage,
+                [len(coef), len(bias)],
+                self.where[op.dst][0],
+            )
         if self.stage + len(staged) > T.WIN_HI:
             raise ValueError(f"{op.name}: staging exceeds the window")
-        return {"op": op, "spec": s, "staged": staged, "desc": desc, "gin": gin, "gout": gout,
-                "nblocks": gin.nj if op.kind == "pw" else gin.nj4}
+        return {
+            "op": op,
+            "spec": s,
+            "staged": staged,
+            "desc": desc,
+            "gin": gin,
+            "gout": gout,
+            "nblocks": gin.nj if op.kind == "pw" else gin.nj4,
+        }
 
     def read(self, blob):
         off, _ = self.where[blob]
@@ -186,9 +226,15 @@ class Runner:
 
         t0 = time.perf_counter()
         try:
-            res = self.dev._submit(job, desc or prep["desc"], opcode=T.PW_OPCODE if op.kind == "pw" else T.DW_OPCODE,
-                                   params=(1, 0, 0, 0, 0, int(fault)), output_size=T.META_BYTES, use_direct=True,
-                                   _completion_validator=validate)
+            res = self.dev._submit(
+                job,
+                desc or prep["desc"],
+                opcode=T.PW_OPCODE if op.kind == "pw" else T.DW_OPCODE,
+                params=(1, 0, 0, 0, 0, int(fault)),
+                output_size=T.META_BYTES,
+                use_direct=True,
+                _completion_validator=validate,
+            )
         except JobFailed:
             if not seen or not (fault or reject) or seen[0].workers[0][2] != (2 if fault else 1):
                 raise
@@ -198,13 +244,26 @@ class Runner:
             raise ValueError("expected fault/rejection missing")
         m = struct.unpack_from("<256I", res.output)
         magic = T.PW_MAGIC if op.kind == "pw" else T.DW_MAGIC
-        if (m[0] != magic or not 0x87A92000 <= m[1] < 0x87A92000 + len(job.code) or m[2] != prep["nblocks"]
-                or any(m[64:96]) or any(m[8:32]) or (op.kind == "dw" and m[7])
-                or not 0 < m[4] + m[5] + m[6] <= res.kernel_reference_ticks):
-            raise ValueError(f"{op.name}: metadata/finite/budget differs: {[hex(w) for w in m[:9]]}")
-        return {"wall_ms": wall * 1000, "wrapper_ms": res.kernel_reference_ticks / 19200,
-                "prologue_us": m[4] / TICKS_PER_US, "compute_us": m[5] / TICKS_PER_US,
-                "epilogue_us": m[6] / TICKS_PER_US, "cycles": m[7]}
+        if (
+            m[0] != magic
+            or not 0x87A92000 <= m[1] < 0x87A92000 + len(job.code)
+            or m[2] != prep["nblocks"]
+            or any(m[64:96])
+            or any(m[8:32])
+            or (op.kind == "dw" and m[7])
+            or not 0 < m[4] + m[5] + m[6] <= res.kernel_reference_ticks
+        ):
+            raise ValueError(
+                f"{op.name}: metadata/finite/budget differs: {[hex(w) for w in m[:9]]}"
+            )
+        return {
+            "wall_ms": wall * 1000,
+            "wrapper_ms": res.kernel_reference_ticks / 19200,
+            "prologue_us": m[4] / TICKS_PER_US,
+            "compute_us": m[5] / TICKS_PER_US,
+            "epilogue_us": m[6] / TICKS_PER_US,
+            "cycles": m[7],
+        }
 
     def check_layer(self, prep, t):
         """Device output vs exact FP64/FP32 of its actual device input."""
@@ -265,13 +324,25 @@ class Runner:
             }
             if round_ == 0:
                 row["bound_ratio_per_layer"] = ratios
-                row["drift_per_tensor"] = {p["op"].dst: T.compare(t[p["op"].dst], blob(p["op"].dst)) | {"op": p["op"].name}
-                                           for p in self.prepared}
+                row["drift_per_tensor"] = {
+                    p["op"].dst: T.compare(t[p["op"].dst], blob(p["op"].dst)) | {"op": p["op"].name}
+                    for p in self.prepared
+                }
             entry["rounds"].append(row)
-            print(json.dumps({"crop": crop["name"], "round": round_, "landmarks": row["landmarks"],
-                              "presence": row["presence"], "max_bound_ratio": row["max_bound_ratio"],
-                              "compute_ms": sum(j["compute_us"] for j in timings) / 1000,
-                              "wrapper_ms": sum(j["wrapper_ms"] for j in timings)}), flush=True)
+            print(
+                json.dumps(
+                    {
+                        "crop": crop["name"],
+                        "round": round_,
+                        "landmarks": row["landmarks"],
+                        "presence": row["presence"],
+                        "max_bound_ratio": row["max_bound_ratio"],
+                        "compute_ms": sum(j["compute_us"] for j in timings) / 1000,
+                        "wrapper_ms": sum(j["wrapper_ms"] for j in timings),
+                    }
+                ),
+                flush=True,
+            )
         if controls:
             pw = next(p for p in self.prepared if p["op"].kind == "pw")
             dw = next(p for p in self.prepared if p["op"].kind == "dw")
@@ -280,7 +351,11 @@ class Runner:
                 bad = bytearray(prep["desc"])
                 struct.pack_into("<I", bad, 4 * word, T.WIN_HI)  # output outside the window
                 self.submit(prep, desc=bytes(bad), reject=True)
-            entry["controls"] = {"guarded_fault_pw": 1, "window_rejection_pw": 1, "window_rejection_dw": 1}
+            entry["controls"] = {
+                "guarded_fault_pw": 1,
+                "window_rejection_pw": 1,
+                "window_rejection_dw": 1,
+            }
             # the next crop's first round re-runs every op cleanly after these controls
         return entry
 
@@ -289,7 +364,12 @@ def summarize(crops):
     import numpy as np
 
     rows = [r for c in crops.values() for r in c["rounds"]]
-    per = lambda key, kind=None: float(np.median([sum(j[key] for j in r["jobs"] if kind in (None, j["kind"])) for r in rows]))  # noqa: E731
+
+    def per(key, kind=None):
+        return float(
+            np.median([sum(j[key] for j in r["jobs"] if kind in (None, j["kind"])) for r in rows])
+        )
+
     return {
         "crops": len(crops),
         "jobs_per_crop": len(rows[0]["jobs"]),
@@ -299,9 +379,12 @@ def summarize(crops):
         "max_handedness_delta": max(abs(r["handedness"][0] - r["handedness"][1]) for r in rows),
         "max_layer_bound_ratio": max(r["max_bound_ratio"] for r in rows),
         "median_ms_per_crop": {
-            "compute_pw": per("compute_us", "pw") / 1000, "compute_dw": per("compute_us", "dw") / 1000,
-            "prologue": per("prologue_us") / 1000, "epilogue": per("epilogue_us") / 1000,
-            "wrapper": per("wrapper_ms"), "host_wall": per("wall_ms"),
+            "compute_pw": per("compute_us", "pw") / 1000,
+            "compute_dw": per("compute_us", "dw") / 1000,
+            "prologue": per("prologue_us") / 1000,
+            "epilogue": per("epilogue_us") / 1000,
+            "wrapper": per("wrapper_ms"),
+            "host_wall": per("wall_ms"),
         },
     }
 

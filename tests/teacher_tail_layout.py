@@ -97,7 +97,9 @@ class Grid:
         flat = unplanar(raw, channels, self.nbin)
         ok = self.interior()
         stray = int(np.count_nonzero(flat[:, ~ok]))
-        out = np.stack([flat[:, self.word(y, 0) : self.word(y, 0) + self.w] for y in range(self.h)], 1)
+        out = np.stack(
+            [flat[:, self.word(y, 0) : self.word(y, 0) + self.w] for y in range(self.h)], 1
+        )
         return out, stray
 
     def tensor_bytes(self, channels):
@@ -171,7 +173,11 @@ def pw_weights(graph, spec):
     nk, no = math.ceil(cin / 32), math.ceil(cout / 32)
     m = np.zeros((no * 32, nk * 32), np.float16)
     m[:cout, :cin] = w
-    tiles = b"".join(pack(m[32 * o : 32 * o + 32, 32 * t : 32 * t + 32]).tobytes() for o in range(no) for t in range(nk))
+    tiles = b"".join(
+        pack(m[32 * o : 32 * o + 32, 32 * t : 32 * t + 32]).tobytes()
+        for o in range(no)
+        for t in range(nk)
+    )
     bias = np.zeros(no * 32, np.float16)
     bias[:cout] = np.asarray(b, np.float32).astype(np.float16)
     slots = np.zeros(((no + 1) // 2 * 2, 32), np.float16)
@@ -238,7 +244,9 @@ def emulate_dw(graph, spec, x):
     acc = np.zeros((c, h, wd), np.float32)
     for dy in range(kh):
         for dx in range(kw):
-            acc = acc + (wt[:, dy, dx, None, None] * pad[:, dy : dy + h, dx : dx + wd]).astype(np.float32)
+            acc = acc + (wt[:, dy, dx, None, None] * pad[:, dy : dy + h, dx : dx + wd]).astype(
+                np.float32
+            )
     v = np.clip(f16(f16(acc) + f16(np.asarray(b, np.float32))[:, None, None]), 0, 6)
     if spec["stride"] == (2, 2):
         v = v[:, 1::2, 1::2]
@@ -277,7 +285,11 @@ def bound_dw(graph, spec, x):
         for dx in range(kw):
             mag += wt[:, dy, dx, None, None] * pad[:, dy : dy + h, dx : dx + wd]
     e = 2.0**-10
-    allow = (kh * kw + 4) * e * mag + 3 * e * np.abs(np.asarray(b, np.float64))[:, None, None] + 2.0**-20
+    allow = (
+        (kh * kw + 4) * e * mag
+        + 3 * e * np.abs(np.asarray(b, np.float64))[:, None, None]
+        + 2.0**-20
+    )
     if spec["stride"] == (2, 2):
         allow = allow[:, 1::2, 1::2]
     return allow
@@ -288,13 +300,20 @@ def heads(graph, specs, last):
     import numpy as np
     from framenpu.landmark import weights_and_bias
 
-    pooled = np.asarray(last, np.float32).reshape(last.shape[0], -1).mean(1, dtype=np.float64).astype(np.float32)
+    pooled = (
+        np.asarray(last, np.float32)
+        .reshape(last.shape[0], -1)
+        .mean(1, dtype=np.float64)
+        .astype(np.float32)
+    )
     out = {}
     for s in specs:
         if s["operator"] != "InnerProduct":
             continue
         w, b = weights_and_bias(graph, s)
-        v = np.asarray(w, np.float32).reshape(s["output_shape"][0], -1).astype(np.float64) @ pooled + np.asarray(b, np.float64)
+        v = np.asarray(w, np.float32).reshape(s["output_shape"][0], -1).astype(
+            np.float64
+        ) @ pooled + np.asarray(b, np.float64)
         if s["activation"] == "sigmoid":
             v = 1 / (1 + np.exp(-v))
         out[s["output"][0]] = v
@@ -321,7 +340,11 @@ def landmark_error(out0, ref0):
     a = np.asarray(out0, np.float64).reshape(21, 3)
     r = np.asarray(ref0, np.float64).reshape(21, 3)
     d = np.hypot(*(a[:, :2] - r[:, :2]).T)
-    return {"max_px": float(d.max()), "mean_px": float(d.mean()), "max_z": float(np.abs(a[:, 2] - r[:, 2]).max())}
+    return {
+        "max_px": float(d.max()),
+        "mean_px": float(d.mean()),
+        "max_z": float(np.abs(a[:, 2] - r[:, 2]).max()),
+    }
 
 
 # ---------------------------------------------------------------- descriptors / plan
@@ -363,8 +386,21 @@ def pw_descriptor(spec, grid, nk, no, where_in, stage, sizes, where_res, where_o
     words = np.zeros(32, "<u4")
     cin, cout = spec["input_shape"][0], spec["output_shape"][0]
     words[:15] = [
-        PW_MAGIC, cin, cout, nk, no, int(spec["activation"] == "clip"), grid.nbin, grid.blk0, grid.nj,
-        where_in, stage, stage + sizes[0], stage + sizes[0] + sizes[1], where_res or 0, where_out,
+        PW_MAGIC,
+        cin,
+        cout,
+        nk,
+        no,
+        int(spec["activation"] == "clip"),
+        grid.nbin,
+        grid.blk0,
+        grid.nj,
+        where_in,
+        stage,
+        stage + sizes[0],
+        stage + sizes[0] + sizes[1],
+        where_res or 0,
+        where_out,
     ]
     return words.tobytes()
 
@@ -376,9 +412,26 @@ def dw_descriptor(spec, gin, gout, where_in, stage, sizes, where_out):
     c = spec["input_shape"][0]
     s2 = spec["stride"] == (2, 2)
     words[:20] = [
-        DW_MAGIC, c, spec["kernel"][0], 2 if s2 else 1, gin.ws, gin.nbin, gin.blk0, gin.nj4, gin.nj,
-        where_in, stage, stage + sizes[0], stage + sizes[0] + sizes[1], where_out,
-        gin.h, gout.w, gout.h, gout.ws, gout.nbin, gout.blk0,
+        DW_MAGIC,
+        c,
+        spec["kernel"][0],
+        2 if s2 else 1,
+        gin.ws,
+        gin.nbin,
+        gin.blk0,
+        gin.nj4,
+        gin.nj,
+        where_in,
+        stage,
+        stage + sizes[0],
+        stage + sizes[0] + sizes[1],
+        where_out,
+        gin.h,
+        gout.w,
+        gout.h,
+        gout.ws,
+        gout.nbin,
+        gout.blk0,
     ]
     return words.tobytes()
 
@@ -399,7 +452,23 @@ def model_pw(desc, mem):
     import numpy as np
 
     d = np.frombuffer(desc, "<u4")[:15].astype(np.int64)
-    _, cin, cout, nk, no, clip, nbin, blk0, nj, off_in, off_w, off_bias, off_mask, off_res, off_out = d
+    (
+        _,
+        cin,
+        cout,
+        nk,
+        no,
+        clip,
+        nbin,
+        blk0,
+        nj,
+        off_in,
+        off_w,
+        off_bias,
+        off_mask,
+        off_res,
+        off_out,
+    ) = d
     cpi, cpo = cin // 2, cout // 2
     src = _halves(mem(off_in, cpi * nbin * 128)).reshape(cpi, nbin, 32, 2)
     res = _halves(mem(off_res, cpo * nbin * 128)).reshape(cpo, nbin, 32, 2) if off_res else None
@@ -408,7 +477,12 @@ def model_pw(desc, mem):
     from hmx_block_layout import unpack
 
     raw_w = mem(off_w, no * nk * 2048)
-    A = np.block([[unpack(raw_w[2048 * (o * nk + t) : 2048 * (o * nk + t + 1)]) for t in range(nk)] for o in range(no)])
+    A = np.block(
+        [
+            [unpack(raw_w[2048 * (o * nk + t) : 2048 * (o * nk + t + 1)]) for t in range(nk)]
+            for o in range(no)
+        ]
+    )
     out = np.zeros((cpo, nbin, 32, 2))
     for j in range(nj):
         B = np.zeros((nk * 32, 32))
@@ -433,23 +507,53 @@ def model_dw(desc, mem):
     import numpy as np
 
     d = np.frombuffer(desc, "<u4")[:20].astype(np.int64)
-    (_, c, k, stride, ws, nbin, blk0, nj4, nj, off_in, off_coef, off_bias, off_mask, off_out,
-     h, w2, h2, ws2, nbin2, blk02) = d
+    (
+        _,
+        c,
+        k,
+        stride,
+        ws,
+        nbin,
+        blk0,
+        nj4,
+        nj,
+        off_in,
+        off_coef,
+        off_bias,
+        off_mask,
+        off_out,
+        h,
+        w2,
+        h2,
+        ws2,
+        nbin2,
+        blk02,
+    ) = d
     cp, r, kk = c // 2, k // 2, k * k
     src = _halves(mem(off_in, cp * nbin * 128)).reshape(cp, nbin * 32, 2)
-    coef = _halves(mem(off_coef, ((cp * kk + 31) // 32) * 128)).reshape(-1, 2)[: cp * kk].reshape(cp, kk, 2)
+    coef = (
+        _halves(mem(off_coef, ((cp * kk + 31) // 32) * 128))
+        .reshape(-1, 2)[: cp * kk]
+        .reshape(cp, kk, 2)
+    )
     bias = _halves(mem(off_bias, ((cp + 31) // 32) * 128)).reshape(-1, 2)[:cp]
-    mask = (np.frombuffer(mem(off_mask, nj4 * 128), "<u4") != 0)
+    mask = np.frombuffer(mem(off_mask, nj4 * 128), "<u4") != 0
     o = 32 * blk0 + np.arange(nj4 * 32)
     acc = np.zeros((cp, nj4 * 32, 2), np.float32)
     t = 0
     for dy in range(k):
         for dx in range(k):
-            acc = acc + (src[:, o + (dy - r) * ws + (dx - r)] * coef[:, t][:, None, :]).astype(np.float32)
+            acc = acc + (src[:, o + (dy - r) * ws + (dx - r)] * coef[:, t][:, None, :]).astype(
+                np.float32
+            )
             t += 1
     v = np.clip(f16(f16(acc) + f16(bias)[:, None, :]), 0, 6) * mask[None, :, None]
     if stride == 1:
-        whole = np.frombuffer(bytes(mem(off_out, cp * nbin * 128)), "<f2").reshape(cp, nbin * 32, 2).copy()
+        whole = (
+            np.frombuffer(bytes(mem(off_out, cp * nbin * 128)), "<f2")
+            .reshape(cp, nbin * 32, 2)
+            .copy()
+        )
         whole[:, 32 * blk0 : 32 * (blk0 + nj)] = v[:, : 32 * nj].astype(np.float16)
         return {int(off_out): whole.tobytes()}
     dec = np.zeros((cp, nbin2 * 32, 2), np.float16)

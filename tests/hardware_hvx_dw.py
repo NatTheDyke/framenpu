@@ -73,7 +73,9 @@ def main():
         "format": "framenpu-hvx-dw-probe",
         "kernel": args.kernel,
         "build": build,
-        "source_sha256": {n: digest(ROOT / n) for n in ("tests/hardware_hvx_dw.py", "tests/hvx_dw_layout.py")},
+        "source_sha256": {
+            n: digest(ROOT / n) for n in ("tests/hardware_hvx_dw.py", "tests/hvx_dw_layout.py")
+        },
         "conditions": "synthetic deterministic activations and weights; headset idle",
         "window": [f"{WIN_LO:#x}", f"{WIN_HI:#x}"],
         "audits": {"restored_jobs": 0, "restored_hmx_jobs": 0},
@@ -99,7 +101,13 @@ def main():
                         mem = dev._transport.memory
                         for i, layer in enumerate(TEACHER_STRIDE1):
                             report["layers"][layer.name] = run_layer(
-                                dev, mem, job, layer, args.rounds, controls=i == 0, kernel=args.kernel
+                                dev,
+                                mem,
+                                job,
+                                layer,
+                                args.rounds,
+                                controls=i == 0,
+                                kernel=args.kernel,
                             )
                             args.output.write_text(json.dumps(report, indent=1) + "\n")
                 finally:
@@ -152,17 +160,33 @@ def summary(layers):
         "copy_in_ms": sum(v["copy_in_us"] for v in layers.values()) / 1000,
         "copy_out_ms": sum(v["copy_out_us"] for v in layers.values()) / 1000,
         "splat_ms": sum(v["splat_us"] for v in layers.values()) / 1000,
-        "cycles_per_tap_vector": sum(v["cycles_per_tap_vector"] * v["macs"] for v in layers.values()) / macs,
+        "cycles_per_tap_vector": sum(
+            v["cycles_per_tap_vector"] * v["macs"] for v in layers.values()
+        )
+        / macs,
         "note": "stride-2 scaled at the measured stride-1 MAC rate (not measured)",
     }
 
 
 KERNELS = {
-    "v1": dict(magic=MAGIC, opcode=OPCODE, image=arena_image, desc=descriptor, check=check_output,
-               nj=lambda L: L.nj, out_word=11),
-    "v2": dict(magic=layout_mod.MAGIC2, opcode=layout_mod.OPCODE2, image=layout_mod.v2_arena_image,
-               desc=layout_mod.v2_descriptor, check=layout_mod.v2_check_output,
-               nj=lambda L: layout_mod.v2_shape(L)[1], out_word=10),
+    "v1": dict(
+        magic=MAGIC,
+        opcode=OPCODE,
+        image=arena_image,
+        desc=descriptor,
+        check=check_output,
+        nj=lambda L: L.nj,
+        out_word=11,
+    ),
+    "v2": dict(
+        magic=layout_mod.MAGIC2,
+        opcode=layout_mod.OPCODE2,
+        image=layout_mod.v2_arena_image,
+        desc=layout_mod.v2_descriptor,
+        check=layout_mod.v2_check_output,
+        nj=lambda L: layout_mod.v2_shape(L)[1],
+        out_word=10,
+    ),
 }
 
 
@@ -227,7 +251,10 @@ def run_layer(dev, mem, job, layer, rounds, *, controls, kernel="v1"):
             "max_error_to_bound_ratio": accuracy["max_error_to_bound_ratio"],
         }
 
-    entry = {"shape": vars(layer) | {"pad": layer.pad, "nbin": layer.nbin, "nj": layer.nj}, "macs": layer.macs}
+    entry = {
+        "shape": vars(layer) | {"pad": layer.pad, "nbin": layer.nbin, "nj": layer.nj},
+        "macs": layer.macs,
+    }
     submit(1)  # checked warmup, excluded
     runs = []
     for round_ in range(rounds):
@@ -262,7 +289,14 @@ def run_layer(dev, mem, job, layer, rounds, *, controls, kernel="v1"):
         json.dumps(
             {
                 k: entry[k]
-                for k in ("pass_us", "copy_in_us", "copy_out_us", "ns_per_tap_vector", "core_mhz", "cycles_per_tap_vector")
+                for k in (
+                    "pass_us",
+                    "copy_in_us",
+                    "copy_out_us",
+                    "ns_per_tap_vector",
+                    "core_mhz",
+                    "cycles_per_tap_vector",
+                )
             }
             | {"layer": layer.name}
         ),

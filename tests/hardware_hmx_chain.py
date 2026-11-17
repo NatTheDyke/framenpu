@@ -73,7 +73,8 @@ def main():
         "format": "framenpu-hmx-chain-probe",
         "build": build,
         "source_sha256": {
-            n: digest(ROOT / n) for n in ("tests/hardware_hmx_chain.py", "tests/hmx_chain_layout.py")
+            n: digest(ROOT / n)
+            for n in ("tests/hardware_hmx_chain.py", "tests/hmx_chain_layout.py")
         },
         "conditions": "synthetic deterministic activations and weights; headset idle",
         "window": [f"{WIN_LO:#x}", f"{WIN_HI:#x}"],
@@ -148,7 +149,9 @@ def run_chain(dev, mem, job, name, layers, rounds):
         mem[off : off + len(data)] = data
     nl = len(layers)
     entry = {
-        "layers": [vars(layer) | {"nj": layer.nj, "nm": layer.nm, "nk1": layer.nk1} for layer in layers],
+        "layers": [
+            vars(layer) | {"nj": layer.nj, "nm": layer.nm, "nk1": layer.nk1} for layer in layers
+        ],
         "arena_bytes": plan["end"] - WIN_LO,
         "descriptor_sha256": hashlib.sha256(desc).hexdigest(),
         "runs": [],
@@ -234,7 +237,9 @@ def run_chain(dev, mem, job, name, layers, rounds):
                     "wall_ms": sum(j["wall_ms"] for j in jobs),
                     "wrapper_ms": sum(j["wrapper_ms"] for j in jobs),
                     "body_us": sum(j["body_us"] for j in jobs),
-                    "max_error_to_bound_ratio": max(a["max_error_to_bound_ratio"] for a in accuracy),
+                    "max_error_to_bound_ratio": max(
+                        a["max_error_to_bound_ratio"] for a in accuracy
+                    ),
                     "output_abs_max": max(a["output_abs_max"] for a in accuracy),
                 }
             )
@@ -258,8 +263,12 @@ def run_chain(dev, mem, job, name, layers, rounds):
     }
     entry["summary"]["per_layer_us"] = [
         {
-            "prologue": med([r["jobs"][0]["prologue_us"][i] for r in entry["runs"] if r["schedule"] == "whole"]),
-            "blocks": med([r["jobs"][0]["blocks_us"][i] for r in entry["runs"] if r["schedule"] == "whole"]),
+            "prologue": med(
+                [r["jobs"][0]["prologue_us"][i] for r in entry["runs"] if r["schedule"] == "whole"]
+            ),
+            "blocks": med(
+                [r["jobs"][0]["blocks_us"][i] for r in entry["runs"] if r["schedule"] == "whole"]
+            ),
         }
         for i in range(nl)
     ]

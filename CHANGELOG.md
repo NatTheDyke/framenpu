@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Fixed CI's NumPy dependency handling: numerical tests run with NumPy in the
+  Python matrix, and the layer-chain check skips when it is absent locally.
+  Applied the repository's formatting rules and fixed two lint failures.
 - Added an optional resident stride-2 teacher-tail path
   ([TEACHER_STRIDE2.md](docs/TEACHER_STRIDE2.md)), qualified on hardware. It keeps
   all 42 compute ops in one 45-descriptor linked request, with an explicit

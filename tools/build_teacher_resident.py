@@ -19,7 +19,11 @@ from framenpu import Job
 from framenpu.compiler import BUILD_FLAGS, SDK, Toolchain, _run
 
 KERNELS = {
-    "rs": (ROOT / "tests/resident_graph_entry.S", SDK / "hmx.S", ROOT / "tests/teacher_resident_probe.c"),
+    "rs": (
+        ROOT / "tests/resident_graph_entry.S",
+        SDK / "hmx.S",
+        ROOT / "tests/teacher_resident_probe.c",
+    ),
     "dw": (ROOT / "tests/resident_graph_entry.S", ROOT / "tests/teacher_dw_probe.c"),
 }
 COMMON = (
@@ -92,7 +96,11 @@ def main():
     p.add_argument("--output", required=True, type=Path)
     args = p.parse_args()
     r = build(args.output)
-    print(json.dumps({k: {"bytes": v["bytes"], "sha256": v["sha256"]} for k, v in r.items()}, indent=2))
+    print(
+        json.dumps(
+            {k: {"bytes": v["bytes"], "sha256": v["sha256"]} for k, v in r.items()}, indent=2
+        )
+    )
 
 
 if __name__ == "__main__":
