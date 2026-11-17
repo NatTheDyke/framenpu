@@ -1,0 +1,7097 @@
+{
+ "format": "framenpu-hmx-spatial-block-evidence",
+ "date": "2026-11-17",
+ "conditions": "Frame CDSP, cached entry, worker 0, one HMX owner, saved 8 KiB VTCM, 128 KiB job arena; synthetic activations, public v20a weights for teacher_112 only",
+ "run2_full_report": {
+  "format": "framenpu-hmx-block-probe",
+  "model_sha256": "b7c3d1be232725a5a143e2648858ec5aec9596c7b83c6a3c508479b04057e00c",
+  "param_sha256": "54e08f284ff6f121ff00f4a9c65afc38c0dbb22a32f4af44fc4e0fde6c4a1bbd",
+  "builds": {
+   "w050_112/copy1": {
+    "format": "framenpu-hmx-block-probe-build",
+    "geometry": "w050_112",
+    "variant": "copy1",
+    "macros": {
+     "FB_GEOM": 1,
+     "FB_W": 112,
+     "FB_R": 8,
+     "FB_CIN": 16,
+     "FB_NM": 1,
+     "FB_CMID": 16,
+     "FB_COUT": 8,
+     "FB_NBIN": 37,
+     "FB_BATCH": 1,
+     "FB_TIMING": 1,
+     "FB_REUSE": 1,
+     "FB_NOHMX": 0
+    },
+    "bytes": 3576,
+    "sha256": "8c992bf491652448c89675a3c6ce08a212b188b4f6524b75cd4685fc2119b693",
+    "input_bytes": 54400,
+    "output_bytes": 14720,
+    "vector_stack_accesses": 0,
+    "flags": [
+     "--target=hexagon",
+     "-mcpu=hexagonv75",
+     "-mhvx",
+     "-mhvx-length=128b",
+     "-Os",
+     "-ffreestanding",
+     "-fno-builtin",
+     "-fno-stack-protector",
+     "-fno-unwind-tables",
+     "-fno-asynchronous-unwind-tables",
+     "-ffp-contract=off",
+     "-mllvm",
+     "-spill-func-threshold=100",
+     "-mllvm",
+     "-spill-func-threshold-Os=100",
+     "-G0",
+     "-fno-jump-tables",
+     "-DFB_GEOM=1",
+     "-DFB_W=112",
+     "-DFB_R=8",
+     "-DFB_CIN=16",
+     "-DFB_NM=1",
+     "-DFB_CMID=16",
+     "-DFB_COUT=8",
+     "-DFB_NBIN=37",
+     "-DFB_BATCH=1",
+     "-DFB_TIMING=1",
+     "-DFB_REUSE=1",
+     "-DFB_NOHMX=0"
+    ],
+    "toolchain": {
+     "clang": "clang version 23.1.4",
+     "linker": "LLD 23.1.4 (compatible with GNU linkers)",
+     "objcopy": "llvm-objcopy, compatible with GNU objcopy"
+    },
+    "sources": {
+     "tests/resident_graph_entry.S": "bb0b48aaf26908b7feccb7eacac98a93bfa1e483cb3cc84a25c060c60f5f1c14",
+     "src/framenpu/sdk/hmx.S": "ca725000e846c220cdf709a82ce61d223dd0862d66687fa968e41be18f262fb6",
+     "tests/hmx_block_probe.c": "0f541b2db645630c1d6ecb285b80f8b084ad582f807a1173d80b62dd9aaf240e",
+     "tests/landmark_common.h": "e2e922baaf80e217350ee3926e445449430ccbdb7cf3f55ed8409d73e89909bb",
+     "tests/hmx_block_layout.py": "ced35770431898d9a89255a801934a5896b6b5f7dcc71510ac60683612d1ac9b",
+     "src/framenpu/sdk/include/framenpu.h": "4e65f4b8fb82586428a810714d91540685cc4895810ad5bb753b178e1db62754",
+     "src/framenpu/sdk/include/fnpu_readback.h": "4c5fd740bcc9269a64d7923d51cedd11bda2a1b4ed5430dcd796332e20a8f820",
+     "src/framenpu/sdk/link.ld": "c0b7dd53a7e254de549280ead79f303db3ab657e13e8565e5be3852c29a08e82"
+    }
+   },
+   "w050_112/main": {
+    "format": "framenpu-hmx-block-probe-build",
+    "geometry": "w050_112",
+    "variant": "main",
+    "macros": {
+     "FB_GEOM": 1,
+     "FB_W": 112,
+     "FB_R": 8,
+     "FB_CIN": 16,
+     "FB_NM": 1,
+     "FB_CMID": 16,
+     "FB_COUT": 8,
+     "FB_NBIN": 37,
+     "FB_BATCH": 8,
+     "FB_TIMING": 1,
+     "FB_REUSE": 1,
+     "FB_NOHMX": 0
+    },
+    "bytes": 3796,
+    "sha256": "88f23e605aad8c293fe62e282d56ec2566fbbc8697a918a0a1a49e72818d6bd1",
+    "input_bytes": 54400,
+    "output_bytes": 14720,
+    "vector_stack_accesses": 0,
+    "flags": [
+     "--target=hexagon",
+     "-mcpu=hexagonv75",
+     "-mhvx",
+     "-mhvx-length=128b",
+     "-Os",
+     "-ffreestanding",
+     "-fno-builtin",
+     "-fno-stack-protector",
+     "-fno-unwind-tables",
+     "-fno-asynchronous-unwind-tables",
+     "-ffp-contract=off",
+     "-mllvm",
+     "-spill-func-threshold=100",
+     "-mllvm",
+     "-spill-func-threshold-Os=100",
+     "-G0",
+     "-fno-jump-tables",
+     "-DFB_GEOM=1",
+     "-DFB_W=112",
+     "-DFB_R=8",
+     "-DFB_CIN=16",
+     "-DFB_NM=1",
+     "-DFB_CMID=16",
+     "-DFB_COUT=8",
+     "-DFB_NBIN=37",
+     "-DFB_BATCH=8",
+     "-DFB_TIMING=1",
+     "-DFB_REUSE=1",
+     "-DFB_NOHMX=0"
+    ],
+    "toolchain": {
+     "clang": "clang version 23.1.4",
+     "linker": "LLD 23.1.4 (compatible with GNU linkers)",
+     "objcopy": "llvm-objcopy, compatible with GNU objcopy"
+    },
+    "sources": {
+     "tests/resident_graph_entry.S": "bb0b48aaf26908b7feccb7eacac98a93bfa1e483cb3cc84a25c060c60f5f1c14",
+     "src/framenpu/sdk/hmx.S": "ca725000e846c220cdf709a82ce61d223dd0862d66687fa968e41be18f262fb6",
+     "tests/hmx_block_probe.c": "0f541b2db645630c1d6ecb285b80f8b084ad582f807a1173d80b62dd9aaf240e",
+     "tests/landmark_common.h": "e2e922baaf80e217350ee3926e445449430ccbdb7cf3f55ed8409d73e89909bb",
+     "tests/hmx_block_layout.py": "ced35770431898d9a89255a801934a5896b6b5f7dcc71510ac60683612d1ac9b",
+     "src/framenpu/sdk/include/framenpu.h": "4e65f4b8fb82586428a810714d91540685cc4895810ad5bb753b178e1db62754",
+     "src/framenpu/sdk/include/fnpu_readback.h": "4c5fd740bcc9269a64d7923d51cedd11bda2a1b4ed5430dcd796332e20a8f820",
+     "src/framenpu/sdk/link.ld": "c0b7dd53a7e254de549280ead79f303db3ab657e13e8565e5be3852c29a08e82"
+    }
+   },
+   "w050_112/nohmx": {
+    "format": "framenpu-hmx-block-probe-build",
+    "geometry": "w050_112",
+    "variant": "nohmx",
+    "macros": {
+     "FB_GEOM": 1,
+     "FB_W": 112,
+     "FB_R": 8,
+     "FB_CIN": 16,
+     "FB_NM": 1,
+     "FB_CMID": 16,
+     "FB_COUT": 8,
+     "FB_NBIN": 37,
+     "FB_BATCH": 8,
+     "FB_TIMING": 1,
+     "FB_REUSE": 1,
+     "FB_NOHMX": 1
+    },
+    "bytes": 3716,
+    "sha256": "c3070566a5fee012c62cd4413238419493e6369f0dff2c59aa6fb4d01096ea6b",
+    "input_bytes": 54400,
+    "output_bytes": 14720,
+    "vector_stack_accesses": 0,
+    "flags": [
+     "--target=hexagon",
+     "-mcpu=hexagonv75",
+     "-mhvx",
+     "-mhvx-length=128b",
+     "-Os",
+     "-ffreestanding",
+     "-fno-builtin",
+     "-fno-stack-protector",
+     "-fno-unwind-tables",
+     "-fno-asynchronous-unwind-tables",
+     "-ffp-contract=off",
+     "-mllvm",
+     "-spill-func-threshold=100",
+     "-mllvm",
+     "-spill-func-threshold-Os=100",
+     "-G0",
+     "-fno-jump-tables",
+     "-DFB_GEOM=1",
+     "-DFB_W=112",
+     "-DFB_R=8",
+     "-DFB_CIN=16",
+     "-DFB_NM=1",
+     "-DFB_CMID=16",
+     "-DFB_COUT=8",
+     "-DFB_NBIN=37",
+     "-DFB_BATCH=8",
+     "-DFB_TIMING=1",
+     "-DFB_REUSE=1",
+     "-DFB_NOHMX=1"
+    ],
+    "toolchain": {
+     "clang": "clang version 23.1.4",
+     "linker": "LLD 23.1.4 (compatible with GNU linkers)",
+     "objcopy": "llvm-objcopy, compatible with GNU objcopy"
+    },
+    "sources": {
+     "tests/resident_graph_entry.S": "bb0b48aaf26908b7feccb7eacac98a93bfa1e483cb3cc84a25c060c60f5f1c14",
+     "src/framenpu/sdk/hmx.S": "ca725000e846c220cdf709a82ce61d223dd0862d66687fa968e41be18f262fb6",
+     "tests/hmx_block_probe.c": "0f541b2db645630c1d6ecb285b80f8b084ad582f807a1173d80b62dd9aaf240e",
+     "tests/landmark_common.h": "e2e922baaf80e217350ee3926e445449430ccbdb7cf3f55ed8409d73e89909bb",
+     "tests/hmx_block_layout.py": "ced35770431898d9a89255a801934a5896b6b5f7dcc71510ac60683612d1ac9b",
+     "src/framenpu/sdk/include/framenpu.h": "4e65f4b8fb82586428a810714d91540685cc4895810ad5bb753b178e1db62754",
+     "src/framenpu/sdk/include/fnpu_readback.h": "4c5fd740bcc9269a64d7923d51cedd11bda2a1b4ed5430dcd796332e20a8f820",
+     "src/framenpu/sdk/link.ld": "c0b7dd53a7e254de549280ead79f303db3ab657e13e8565e5be3852c29a08e82"
+    }
+   },
+   "w050_112/noreuse": {
+    "format": "framenpu-hmx-block-probe-build",
+    "geometry": "w050_112",
+    "variant": "noreuse",
+    "macros": {
+     "FB_GEOM": 1,
+     "FB_W": 112,
+     "FB_R": 8,
+     "FB_CIN": 16,
+     "FB_NM": 1,
+     "FB_CMID": 16,
+     "FB_COUT": 8,
+     "FB_NBIN": 37,
+     "FB_BATCH": 8,
+     "FB_TIMING": 1,
+     "FB_REUSE": 0,
+     "FB_NOHMX": 0
+    },
+    "bytes": 3800,
+    "sha256": "d4c9542b689b1e266b50cd2e48e75268bf6648a2736dcd9569e4e6ae38f30570",
+    "input_bytes": 54400,
+    "output_bytes": 14720,
+    "vector_stack_accesses": 0,
+    "flags": [
+     "--target=hexagon",
+     "-mcpu=hexagonv75",
+     "-mhvx",
+     "-mhvx-length=128b",
+     "-Os",
+     "-ffreestanding",
+     "-fno-builtin",
+     "-fno-stack-protector",
+     "-fno-unwind-tables",
+     "-fno-asynchronous-unwind-tables",
+     "-ffp-contract=off",
+     "-mllvm",
+     "-spill-func-threshold=100",
+     "-mllvm",
+     "-spill-func-threshold-Os=100",
+     "-G0",
+     "-fno-jump-tables",
+     "-DFB_GEOM=1",
+     "-DFB_W=112",
+     "-DFB_R=8",
+     "-DFB_CIN=16",
+     "-DFB_NM=1",
+     "-DFB_CMID=16",
+     "-DFB_COUT=8",
+     "-DFB_NBIN=37",
+     "-DFB_BATCH=8",
+     "-DFB_TIMING=1",
+     "-DFB_REUSE=0",
+     "-DFB_NOHMX=0"
+    ],
+    "toolchain": {
+     "clang": "clang version 23.1.4",
+     "linker": "LLD 23.1.4 (compatible with GNU linkers)",
+     "objcopy": "llvm-objcopy, compatible with GNU objcopy"
+    },
+    "sources": {
+     "tests/resident_graph_entry.S": "bb0b48aaf26908b7feccb7eacac98a93bfa1e483cb3cc84a25c060c60f5f1c14",
+     "src/framenpu/sdk/hmx.S": "ca725000e846c220cdf709a82ce61d223dd0862d66687fa968e41be18f262fb6",
+     "tests/hmx_block_probe.c": "0f541b2db645630c1d6ecb285b80f8b084ad582f807a1173d80b62dd9aaf240e",
+     "tests/landmark_common.h": "e2e922baaf80e217350ee3926e445449430ccbdb7cf3f55ed8409d73e89909bb",
+     "tests/hmx_block_layout.py": "ced35770431898d9a89255a801934a5896b6b5f7dcc71510ac60683612d1ac9b",
+     "src/framenpu/sdk/include/framenpu.h": "4e65f4b8fb82586428a810714d91540685cc4895810ad5bb753b178e1db62754",
+     "src/framenpu/sdk/include/fnpu_readback.h": "4c5fd740bcc9269a64d7923d51cedd11bda2a1b4ed5430dcd796332e20a8f820",
+     "src/framenpu/sdk/link.ld": "c0b7dd53a7e254de549280ead79f303db3ab657e13e8565e5be3852c29a08e82"
+    }
+   },
+   "w050_112/notime": {
+    "format": "framenpu-hmx-block-probe-build",
+    "geometry": "w050_112",
+    "variant": "notime",
+    "macros": {
+     "FB_GEOM": 1,
+     "FB_W": 112,
+     "FB_R": 8,
+     "FB_CIN": 16,
+     "FB_NM": 1,
+     "FB_CMID": 16,
+     "FB_COUT": 8,
+     "FB_NBIN": 37,
+     "FB_BATCH": 8,
+     "FB_TIMING": 0,
+     "FB_REUSE": 1,
+     "FB_NOHMX": 0
+    },
+    "bytes": 3640,
+    "sha256": "480c06f6e04dd467b72dbca85f76f49df9e77c10e05ef51a0985b1d5bdfba217",
+    "input_bytes": 54400,
+    "output_bytes": 14720,
+    "vector_stack_accesses": 0,
+    "flags": [
+     "--target=hexagon",
+     "-mcpu=hexagonv75",
+     "-mhvx",
+     "-mhvx-length=128b",
+     "-Os",
+     "-ffreestanding",
+     "-fno-builtin",
+     "-fno-stack-protector",
+     "-fno-unwind-tables",
+     "-fno-asynchronous-unwind-tables",
+     "-ffp-contract=off",
+     "-mllvm",
+     "-spill-func-threshold=100",
+     "-mllvm",
+     "-spill-func-threshold-Os=100",
+     "-G0",
+     "-fno-jump-tables",
+     "-DFB_GEOM=1",
+     "-DFB_W=112",
+     "-DFB_R=8",
+     "-DFB_CIN=16",
+     "-DFB_NM=1",
+     "-DFB_CMID=16",
+     "-DFB_COUT=8",
+     "-DFB_NBIN=37",
+     "-DFB_BATCH=8",
+     "-DFB_TIMING=0",
+     "-DFB_REUSE=1",
+     "-DFB_NOHMX=0"
+    ],
+    "toolchain": {
+     "clang": "clang version 23.1.4",
+     "linker": "LLD 23.1.4 (compatible with GNU linkers)",
+     "objcopy": "llvm-objcopy, compatible with GNU objcopy"
+    },
+    "sources": {
+     "tests/resident_graph_entry.S": "bb0b48aaf26908b7feccb7eacac98a93bfa1e483cb3cc84a25c060c60f5f1c14",
+     "src/framenpu/sdk/hmx.S": "ca725000e846c220cdf709a82ce61d223dd0862d66687fa968e41be18f262fb6",
+     "tests/hmx_block_probe.c": "0f541b2db645630c1d6ecb285b80f8b084ad582f807a1173d80b62dd9aaf240e",
+     "tests/landmark_common.h": "e2e922baaf80e217350ee3926e445449430ccbdb7cf3f55ed8409d73e89909bb",
+     "tests/hmx_block_layout.py": "ced35770431898d9a89255a801934a5896b6b5f7dcc71510ac60683612d1ac9b",
+     "src/framenpu/sdk/include/framenpu.h": "4e65f4b8fb82586428a810714d91540685cc4895810ad5bb753b178e1db62754",
+     "src/framenpu/sdk/include/fnpu_readback.h": "4c5fd740bcc9269a64d7923d51cedd11bda2a1b4ed5430dcd796332e20a8f820",
+     "src/framenpu/sdk/link.ld": "c0b7dd53a7e254de549280ead79f303db3ab657e13e8565e5be3852c29a08e82"
+    }
+   },
+   "w050_14/copy1": {
+    "format": "framenpu-hmx-block-probe-build",
+    "geometry": "w050_14",
+    "variant": "copy1",
+    "macros": {
+     "FB_GEOM": 2,
+     "FB_W": 14,
+     "FB_R": 14,
+     "FB_CIN": 24,
+     "FB_NM": 5,
+     "FB_CMID": 144,
+     "FB_COUT": 24,
+     "FB_NBIN": 9,
+     "FB_BATCH": 1,
+     "FB_TIMING": 1,
+     "FB_REUSE": 1,
+     "FB_NOHMX": 0
+    },
+    "bytes": 3704,
+    "sha256": "200bf3286a897a6330a992a9a6b5c944764e10b66768e8b8e26b18623d3c91e7",
+    "input_bytes": 97280,
+    "output_bytes": 21376,
+    "vector_stack_accesses": 0,
+    "flags": [
+     "--target=hexagon",
+     "-mcpu=hexagonv75",
+     "-mhvx",
+     "-mhvx-length=128b",
+     "-Os",
+     "-ffreestanding",
+     "-fno-builtin",
+     "-fno-stack-protector",
+     "-fno-unwind-tables",
+     "-fno-asynchronous-unwind-tables",
+     "-ffp-contract=off",
+     "-mllvm",
+     "-spill-func-threshold=100",
+     "-mllvm",
+     "-spill-func-threshold-Os=100",
+     "-G0",
+     "-fno-jump-tables",
+     "-DFB_GEOM=2",
+     "-DFB_W=14",
+     "-DFB_R=14",
+     "-DFB_CIN=24",
+     "-DFB_NM=5",
+     "-DFB_CMID=144",
+     "-DFB_COUT=24",
+     "-DFB_NBIN=9",
+     "-DFB_BATCH=1",
+     "-DFB_TIMING=1",
+     "-DFB_REUSE=1",
+     "-DFB_NOHMX=0"
+    ],
+    "toolchain": {
+     "clang": "clang version 23.1.4",
+     "linker": "LLD 23.1.4 (compatible with GNU linkers)",
+     "objcopy": "llvm-objcopy, compatible with GNU objcopy"
+    },
+    "sources": {
+     "tests/resident_graph_entry.S": "bb0b48aaf26908b7feccb7eacac98a93bfa1e483cb3cc84a25c060c60f5f1c14",
+     "src/framenpu/sdk/hmx.S": "ca725000e846c220cdf709a82ce61d223dd0862d66687fa968e41be18f262fb6",
+     "tests/hmx_block_probe.c": "0f541b2db645630c1d6ecb285b80f8b084ad582f807a1173d80b62dd9aaf240e",
+     "tests/landmark_common.h": "e2e922baaf80e217350ee3926e445449430ccbdb7cf3f55ed8409d73e89909bb",
+     "tests/hmx_block_layout.py": "ced35770431898d9a89255a801934a5896b6b5f7dcc71510ac60683612d1ac9b",
+     "src/framenpu/sdk/include/framenpu.h": "4e65f4b8fb82586428a810714d91540685cc4895810ad5bb753b178e1db62754",
+     "src/framenpu/sdk/include/fnpu_readback.h": "4c5fd740bcc9269a64d7923d51cedd11bda2a1b4ed5430dcd796332e20a8f820",
+     "src/framenpu/sdk/link.ld": "c0b7dd53a7e254de549280ead79f303db3ab657e13e8565e5be3852c29a08e82"
+    }
+   },
+   "w050_14/main": {
+    "format": "framenpu-hmx-block-probe-build",
+    "geometry": "w050_14",
+    "variant": "main",
+    "macros": {
+     "FB_GEOM": 2,
+     "FB_W": 14,
+     "FB_R": 14,
+     "FB_CIN": 24,
+     "FB_NM": 5,
+     "FB_CMID": 144,
+     "FB_COUT": 24,
+     "FB_NBIN": 9,
+     "FB_BATCH": 8,
+     "FB_TIMING": 1,
+     "FB_REUSE": 1,
+     "FB_NOHMX": 0
+    },
+    "bytes": 3916,
+    "sha256": "1028a5ce415bd978c8c3ac1da8638c375ad1547e5023cee48250869f2d60ecee",
+    "input_bytes": 97280,
+    "output_bytes": 21376,
+    "vector_stack_accesses": 0,
+    "flags": [
+     "--target=hexagon",
+     "-mcpu=hexagonv75",
+     "-mhvx",
+     "-mhvx-length=128b",
+     "-Os",
+     "-ffreestanding",
+     "-fno-builtin",
+     "-fno-stack-protector",
+     "-fno-unwind-tables",
+     "-fno-asynchronous-unwind-tables",
+     "-ffp-contract=off",
+     "-mllvm",
+     "-spill-func-threshold=100",
+     "-mllvm",
+     "-spill-func-threshold-Os=100",
+     "-G0",
+     "-fno-jump-tables",
+     "-DFB_GEOM=2",
+     "-DFB_W=14",
+     "-DFB_R=14",
+     "-DFB_CIN=24",
+     "-DFB_NM=5",
+     "-DFB_CMID=144",
+     "-DFB_COUT=24",
+     "-DFB_NBIN=9",
+     "-DFB_BATCH=8",
+     "-DFB_TIMING=1",
+     "-DFB_REUSE=1",
+     "-DFB_NOHMX=0"
+    ],
+    "toolchain": {
+     "clang": "clang version 23.1.4",
+     "linker": "LLD 23.1.4 (compatible with GNU linkers)",
+     "objcopy": "llvm-objcopy, compatible with GNU objcopy"
+    },
+    "sources": {
+     "tests/resident_graph_entry.S": "bb0b48aaf26908b7feccb7eacac98a93bfa1e483cb3cc84a25c060c60f5f1c14",
+     "src/framenpu/sdk/hmx.S": "ca725000e846c220cdf709a82ce61d223dd0862d66687fa968e41be18f262fb6",
+     "tests/hmx_block_probe.c": "0f541b2db645630c1d6ecb285b80f8b084ad582f807a1173d80b62dd9aaf240e",
+     "tests/landmark_common.h": "e2e922baaf80e217350ee3926e445449430ccbdb7cf3f55ed8409d73e89909bb",
+     "tests/hmx_block_layout.py": "ced35770431898d9a89255a801934a5896b6b5f7dcc71510ac60683612d1ac9b",
+     "src/framenpu/sdk/include/framenpu.h": "4e65f4b8fb82586428a810714d91540685cc4895810ad5bb753b178e1db62754",
+     "src/framenpu/sdk/include/fnpu_readback.h": "4c5fd740bcc9269a64d7923d51cedd11bda2a1b4ed5430dcd796332e20a8f820",
+     "src/framenpu/sdk/link.ld": "c0b7dd53a7e254de549280ead79f303db3ab657e13e8565e5be3852c29a08e82"
+    }
+   },
+   "w050_14/nohmx": {
+    "format": "framenpu-hmx-block-probe-build",
+    "geometry": "w050_14",
+    "variant": "nohmx",
+    "macros": {
+     "FB_GEOM": 2,
+     "FB_W": 14,
+     "FB_R": 14,
+     "FB_CIN": 24,
+     "FB_NM": 5,
+     "FB_CMID": 144,
+     "FB_COUT": 24,
+     "FB_NBIN": 9,
+     "FB_BATCH": 8,
+     "FB_TIMING": 1,
+     "FB_REUSE": 1,
+     "FB_NOHMX": 1
+    },
+    "bytes": 3876,
+    "sha256": "2778e6bc317d7cd9ad6951740eb1f81e88fbfc5a59cf62ff78209533758e5e19",
+    "input_bytes": 97280,
+    "output_bytes": 21376,
+    "vector_stack_accesses": 0,
+    "flags": [
+     "--target=hexagon",
+     "-mcpu=hexagonv75",
+     "-mhvx",
+     "-mhvx-length=128b",
+     "-Os",
+     "-ffreestanding",
+     "-fno-builtin",
+     "-fno-stack-protector",
+     "-fno-unwind-tables",
+     "-fno-asynchronous-unwind-tables",
+     "-ffp-contract=off",
+     "-mllvm",
+     "-spill-func-threshold=100",
+     "-mllvm",
+     "-spill-func-threshold-Os=100",
+     "-G0",
+     "-fno-jump-tables",
+     "-DFB_GEOM=2",
+     "-DFB_W=14",
+     "-DFB_R=14",
+     "-DFB_CIN=24",
+     "-DFB_NM=5",
+     "-DFB_CMID=144",
+     "-DFB_COUT=24",
+     "-DFB_NBIN=9",
+     "-DFB_BATCH=8",
+     "-DFB_TIMING=1",
+     "-DFB_REUSE=1",
+     "-DFB_NOHMX=1"
+    ],
+    "toolchain": {
+     "clang": "clang version 23.1.4",
+     "linker": "LLD 23.1.4 (compatible with GNU linkers)",
+     "objcopy": "llvm-objcopy, compatible with GNU objcopy"
+    },
+    "sources": {
+     "tests/resident_graph_entry.S": "bb0b48aaf26908b7feccb7eacac98a93bfa1e483cb3cc84a25c060c60f5f1c14",
+     "src/framenpu/sdk/hmx.S": "ca725000e846c220cdf709a82ce61d223dd0862d66687fa968e41be18f262fb6",
+     "tests/hmx_block_probe.c": "0f541b2db645630c1d6ecb285b80f8b084ad582f807a1173d80b62dd9aaf240e",
+     "tests/landmark_common.h": "e2e922baaf80e217350ee3926e445449430ccbdb7cf3f55ed8409d73e89909bb",
+     "tests/hmx_block_layout.py": "ced35770431898d9a89255a801934a5896b6b5f7dcc71510ac60683612d1ac9b",
+     "src/framenpu/sdk/include/framenpu.h": "4e65f4b8fb82586428a810714d91540685cc4895810ad5bb753b178e1db62754",
+     "src/framenpu/sdk/include/fnpu_readback.h": "4c5fd740bcc9269a64d7923d51cedd11bda2a1b4ed5430dcd796332e20a8f820",
+     "src/framenpu/sdk/link.ld": "c0b7dd53a7e254de549280ead79f303db3ab657e13e8565e5be3852c29a08e82"
+    }
+   },
+   "w050_14/notime": {
+    "format": "framenpu-hmx-block-probe-build",
+    "geometry": "w050_14",
+    "variant": "notime",
+    "macros": {
+     "FB_GEOM": 2,
+     "FB_W": 14,
+     "FB_R": 14,
+     "FB_CIN": 24,
+     "FB_NM": 5,
+     "FB_CMID": 144,
+     "FB_COUT": 24,
+     "FB_NBIN": 9,
+     "FB_BATCH": 8,
+     "FB_TIMING": 0,
+     "FB_REUSE": 1,
+     "FB_NOHMX": 0
+    },
+    "bytes": 3756,
+    "sha256": "226e489305dc84a48629802f79bbab424b6488e0e1e61139f00449119cc5cd30",
+    "input_bytes": 97280,
+    "output_bytes": 21376,
+    "vector_stack_accesses": 0,
+    "flags": [
+     "--target=hexagon",
+     "-mcpu=hexagonv75",
+     "-mhvx",
+     "-mhvx-length=128b",
+     "-Os",
+     "-ffreestanding",
+     "-fno-builtin",
+     "-fno-stack-protector",
+     "-fno-unwind-tables",
+     "-fno-asynchronous-unwind-tables",
+     "-ffp-contract=off",
+     "-mllvm",
+     "-spill-func-threshold=100",
+     "-mllvm",
+     "-spill-func-threshold-Os=100",
+     "-G0",
+     "-fno-jump-tables",
+     "-DFB_GEOM=2",
+     "-DFB_W=14",
+     "-DFB_R=14",
+     "-DFB_CIN=24",
+     "-DFB_NM=5",
+     "-DFB_CMID=144",
+     "-DFB_COUT=24",
+     "-DFB_NBIN=9",
+     "-DFB_BATCH=8",
+     "-DFB_TIMING=0",
+     "-DFB_REUSE=1",
+     "-DFB_NOHMX=0"
+    ],
+    "toolchain": {
+     "clang": "clang version 23.1.4",
+     "linker": "LLD 23.1.4 (compatible with GNU linkers)",
+     "objcopy": "llvm-objcopy, compatible with GNU objcopy"
+    },
+    "sources": {
+     "tests/resident_graph_entry.S": "bb0b48aaf26908b7feccb7eacac98a93bfa1e483cb3cc84a25c060c60f5f1c14",
+     "src/framenpu/sdk/hmx.S": "ca725000e846c220cdf709a82ce61d223dd0862d66687fa968e41be18f262fb6",
+     "tests/hmx_block_probe.c": "0f541b2db645630c1d6ecb285b80f8b084ad582f807a1173d80b62dd9aaf240e",
+     "tests/landmark_common.h": "e2e922baaf80e217350ee3926e445449430ccbdb7cf3f55ed8409d73e89909bb",
+     "tests/hmx_block_layout.py": "ced35770431898d9a89255a801934a5896b6b5f7dcc71510ac60683612d1ac9b",
+     "src/framenpu/sdk/include/framenpu.h": "4e65f4b8fb82586428a810714d91540685cc4895810ad5bb753b178e1db62754",
+     "src/framenpu/sdk/include/fnpu_readback.h": "4c5fd740bcc9269a64d7923d51cedd11bda2a1b4ed5430dcd796332e20a8f820",
+     "src/framenpu/sdk/link.ld": "c0b7dd53a7e254de549280ead79f303db3ab657e13e8565e5be3852c29a08e82"
+    }
+   },
+   "w050_7/copy1": {
+    "format": "framenpu-hmx-block-probe-build",
+    "geometry": "w050_7",
+    "variant": "copy1",
+    "macros": {
+     "FB_GEOM": 3,
+     "FB_W": 7,
+     "FB_R": 7,
+     "FB_CIN": 56,
+     "FB_NM": 2,
+     "FB_CMID": 64,
+     "FB_COUT": 56,
+     "FB_NBIN": 4,
+     "FB_BATCH": 1,
+     "FB_TIMING": 1,
+     "FB_REUSE": 1,
+     "FB_NOHMX": 0
+    },
+    "bytes": 3852,
+    "sha256": "a3dbbf3448c70483190aa649ab4a3ff6b984b4aa1755f3ee554d3a61216d8774",
+    "input_bytes": 88960,
+    "output_bytes": 11648,
+    "vector_stack_accesses": 0,
+    "flags": [
+     "--target=hexagon",
+     "-mcpu=hexagonv75",
+     "-mhvx",
+     "-mhvx-length=128b",
+     "-Os",
+     "-ffreestanding",
+     "-fno-builtin",
+     "-fno-stack-protector",
+     "-fno-unwind-tables",
+     "-fno-asynchronous-unwind-tables",
+     "-ffp-contract=off",
+     "-mllvm",
+     "-spill-func-threshold=100",
+     "-mllvm",
+     "-spill-func-threshold-Os=100",
+     "-G0",
+     "-fno-jump-tables",
+     "-DFB_GEOM=3",
+     "-DFB_W=7",
+     "-DFB_R=7",
+     "-DFB_CIN=56",
+     "-DFB_NM=2",
+     "-DFB_CMID=64",
+     "-DFB_COUT=56",
+     "-DFB_NBIN=4",
+     "-DFB_BATCH=1",
+     "-DFB_TIMING=1",
+     "-DFB_REUSE=1",
+     "-DFB_NOHMX=0"
+    ],
+    "toolchain": {
+     "clang": "clang version 23.1.4",
+     "linker": "LLD 23.1.4 (compatible with GNU linkers)",
+     "objcopy": "llvm-objcopy, compatible with GNU objcopy"
+    },
+    "sources": {
+     "tests/resident_graph_entry.S": "bb0b48aaf26908b7feccb7eacac98a93bfa1e483cb3cc84a25c060c60f5f1c14",
+     "src/framenpu/sdk/hmx.S": "ca725000e846c220cdf709a82ce61d223dd0862d66687fa968e41be18f262fb6",
+     "tests/hmx_block_probe.c": "0f541b2db645630c1d6ecb285b80f8b084ad582f807a1173d80b62dd9aaf240e",
+     "tests/landmark_common.h": "e2e922baaf80e217350ee3926e445449430ccbdb7cf3f55ed8409d73e89909bb",
+     "tests/hmx_block_layout.py": "ced35770431898d9a89255a801934a5896b6b5f7dcc71510ac60683612d1ac9b",
+     "src/framenpu/sdk/include/framenpu.h": "4e65f4b8fb82586428a810714d91540685cc4895810ad5bb753b178e1db62754",
+     "src/framenpu/sdk/include/fnpu_readback.h": "4c5fd740bcc9269a64d7923d51cedd11bda2a1b4ed5430dcd796332e20a8f820",
+     "src/framenpu/sdk/link.ld": "c0b7dd53a7e254de549280ead79f303db3ab657e13e8565e5be3852c29a08e82"
+    }
+   },
+   "w050_7/main": {
+    "format": "framenpu-hmx-block-probe-build",
+    "geometry": "w050_7",
+    "variant": "main",
+    "macros": {
+     "FB_GEOM": 3,
+     "FB_W": 7,
+     "FB_R": 7,
+     "FB_CIN": 56,
+     "FB_NM": 2,
+     "FB_CMID": 64,
+     "FB_COUT": 56,
+     "FB_NBIN": 4,
+     "FB_BATCH": 8,
+     "FB_TIMING": 1,
+     "FB_REUSE": 1,
+     "FB_NOHMX": 0
+    },
+    "bytes": 4088,
+    "sha256": "a01c6182d35373d0b213ec8a1f4aa939d503442dd73b0755d4c4b112a4c250d8",
+    "input_bytes": 88960,
+    "output_bytes": 11648,
+    "vector_stack_accesses": 0,
+    "flags": [
+     "--target=hexagon",
+     "-mcpu=hexagonv75",
+     "-mhvx",
+     "-mhvx-length=128b",
+     "-Os",
+     "-ffreestanding",
+     "-fno-builtin",
+     "-fno-stack-protector",
+     "-fno-unwind-tables",
+     "-fno-asynchronous-unwind-tables",
+     "-ffp-contract=off",
+     "-mllvm",
+     "-spill-func-threshold=100",
+     "-mllvm",
+     "-spill-func-threshold-Os=100",
+     "-G0",
+     "-fno-jump-tables",
+     "-DFB_GEOM=3",
+     "-DFB_W=7",
+     "-DFB_R=7",
+     "-DFB_CIN=56",
+     "-DFB_NM=2",
+     "-DFB_CMID=64",
+     "-DFB_COUT=56",
+     "-DFB_NBIN=4",
+     "-DFB_BATCH=8",
+     "-DFB_TIMING=1",
+     "-DFB_REUSE=1",
+     "-DFB_NOHMX=0"
+    ],
+    "toolchain": {
+     "clang": "clang version 23.1.4",
+     "linker": "LLD 23.1.4 (compatible with GNU linkers)",
+     "objcopy": "llvm-objcopy, compatible with GNU objcopy"
+    },
+    "sources": {
+     "tests/resident_graph_entry.S": "bb0b48aaf26908b7feccb7eacac98a93bfa1e483cb3cc84a25c060c60f5f1c14",
+     "src/framenpu/sdk/hmx.S": "ca725000e846c220cdf709a82ce61d223dd0862d66687fa968e41be18f262fb6",
+     "tests/hmx_block_probe.c": "0f541b2db645630c1d6ecb285b80f8b084ad582f807a1173d80b62dd9aaf240e",
+     "tests/landmark_common.h": "e2e922baaf80e217350ee3926e445449430ccbdb7cf3f55ed8409d73e89909bb",
+     "tests/hmx_block_layout.py": "ced35770431898d9a89255a801934a5896b6b5f7dcc71510ac60683612d1ac9b",
+     "src/framenpu/sdk/include/framenpu.h": "4e65f4b8fb82586428a810714d91540685cc4895810ad5bb753b178e1db62754",
+     "src/framenpu/sdk/include/fnpu_readback.h": "4c5fd740bcc9269a64d7923d51cedd11bda2a1b4ed5430dcd796332e20a8f820",
+     "src/framenpu/sdk/link.ld": "c0b7dd53a7e254de549280ead79f303db3ab657e13e8565e5be3852c29a08e82"
+    }
+   },
+   "w050_7/nohmx": {
+    "format": "framenpu-hmx-block-probe-build",
+    "geometry": "w050_7",
+    "variant": "nohmx",
+    "macros": {
+     "FB_GEOM": 3,
+     "FB_W": 7,
+     "FB_R": 7,
+     "FB_CIN": 56,
+     "FB_NM": 2,
+     "FB_CMID": 64,
+     "FB_COUT": 56,
+     "FB_NBIN": 4,
+     "FB_BATCH": 8,
+     "FB_TIMING": 1,
+     "FB_REUSE": 1,
+     "FB_NOHMX": 1
+    },
+    "bytes": 4040,
+    "sha256": "cc519fd9b1f6bca50a2a212bbe0f8fa0a5d24f82e2cb6c2792bb900e7fd68885",
+    "input_bytes": 88960,
+    "output_bytes": 11648,
+    "vector_stack_accesses": 0,
+    "flags": [
+     "--target=hexagon",
+     "-mcpu=hexagonv75",
+     "-mhvx",
+     "-mhvx-length=128b",
+     "-Os",
+     "-ffreestanding",
+     "-fno-builtin",
+     "-fno-stack-protector",
+     "-fno-unwind-tables",
+     "-fno-asynchronous-unwind-tables",
+     "-ffp-contract=off",
+     "-mllvm",
+     "-spill-func-threshold=100",
+     "-mllvm",
+     "-spill-func-threshold-Os=100",
+     "-G0",
+     "-fno-jump-tables",
+     "-DFB_GEOM=3",
+     "-DFB_W=7",
+     "-DFB_R=7",
+     "-DFB_CIN=56",
+     "-DFB_NM=2",
+     "-DFB_CMID=64",
+     "-DFB_COUT=56",
+     "-DFB_NBIN=4",
+     "-DFB_BATCH=8",
+     "-DFB_TIMING=1",
+     "-DFB_REUSE=1",
+     "-DFB_NOHMX=1"
+    ],
+    "toolchain": {
+     "clang": "clang version 23.1.4",
+     "linker": "LLD 23.1.4 (compatible with GNU linkers)",
+     "objcopy": "llvm-objcopy, compatible with GNU objcopy"
+    },
+    "sources": {
+     "tests/resident_graph_entry.S": "bb0b48aaf26908b7feccb7eacac98a93bfa1e483cb3cc84a25c060c60f5f1c14",
+     "src/framenpu/sdk/hmx.S": "ca725000e846c220cdf709a82ce61d223dd0862d66687fa968e41be18f262fb6",
+     "tests/hmx_block_probe.c": "0f541b2db645630c1d6ecb285b80f8b084ad582f807a1173d80b62dd9aaf240e",
+     "tests/landmark_common.h": "e2e922baaf80e217350ee3926e445449430ccbdb7cf3f55ed8409d73e89909bb",
+     "tests/hmx_block_layout.py": "ced35770431898d9a89255a801934a5896b6b5f7dcc71510ac60683612d1ac9b",
+     "src/framenpu/sdk/include/framenpu.h": "4e65f4b8fb82586428a810714d91540685cc4895810ad5bb753b178e1db62754",
+     "src/framenpu/sdk/include/fnpu_readback.h": "4c5fd740bcc9269a64d7923d51cedd11bda2a1b4ed5430dcd796332e20a8f820",
+     "src/framenpu/sdk/link.ld": "c0b7dd53a7e254de549280ead79f303db3ab657e13e8565e5be3852c29a08e82"
+    }
+   },
+   "w050_7/notime": {
+    "format": "framenpu-hmx-block-probe-build",
+    "geometry": "w050_7",
+    "variant": "notime",
+    "macros": {
+     "FB_GEOM": 3,
+     "FB_W": 7,
+     "FB_R": 7,
+     "FB_CIN": 56,
+     "FB_NM": 2,
+     "FB_CMID": 64,
+     "FB_COUT": 56,
+     "FB_NBIN": 4,
+     "FB_BATCH": 8,
+     "FB_TIMING": 0,
+     "FB_REUSE": 1,
+     "FB_NOHMX": 0
+    },
+    "bytes": 3864,
+    "sha256": "0bbec0b374420d79fec2dff9041929f678ac5fc3abacdabea5c8cedacdd1f3eb",
+    "input_bytes": 88960,
+    "output_bytes": 11648,
+    "vector_stack_accesses": 0,
+    "flags": [
+     "--target=hexagon",
+     "-mcpu=hexagonv75",
+     "-mhvx",
+     "-mhvx-length=128b",
+     "-Os",
+     "-ffreestanding",
+     "-fno-builtin",
+     "-fno-stack-protector",
+     "-fno-unwind-tables",
+     "-fno-asynchronous-unwind-tables",
+     "-ffp-contract=off",
+     "-mllvm",
+     "-spill-func-threshold=100",
+     "-mllvm",
+     "-spill-func-threshold-Os=100",
+     "-G0",
+     "-fno-jump-tables",
+     "-DFB_GEOM=3",
+     "-DFB_W=7",
+     "-DFB_R=7",
+     "-DFB_CIN=56",
+     "-DFB_NM=2",
+     "-DFB_CMID=64",
+     "-DFB_COUT=56",
+     "-DFB_NBIN=4",
+     "-DFB_BATCH=8",
+     "-DFB_TIMING=0",
+     "-DFB_REUSE=1",
+     "-DFB_NOHMX=0"
+    ],
+    "toolchain": {
+     "clang": "clang version 23.1.4",
+     "linker": "LLD 23.1.4 (compatible with GNU linkers)",
+     "objcopy": "llvm-objcopy, compatible with GNU objcopy"
+    },
+    "sources": {
+     "tests/resident_graph_entry.S": "bb0b48aaf26908b7feccb7eacac98a93bfa1e483cb3cc84a25c060c60f5f1c14",
+     "src/framenpu/sdk/hmx.S": "ca725000e846c220cdf709a82ce61d223dd0862d66687fa968e41be18f262fb6",
+     "tests/hmx_block_probe.c": "0f541b2db645630c1d6ecb285b80f8b084ad582f807a1173d80b62dd9aaf240e",
+     "tests/landmark_common.h": "e2e922baaf80e217350ee3926e445449430ccbdb7cf3f55ed8409d73e89909bb",
+     "tests/hmx_block_layout.py": "ced35770431898d9a89255a801934a5896b6b5f7dcc71510ac60683612d1ac9b",
+     "src/framenpu/sdk/include/framenpu.h": "4e65f4b8fb82586428a810714d91540685cc4895810ad5bb753b178e1db62754",
+     "src/framenpu/sdk/include/fnpu_readback.h": "4c5fd740bcc9269a64d7923d51cedd11bda2a1b4ed5430dcd796332e20a8f820",
+     "src/framenpu/sdk/link.ld": "c0b7dd53a7e254de549280ead79f303db3ab657e13e8565e5be3852c29a08e82"
+    }
+   },
+   "teacher_112/copy1": {
+    "format": "framenpu-hmx-block-probe-build",
+    "geometry": "teacher_112",
+    "variant": "copy1",
+    "macros": {
+     "FB_GEOM": 4,
+     "FB_W": 112,
+     "FB_R": 8,
+     "FB_CIN": 24,
+     "FB_NM": 1,
+     "FB_CMID": 24,
+     "FB_COUT": 16,
+     "FB_NBIN": 37,
+     "FB_BATCH": 1,
+     "FB_TIMING": 1,
+     "FB_REUSE": 1,
+     "FB_NOHMX": 0
+    },
+    "bytes": 3584,
+    "sha256": "52e7ea81cccfc9f7f415d7d506872693e912f660b97755c334fc3232c01c1fac",
+    "input_bytes": 77440,
+    "output_bytes": 29056,
+    "vector_stack_accesses": 0,
+    "flags": [
+     "--target=hexagon",
+     "-mcpu=hexagonv75",
+     "-mhvx",
+     "-mhvx-length=128b",
+     "-Os",
+     "-ffreestanding",
+     "-fno-builtin",
+     "-fno-stack-protector",
+     "-fno-unwind-tables",
+     "-fno-asynchronous-unwind-tables",
+     "-ffp-contract=off",
+     "-mllvm",
+     "-spill-func-threshold=100",
+     "-mllvm",
+     "-spill-func-threshold-Os=100",
+     "-G0",
+     "-fno-jump-tables",
+     "-DFB_GEOM=4",
+     "-DFB_W=112",
+     "-DFB_R=8",
+     "-DFB_CIN=24",
+     "-DFB_NM=1",
+     "-DFB_CMID=24",
+     "-DFB_COUT=16",
+     "-DFB_NBIN=37",
+     "-DFB_BATCH=1",
+     "-DFB_TIMING=1",
+     "-DFB_REUSE=1",
+     "-DFB_NOHMX=0"
+    ],
+    "toolchain": {
+     "clang": "clang version 23.1.4",
+     "linker": "LLD 23.1.4 (compatible with GNU linkers)",
+     "objcopy": "llvm-objcopy, compatible with GNU objcopy"
+    },
+    "sources": {
+     "tests/resident_graph_entry.S": "bb0b48aaf26908b7feccb7eacac98a93bfa1e483cb3cc84a25c060c60f5f1c14",
+     "src/framenpu/sdk/hmx.S": "ca725000e846c220cdf709a82ce61d223dd0862d66687fa968e41be18f262fb6",
+     "tests/hmx_block_probe.c": "0f541b2db645630c1d6ecb285b80f8b084ad582f807a1173d80b62dd9aaf240e",
+     "tests/landmark_common.h": "e2e922baaf80e217350ee3926e445449430ccbdb7cf3f55ed8409d73e89909bb",
+     "tests/hmx_block_layout.py": "ced35770431898d9a89255a801934a5896b6b5f7dcc71510ac60683612d1ac9b",
+     "src/framenpu/sdk/include/framenpu.h": "4e65f4b8fb82586428a810714d91540685cc4895810ad5bb753b178e1db62754",
+     "src/framenpu/sdk/include/fnpu_readback.h": "4c5fd740bcc9269a64d7923d51cedd11bda2a1b4ed5430dcd796332e20a8f820",
+     "src/framenpu/sdk/link.ld": "c0b7dd53a7e254de549280ead79f303db3ab657e13e8565e5be3852c29a08e82"
+    }
+   },
+   "teacher_112/main": {
+    "format": "framenpu-hmx-block-probe-build",
+    "geometry": "teacher_112",
+    "variant": "main",
+    "macros": {
+     "FB_GEOM": 4,
+     "FB_W": 112,
+     "FB_R": 8,
+     "FB_CIN": 24,
+     "FB_NM": 1,
+     "FB_CMID": 24,
+     "FB_COUT": 16,
+     "FB_NBIN": 37,
+     "FB_BATCH": 8,
+     "FB_TIMING": 1,
+     "FB_REUSE": 1,
+     "FB_NOHMX": 0
+    },
+    "bytes": 3804,
+    "sha256": "f550a69ab0becb83588606477c313616d7a4580bf581dc827ed9421176e5f902",
+    "input_bytes": 77440,
+    "output_bytes": 29056,
+    "vector_stack_accesses": 0,
+    "flags": [
+     "--target=hexagon",
+     "-mcpu=hexagonv75",
+     "-mhvx",
+     "-mhvx-length=128b",
+     "-Os",
+     "-ffreestanding",
+     "-fno-builtin",
+     "-fno-stack-protector",
+     "-fno-unwind-tables",
+     "-fno-asynchronous-unwind-tables",
+     "-ffp-contract=off",
+     "-mllvm",
+     "-spill-func-threshold=100",
+     "-mllvm",
+     "-spill-func-threshold-Os=100",
+     "-G0",
+     "-fno-jump-tables",
+     "-DFB_GEOM=4",
+     "-DFB_W=112",
+     "-DFB_R=8",
+     "-DFB_CIN=24",
+     "-DFB_NM=1",
+     "-DFB_CMID=24",
+     "-DFB_COUT=16",
+     "-DFB_NBIN=37",
+     "-DFB_BATCH=8",
+     "-DFB_TIMING=1",
+     "-DFB_REUSE=1",
+     "-DFB_NOHMX=0"
+    ],
+    "toolchain": {
+     "clang": "clang version 23.1.4",
+     "linker": "LLD 23.1.4 (compatible with GNU linkers)",
+     "objcopy": "llvm-objcopy, compatible with GNU objcopy"
+    },
+    "sources": {
+     "tests/resident_graph_entry.S": "bb0b48aaf26908b7feccb7eacac98a93bfa1e483cb3cc84a25c060c60f5f1c14",
+     "src/framenpu/sdk/hmx.S": "ca725000e846c220cdf709a82ce61d223dd0862d66687fa968e41be18f262fb6",
+     "tests/hmx_block_probe.c": "0f541b2db645630c1d6ecb285b80f8b084ad582f807a1173d80b62dd9aaf240e",
+     "tests/landmark_common.h": "e2e922baaf80e217350ee3926e445449430ccbdb7cf3f55ed8409d73e89909bb",
+     "tests/hmx_block_layout.py": "ced35770431898d9a89255a801934a5896b6b5f7dcc71510ac60683612d1ac9b",
+     "src/framenpu/sdk/include/framenpu.h": "4e65f4b8fb82586428a810714d91540685cc4895810ad5bb753b178e1db62754",
+     "src/framenpu/sdk/include/fnpu_readback.h": "4c5fd740bcc9269a64d7923d51cedd11bda2a1b4ed5430dcd796332e20a8f820",
+     "src/framenpu/sdk/link.ld": "c0b7dd53a7e254de549280ead79f303db3ab657e13e8565e5be3852c29a08e82"
+    }
+   },
+   "teacher_112/nohmx": {
+    "format": "framenpu-hmx-block-probe-build",
+    "geometry": "teacher_112",
+    "variant": "nohmx",
+    "macros": {
+     "FB_GEOM": 4,
+     "FB_W": 112,
+     "FB_R": 8,
+     "FB_CIN": 24,
+     "FB_NM": 1,
+     "FB_CMID": 24,
+     "FB_COUT": 16,
+     "FB_NBIN": 37,
+     "FB_BATCH": 8,
+     "FB_TIMING": 1,
+     "FB_REUSE": 1,
+     "FB_NOHMX": 1
+    },
+    "bytes": 3724,
+    "sha256": "be4768ab5a9e10b48520528aecf3229f6c72f241409574699f2a052b1975eee9",
+    "input_bytes": 77440,
+    "output_bytes": 29056,
+    "vector_stack_accesses": 0,
+    "flags": [
+     "--target=hexagon",
+     "-mcpu=hexagonv75",
+     "-mhvx",
+     "-mhvx-length=128b",
+     "-Os",
+     "-ffreestanding",
+     "-fno-builtin",
+     "-fno-stack-protector",
+     "-fno-unwind-tables",
+     "-fno-asynchronous-unwind-tables",
+     "-ffp-contract=off",
+     "-mllvm",
+     "-spill-func-threshold=100",
+     "-mllvm",
+     "-spill-func-threshold-Os=100",
+     "-G0",
+     "-fno-jump-tables",
+     "-DFB_GEOM=4",
+     "-DFB_W=112",
+     "-DFB_R=8",
+     "-DFB_CIN=24",
+     "-DFB_NM=1",
+     "-DFB_CMID=24",
+     "-DFB_COUT=16",
+     "-DFB_NBIN=37",
+     "-DFB_BATCH=8",
+     "-DFB_TIMING=1",
+     "-DFB_REUSE=1",
+     "-DFB_NOHMX=1"
+    ],
+    "toolchain": {
+     "clang": "clang version 23.1.4",
+     "linker": "LLD 23.1.4 (compatible with GNU linkers)",
+     "objcopy": "llvm-objcopy, compatible with GNU objcopy"
+    },
+    "sources": {
+     "tests/resident_graph_entry.S": "bb0b48aaf26908b7feccb7eacac98a93bfa1e483cb3cc84a25c060c60f5f1c14",
+     "src/framenpu/sdk/hmx.S": "ca725000e846c220cdf709a82ce61d223dd0862d66687fa968e41be18f262fb6",
+     "tests/hmx_block_probe.c": "0f541b2db645630c1d6ecb285b80f8b084ad582f807a1173d80b62dd9aaf240e",
+     "tests/landmark_common.h": "e2e922baaf80e217350ee3926e445449430ccbdb7cf3f55ed8409d73e89909bb",
+     "tests/hmx_block_layout.py": "ced35770431898d9a89255a801934a5896b6b5f7dcc71510ac60683612d1ac9b",
+     "src/framenpu/sdk/include/framenpu.h": "4e65f4b8fb82586428a810714d91540685cc4895810ad5bb753b178e1db62754",
+     "src/framenpu/sdk/include/fnpu_readback.h": "4c5fd740bcc9269a64d7923d51cedd11bda2a1b4ed5430dcd796332e20a8f820",
+     "src/framenpu/sdk/link.ld": "c0b7dd53a7e254de549280ead79f303db3ab657e13e8565e5be3852c29a08e82"
+    }
+   },
+   "teacher_112/noreuse": {
+    "format": "framenpu-hmx-block-probe-build",
+    "geometry": "teacher_112",
+    "variant": "noreuse",
+    "macros": {
+     "FB_GEOM": 4,
+     "FB_W": 112,
+     "FB_R": 8,
+     "FB_CIN": 24,
+     "FB_NM": 1,
+     "FB_CMID": 24,
+     "FB_COUT": 16,
+     "FB_NBIN": 37,
+     "FB_BATCH": 8,
+     "FB_TIMING": 1,
+     "FB_REUSE": 0,
+     "FB_NOHMX": 0
+    },
+    "bytes": 3808,
+    "sha256": "d919fe84be36e430c0185479c8f8b92ec3860bd82639c6d35b351a23b4462b0a",
+    "input_bytes": 77440,
+    "output_bytes": 29056,
+    "vector_stack_accesses": 0,
+    "flags": [
+     "--target=hexagon",
+     "-mcpu=hexagonv75",
+     "-mhvx",
+     "-mhvx-length=128b",
+     "-Os",
+     "-ffreestanding",
+     "-fno-builtin",
+     "-fno-stack-protector",
+     "-fno-unwind-tables",
+     "-fno-asynchronous-unwind-tables",
+     "-ffp-contract=off",
+     "-mllvm",
+     "-spill-func-threshold=100",
+     "-mllvm",
+     "-spill-func-threshold-Os=100",
+     "-G0",
+     "-fno-jump-tables",
+     "-DFB_GEOM=4",
+     "-DFB_W=112",
+     "-DFB_R=8",
+     "-DFB_CIN=24",
+     "-DFB_NM=1",
+     "-DFB_CMID=24",
+     "-DFB_COUT=16",
+     "-DFB_NBIN=37",
+     "-DFB_BATCH=8",
+     "-DFB_TIMING=1",
+     "-DFB_REUSE=0",
+     "-DFB_NOHMX=0"
+    ],
+    "toolchain": {
+     "clang": "clang version 23.1.4",
+     "linker": "LLD 23.1.4 (compatible with GNU linkers)",
+     "objcopy": "llvm-objcopy, compatible with GNU objcopy"
+    },
+    "sources": {
+     "tests/resident_graph_entry.S": "bb0b48aaf26908b7feccb7eacac98a93bfa1e483cb3cc84a25c060c60f5f1c14",
+     "src/framenpu/sdk/hmx.S": "ca725000e846c220cdf709a82ce61d223dd0862d66687fa968e41be18f262fb6",
+     "tests/hmx_block_probe.c": "0f541b2db645630c1d6ecb285b80f8b084ad582f807a1173d80b62dd9aaf240e",
+     "tests/landmark_common.h": "e2e922baaf80e217350ee3926e445449430ccbdb7cf3f55ed8409d73e89909bb",
+     "tests/hmx_block_layout.py": "ced35770431898d9a89255a801934a5896b6b5f7dcc71510ac60683612d1ac9b",
+     "src/framenpu/sdk/include/framenpu.h": "4e65f4b8fb82586428a810714d91540685cc4895810ad5bb753b178e1db62754",
+     "src/framenpu/sdk/include/fnpu_readback.h": "4c5fd740bcc9269a64d7923d51cedd11bda2a1b4ed5430dcd796332e20a8f820",
+     "src/framenpu/sdk/link.ld": "c0b7dd53a7e254de549280ead79f303db3ab657e13e8565e5be3852c29a08e82"
+    }
+   },
+   "teacher_112/notime": {
+    "format": "framenpu-hmx-block-probe-build",
+    "geometry": "teacher_112",
+    "variant": "notime",
+    "macros": {
+     "FB_GEOM": 4,
+     "FB_W": 112,
+     "FB_R": 8,
+     "FB_CIN": 24,
+     "FB_NM": 1,
+     "FB_CMID": 24,
+     "FB_COUT": 16,
+     "FB_NBIN": 37,
+     "FB_BATCH": 8,
+     "FB_TIMING": 0,
+     "FB_REUSE": 1,
+     "FB_NOHMX": 0
+    },
+    "bytes": 3644,
+    "sha256": "1f52e05b14c66242aee562bce349eea22564fbd76074efd16bc107705e098dd5",
+    "input_bytes": 77440,
+    "output_bytes": 29056,
+    "vector_stack_accesses": 0,
+    "flags": [
+     "--target=hexagon",
+     "-mcpu=hexagonv75",
+     "-mhvx",
+     "-mhvx-length=128b",
+     "-Os",
+     "-ffreestanding",
+     "-fno-builtin",
+     "-fno-stack-protector",
+     "-fno-unwind-tables",
+     "-fno-asynchronous-unwind-tables",
+     "-ffp-contract=off",
+     "-mllvm",
+     "-spill-func-threshold=100",
+     "-mllvm",
+     "-spill-func-threshold-Os=100",
+     "-G0",
+     "-fno-jump-tables",
+     "-DFB_GEOM=4",
+     "-DFB_W=112",
+     "-DFB_R=8",
+     "-DFB_CIN=24",
+     "-DFB_NM=1",
+     "-DFB_CMID=24",
+     "-DFB_COUT=16",
+     "-DFB_NBIN=37",
+     "-DFB_BATCH=8",
+     "-DFB_TIMING=0",
+     "-DFB_REUSE=1",
+     "-DFB_NOHMX=0"
+    ],
+    "toolchain": {
+     "clang": "clang version 23.1.4",
+     "linker": "LLD 23.1.4 (compatible with GNU linkers)",
+     "objcopy": "llvm-objcopy, compatible with GNU objcopy"
+    },
+    "sources": {
+     "tests/resident_graph_entry.S": "bb0b48aaf26908b7feccb7eacac98a93bfa1e483cb3cc84a25c060c60f5f1c14",
+     "src/framenpu/sdk/hmx.S": "ca725000e846c220cdf709a82ce61d223dd0862d66687fa968e41be18f262fb6",
+     "tests/hmx_block_probe.c": "0f541b2db645630c1d6ecb285b80f8b084ad582f807a1173d80b62dd9aaf240e",
+     "tests/landmark_common.h": "e2e922baaf80e217350ee3926e445449430ccbdb7cf3f55ed8409d73e89909bb",
+     "tests/hmx_block_layout.py": "ced35770431898d9a89255a801934a5896b6b5f7dcc71510ac60683612d1ac9b",
+     "src/framenpu/sdk/include/framenpu.h": "4e65f4b8fb82586428a810714d91540685cc4895810ad5bb753b178e1db62754",
+     "src/framenpu/sdk/include/fnpu_readback.h": "4c5fd740bcc9269a64d7923d51cedd11bda2a1b4ed5430dcd796332e20a8f820",
+     "src/framenpu/sdk/link.ld": "c0b7dd53a7e254de549280ead79f303db3ab657e13e8565e5be3852c29a08e82"
+    }
+   }
+  },
+  "source_sha256": {
+   "tests/hardware_hmx_block.py": "27d3f66522d0c6d1801a3deb2d103a284165f008fbe0b6954aa386e26e16db01",
+   "tests/hmx_block_layout.py": "ced35770431898d9a89255a801934a5896b6b5f7dcc71510ac60683612d1ac9b"
+  },
+  "conditions": "synthetic activations; public v20a weights only for teacher_112",
+  "audits": {
+   "restored_jobs": 267,
+   "restored_hmx_jobs": 265
+  },
+  "cases": [
+   {
+    "geometry": "w050_112",
+    "fixture": "synthetic",
+    "role": "half-width fused 3x3 at 112x112 (convdwclip_0+conv_10 shape), 8-row band, synthetic weights",
+    "payload_sha256": "db4339fe7c3d0e0111281055f9b8b4346d38ff2b4903ee9df8848cc79fb27fe1",
+    "host_payload_ms": 0.288015,
+    "per_block": {
+     "k_tiles": 6,
+     "transactions": 2,
+     "blocks_per_job_rep": 28
+    },
+    "samples": [
+     {
+      "variant": "copy1",
+      "reps": 4,
+      "round": 0,
+      "body_ticks": 137322,
+      "phase_ticks": {
+       "weights": 1146,
+       "stage": 24487,
+       "pack": 88808,
+       "hmx": 21150,
+       "post": 1213,
+       "spill": 0,
+       "store": 336,
+       "setup": 181
+      },
+      "wrapper_ms": 8.780104166666666,
+      "error": {
+       "values": 7168,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.19603679086456632,
+       "exact_semantics_max_abs": 0.00044509395956993103
+      }
+     },
+     {
+      "variant": "copy1",
+      "reps": 1,
+      "round": 0,
+      "body_ticks": 34560,
+      "phase_ticks": {
+       "weights": 310,
+       "stage": 6154,
+       "pack": 22176,
+       "hmx": 5373,
+       "post": 373,
+       "spill": 0,
+       "store": 84,
+       "setup": 68
+      },
+      "wrapper_ms": 3.4384895833333333,
+      "error": {
+       "values": 7168,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.19603679086456632,
+       "exact_semantics_max_abs": 0.00044509395956993103
+      }
+     },
+     {
+      "variant": "main",
+      "reps": 4,
+      "round": 0,
+      "body_ticks": 149465,
+      "phase_ticks": {
+       "weights": 25029,
+       "stage": 9952,
+       "pack": 94228,
+       "hmx": 18539,
+       "post": 1203,
+       "spill": 0,
+       "store": 336,
+       "setup": 177
+      },
+      "wrapper_ms": 9.434739583333334,
+      "error": {
+       "values": 7168,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.19603679086456632,
+       "exact_semantics_max_abs": 0.00044509395956993103
+      }
+     },
+     {
+      "variant": "main",
+      "reps": 1,
+      "round": 0,
+      "body_ticks": 37485,
+      "phase_ticks": {
+       "weights": 6186,
+       "stage": 2647,
+       "pack": 23419,
+       "hmx": 4678,
+       "post": 372,
+       "spill": 0,
+       "store": 84,
+       "setup": 68
+      },
+      "wrapper_ms": 3.59609375,
+      "error": {
+       "values": 7168,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.19603679086456632,
+       "exact_semantics_max_abs": 0.00044509395956993103
+      }
+     },
+     {
+      "variant": "nohmx",
+      "reps": 4,
+      "round": 0,
+      "body_ticks": 144338,
+      "phase_ticks": {
+       "weights": 23949,
+       "stage": 10686,
+       "pack": 93443,
+       "hmx": 14507,
+       "post": 1208,
+       "spill": 0,
+       "store": 367,
+       "setup": 176
+      },
+      "wrapper_ms": 9.162083333333333,
+      "error": null
+     },
+     {
+      "variant": "nohmx",
+      "reps": 1,
+      "round": 0,
+      "body_ticks": 36072,
+      "phase_ticks": {
+       "weights": 5856,
+       "stage": 2883,
+       "pack": 23137,
+       "hmx": 3620,
+       "post": 371,
+       "spill": 0,
+       "store": 118,
+       "setup": 85
+      },
+      "wrapper_ms": 3.5141145833333334,
+      "error": null
+     },
+     {
+      "variant": "noreuse",
+      "reps": 4,
+      "round": 0,
+      "body_ticks": 154261,
+      "phase_ticks": {
+       "weights": 29813,
+       "stage": 9953,
+       "pack": 94208,
+       "hmx": 18535,
+       "post": 1222,
+       "spill": 0,
+       "store": 346,
+       "setup": 183
+      },
+      "wrapper_ms": 9.69640625,
+      "error": {
+       "values": 7168,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.19603679086456632,
+       "exact_semantics_max_abs": 0.00044509395956993103
+      }
+     },
+     {
+      "variant": "noreuse",
+      "reps": 1,
+      "round": 0,
+      "body_ticks": 38709,
+      "phase_ticks": {
+       "weights": 7418,
+       "stage": 2589,
+       "pack": 23484,
+       "hmx": 4675,
+       "post": 368,
+       "spill": 0,
+       "store": 85,
+       "setup": 68
+      },
+      "wrapper_ms": 3.6515104166666665,
+      "error": {
+       "values": 7168,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.19603679086456632,
+       "exact_semantics_max_abs": 0.00044509395956993103
+      }
+     },
+     {
+      "variant": "notime",
+      "reps": 4,
+      "round": 0,
+      "body_ticks": 124362,
+      "phase_ticks": {
+       "weights": 0,
+       "stage": 0,
+       "pack": 0,
+       "hmx": 0,
+       "post": 0,
+       "spill": 0,
+       "store": 0,
+       "setup": 0
+      },
+      "wrapper_ms": 8.122291666666667,
+      "error": {
+       "values": 7168,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.19603679086456632,
+       "exact_semantics_max_abs": 0.00044509395956993103
+      }
+     },
+     {
+      "variant": "notime",
+      "reps": 1,
+      "round": 0,
+      "body_ticks": 31483,
+      "phase_ticks": {
+       "weights": 0,
+       "stage": 0,
+       "pack": 0,
+       "hmx": 0,
+       "post": 0,
+       "spill": 0,
+       "store": 0,
+       "setup": 0
+      },
+      "wrapper_ms": 3.2826041666666668,
+      "error": {
+       "values": 7168,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.19603679086456632,
+       "exact_semantics_max_abs": 0.00044509395956993103
+      }
+     },
+     {
+      "variant": "notime",
+      "reps": 1,
+      "round": 1,
+      "body_ticks": 31404,
+      "phase_ticks": {
+       "weights": 0,
+       "stage": 0,
+       "pack": 0,
+       "hmx": 0,
+       "post": 0,
+       "spill": 0,
+       "store": 0,
+       "setup": 0
+      },
+      "wrapper_ms": 3.2952083333333335,
+      "error": {
+       "values": 7168,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.19603679086456632,
+       "exact_semantics_max_abs": 0.00044509395956993103
+      }
+     },
+     {
+      "variant": "notime",
+      "reps": 4,
+      "round": 1,
+      "body_ticks": 124353,
+      "phase_ticks": {
+       "weights": 0,
+       "stage": 0,
+       "pack": 0,
+       "hmx": 0,
+       "post": 0,
+       "spill": 0,
+       "store": 0,
+       "setup": 0
+      },
+      "wrapper_ms": 8.114479166666667,
+      "error": {
+       "values": 7168,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.19603679086456632,
+       "exact_semantics_max_abs": 0.00044509395956993103
+      }
+     },
+     {
+      "variant": "noreuse",
+      "reps": 1,
+      "round": 1,
+      "body_ticks": 38849,
+      "phase_ticks": {
+       "weights": 7510,
+       "stage": 2525,
+       "pack": 23551,
+       "hmx": 4685,
+       "post": 384,
+       "spill": 0,
+       "store": 94,
+       "setup": 68
+      },
+      "wrapper_ms": 3.6774479166666665,
+      "error": {
+       "values": 7168,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.19603679086456632,
+       "exact_semantics_max_abs": 0.00044509395956993103
+      }
+     },
+     {
+      "variant": "noreuse",
+      "reps": 4,
+      "round": 1,
+      "body_ticks": 154344,
+      "phase_ticks": {
+       "weights": 29893,
+       "stage": 9860,
+       "pack": 94285,
+       "hmx": 18552,
+       "post": 1225,
+       "spill": 0,
+       "store": 346,
+       "setup": 182
+      },
+      "wrapper_ms": 9.69265625,
+      "error": {
+       "values": 7168,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.19603679086456632,
+       "exact_semantics_max_abs": 0.00044509395956993103
+      }
+     },
+     {
+      "variant": "nohmx",
+      "reps": 1,
+      "round": 1,
+      "body_ticks": 36656,
+      "phase_ticks": {
+       "weights": 6320,
+       "stage": 2499,
+       "pack": 23602,
+       "hmx": 3654,
+       "post": 371,
+       "spill": 0,
+       "store": 118,
+       "setup": 90
+      },
+      "wrapper_ms": 3.5638020833333335,
+      "error": null
+     },
+     {
+      "variant": "nohmx",
+      "reps": 4,
+      "round": 1,
+      "body_ticks": 144800,
+      "phase_ticks": {
+       "weights": 24475,
+       "stage": 10119,
+       "pack": 93991,
+       "hmx": 14460,
+       "post": 1211,
+       "spill": 0,
+       "store": 370,
+       "setup": 172
+      },
+      "wrapper_ms": 9.201822916666666,
+      "error": null
+     },
+     {
+      "variant": "main",
+      "reps": 1,
+      "round": 1,
+      "body_ticks": 37719,
+      "phase_ticks": {
+       "weights": 6377,
+       "stage": 2478,
+       "pack": 23610,
+       "hmx": 4688,
+       "post": 383,
+       "spill": 0,
+       "store": 84,
+       "setup": 68
+      },
+      "wrapper_ms": 3.625625,
+      "error": {
+       "values": 7168,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.19603679086456632,
+       "exact_semantics_max_abs": 0.00044509395956993103
+      }
+     },
+     {
+      "variant": "main",
+      "reps": 4,
+      "round": 1,
+      "body_ticks": 149191,
+      "phase_ticks": {
+       "weights": 24745,
+       "stage": 10207,
+       "pack": 93984,
+       "hmx": 18517,
+       "post": 1223,
+       "spill": 0,
+       "store": 336,
+       "setup": 178
+      },
+      "wrapper_ms": 9.4071875,
+      "error": {
+       "values": 7168,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.19603679086456632,
+       "exact_semantics_max_abs": 0.00044509395956993103
+      }
+     },
+     {
+      "variant": "copy1",
+      "reps": 1,
+      "round": 1,
+      "body_ticks": 34605,
+      "phase_ticks": {
+       "weights": 310,
+       "stage": 6175,
+       "pack": 22187,
+       "hmx": 5379,
+       "post": 371,
+       "spill": 0,
+       "store": 84,
+       "setup": 68
+      },
+      "wrapper_ms": 3.4429166666666666,
+      "error": {
+       "values": 7168,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.19603679086456632,
+       "exact_semantics_max_abs": 0.00044509395956993103
+      }
+     },
+     {
+      "variant": "copy1",
+      "reps": 4,
+      "round": 1,
+      "body_ticks": 137289,
+      "phase_ticks": {
+       "weights": 1147,
+       "stage": 24570,
+       "pack": 88691,
+       "hmx": 21159,
+       "post": 1210,
+       "spill": 0,
+       "store": 336,
+       "setup": 175
+      },
+      "wrapper_ms": 8.789114583333333,
+      "error": {
+       "values": 7168,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.19603679086456632,
+       "exact_semantics_max_abs": 0.00044509395956993103
+      }
+     },
+     {
+      "variant": "copy1",
+      "reps": 4,
+      "round": 2,
+      "body_ticks": 137227,
+      "phase_ticks": {
+       "weights": 1146,
+       "stage": 24461,
+       "pack": 88764,
+       "hmx": 21133,
+       "post": 1213,
+       "spill": 0,
+       "store": 336,
+       "setup": 173
+      },
+      "wrapper_ms": 8.78828125,
+      "error": {
+       "values": 7168,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.19603679086456632,
+       "exact_semantics_max_abs": 0.00044509395956993103
+      }
+     },
+     {
+      "variant": "copy1",
+      "reps": 1,
+      "round": 2,
+      "body_ticks": 34603,
+      "phase_ticks": {
+       "weights": 318,
+       "stage": 6157,
+       "pack": 22218,
+       "hmx": 5369,
+       "post": 362,
+       "spill": 0,
+       "store": 84,
+       "setup": 64
+      },
+      "wrapper_ms": 3.4339583333333334,
+      "error": {
+       "values": 7168,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.19603679086456632,
+       "exact_semantics_max_abs": 0.00044509395956993103
+      }
+     },
+     {
+      "variant": "main",
+      "reps": 4,
+      "round": 2,
+      "body_ticks": 146951,
+      "phase_ticks": {
+       "weights": 22900,
+       "stage": 11812,
+       "pack": 92115,
+       "hmx": 18415,
+       "post": 1205,
+       "spill": 0,
+       "store": 336,
+       "setup": 167
+      },
+      "wrapper_ms": 9.275260416666667,
+      "error": {
+       "values": 7168,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.19603679086456632,
+       "exact_semantics_max_abs": 0.00044509395956993103
+      }
+     },
+     {
+      "variant": "main",
+      "reps": 1,
+      "round": 2,
+      "body_ticks": 37611,
+      "phase_ticks": {
+       "weights": 6263,
+       "stage": 2600,
+       "pack": 23504,
+       "hmx": 4686,
+       "post": 373,
+       "spill": 0,
+       "store": 84,
+       "setup": 70
+      },
+      "wrapper_ms": 3.599270833333333,
+      "error": {
+       "values": 7168,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.19603679086456632,
+       "exact_semantics_max_abs": 0.00044509395956993103
+      }
+     },
+     {
+      "variant": "nohmx",
+      "reps": 4,
+      "round": 2,
+      "body_ticks": 144364,
+      "phase_ticks": {
+       "weights": 24090,
+       "stage": 10479,
+       "pack": 93594,
+       "hmx": 14444,
+       "post": 1210,
+       "spill": 0,
+       "store": 370,
+       "setup": 175
+      },
+      "wrapper_ms": 9.16296875,
+      "error": null
+     },
+     {
+      "variant": "nohmx",
+      "reps": 1,
+      "round": 2,
+      "body_ticks": 36576,
+      "phase_ticks": {
+       "weights": 6275,
+       "stage": 2523,
+       "pack": 23565,
+       "hmx": 3636,
+       "post": 369,
+       "spill": 0,
+       "store": 118,
+       "setup": 88
+      },
+      "wrapper_ms": 3.540677083333333,
+      "error": null
+     },
+     {
+      "variant": "noreuse",
+      "reps": 4,
+      "round": 2,
+      "body_ticks": 154164,
+      "phase_ticks": {
+       "weights": 29710,
+       "stage": 10022,
+       "pack": 94149,
+       "hmx": 18530,
+       "post": 1223,
+       "spill": 0,
+       "store": 347,
+       "setup": 182
+      },
+      "wrapper_ms": 9.654270833333333,
+      "error": {
+       "values": 7168,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.19603679086456632,
+       "exact_semantics_max_abs": 0.00044509395956993103
+      }
+     },
+     {
+      "variant": "noreuse",
+      "reps": 1,
+      "round": 2,
+      "body_ticks": 38863,
+      "phase_ticks": {
+       "weights": 7506,
+       "stage": 2523,
+       "pack": 23584,
+       "hmx": 4687,
+       "post": 373,
+       "spill": 0,
+       "store": 94,
+       "setup": 64
+      },
+      "wrapper_ms": 3.64671875,
+      "error": {
+       "values": 7168,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.19603679086456632,
+       "exact_semantics_max_abs": 0.00044509395956993103
+      }
+     },
+     {
+      "variant": "notime",
+      "reps": 4,
+      "round": 2,
+      "body_ticks": 124516,
+      "phase_ticks": {
+       "weights": 0,
+       "stage": 0,
+       "pack": 0,
+       "hmx": 0,
+       "post": 0,
+       "spill": 0,
+       "store": 0,
+       "setup": 0
+      },
+      "wrapper_ms": 8.117708333333333,
+      "error": {
+       "values": 7168,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.19603679086456632,
+       "exact_semantics_max_abs": 0.00044509395956993103
+      }
+     },
+     {
+      "variant": "notime",
+      "reps": 1,
+      "round": 2,
+      "body_ticks": 31271,
+      "phase_ticks": {
+       "weights": 0,
+       "stage": 0,
+       "pack": 0,
+       "hmx": 0,
+       "post": 0,
+       "spill": 0,
+       "store": 0,
+       "setup": 0
+      },
+      "wrapper_ms": 3.251145833333333,
+      "error": {
+       "values": 7168,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.19603679086456632,
+       "exact_semantics_max_abs": 0.00044509395956993103
+      }
+     },
+     {
+      "variant": "notime",
+      "reps": 1,
+      "round": 3,
+      "body_ticks": 31498,
+      "phase_ticks": {
+       "weights": 0,
+       "stage": 0,
+       "pack": 0,
+       "hmx": 0,
+       "post": 0,
+       "spill": 0,
+       "store": 0,
+       "setup": 0
+      },
+      "wrapper_ms": 3.28140625,
+      "error": {
+       "values": 7168,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.19603679086456632,
+       "exact_semantics_max_abs": 0.00044509395956993103
+      }
+     },
+     {
+      "variant": "notime",
+      "reps": 4,
+      "round": 3,
+      "body_ticks": 124253,
+      "phase_ticks": {
+       "weights": 0,
+       "stage": 0,
+       "pack": 0,
+       "hmx": 0,
+       "post": 0,
+       "spill": 0,
+       "store": 0,
+       "setup": 0
+      },
+      "wrapper_ms": 8.1065625,
+      "error": {
+       "values": 7168,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.19603679086456632,
+       "exact_semantics_max_abs": 0.00044509395956993103
+      }
+     },
+     {
+      "variant": "noreuse",
+      "reps": 1,
+      "round": 3,
+      "body_ticks": 38764,
+      "phase_ticks": {
+       "weights": 7423,
+       "stage": 2598,
+       "pack": 23488,
+       "hmx": 4679,
+       "post": 383,
+       "spill": 0,
+       "store": 94,
+       "setup": 67
+      },
+      "wrapper_ms": 3.6632291666666665,
+      "error": {
+       "values": 7168,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.19603679086456632,
+       "exact_semantics_max_abs": 0.00044509395956993103
+      }
+     },
+     {
+      "variant": "noreuse",
+      "reps": 4,
+      "round": 3,
+      "body_ticks": 154023,
+      "phase_ticks": {
+       "weights": 29629,
+       "stage": 10057,
+       "pack": 94041,
+       "hmx": 18545,
+       "post": 1223,
+       "spill": 0,
+       "store": 346,
+       "setup": 181
+      },
+      "wrapper_ms": 9.6778125,
+      "error": {
+       "values": 7168,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.19603679086456632,
+       "exact_semantics_max_abs": 0.00044509395956993103
+      }
+     },
+     {
+      "variant": "nohmx",
+      "reps": 1,
+      "round": 3,
+      "body_ticks": 36245,
+      "phase_ticks": {
+       "weights": 5979,
+       "stage": 2765,
+       "pack": 23297,
+       "hmx": 3633,
+       "post": 367,
+       "spill": 0,
+       "store": 115,
+       "setup": 87
+      },
+      "wrapper_ms": 3.5178125,
+      "error": null
+     },
+     {
+      "variant": "nohmx",
+      "reps": 4,
+      "round": 3,
+      "body_ticks": 144559,
+      "phase_ticks": {
+       "weights": 24288,
+       "stage": 10325,
+       "pack": 93733,
+       "hmx": 14453,
+       "post": 1212,
+       "spill": 0,
+       "store": 370,
+       "setup": 176
+      },
+      "wrapper_ms": 9.199895833333333,
+      "error": null
+     },
+     {
+      "variant": "main",
+      "reps": 1,
+      "round": 3,
+      "body_ticks": 37754,
+      "phase_ticks": {
+       "weights": 6369,
+       "stage": 2499,
+       "pack": 23636,
+       "hmx": 4683,
+       "post": 384,
+       "spill": 0,
+       "store": 84,
+       "setup": 68
+      },
+      "wrapper_ms": 3.62578125,
+      "error": {
+       "values": 7168,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.19603679086456632,
+       "exact_semantics_max_abs": 0.00044509395956993103
+      }
+     },
+     {
+      "variant": "main",
+      "reps": 4,
+      "round": 3,
+      "body_ticks": 149106,
+      "phase_ticks": {
+       "weights": 24761,
+       "stage": 10200,
+       "pack": 93896,
+       "hmx": 18524,
+       "post": 1206,
+       "spill": 0,
+       "store": 336,
+       "setup": 182
+      },
+      "wrapper_ms": 9.3984375,
+      "error": {
+       "values": 7168,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.19603679086456632,
+       "exact_semantics_max_abs": 0.00044509395956993103
+      }
+     },
+     {
+      "variant": "copy1",
+      "reps": 1,
+      "round": 3,
+      "body_ticks": 34674,
+      "phase_ticks": {
+       "weights": 309,
+       "stage": 6161,
+       "pack": 22262,
+       "hmx": 5399,
+       "post": 370,
+       "spill": 0,
+       "store": 84,
+       "setup": 68
+      },
+      "wrapper_ms": 3.4367708333333336,
+      "error": {
+       "values": 7168,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.19603679086456632,
+       "exact_semantics_max_abs": 0.00044509395956993103
+      }
+     },
+     {
+      "variant": "copy1",
+      "reps": 4,
+      "round": 3,
+      "body_ticks": 137469,
+      "phase_ticks": {
+       "weights": 1146,
+       "stage": 24575,
+       "pack": 88826,
+       "hmx": 21191,
+       "post": 1212,
+       "spill": 0,
+       "store": 336,
+       "setup": 182
+      },
+      "wrapper_ms": 8.809791666666667,
+      "error": {
+       "values": 7168,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.19603679086456632,
+       "exact_semantics_max_abs": 0.00044509395956993103
+      }
+     },
+     {
+      "variant": "copy1",
+      "reps": 4,
+      "round": 4,
+      "body_ticks": 137168,
+      "phase_ticks": {
+       "weights": 1146,
+       "stage": 24437,
+       "pack": 88702,
+       "hmx": 21150,
+       "post": 1214,
+       "spill": 0,
+       "store": 336,
+       "setup": 182
+      },
+      "wrapper_ms": 8.760677083333333,
+      "error": {
+       "values": 7168,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.19603679086456632,
+       "exact_semantics_max_abs": 0.00044509395956993103
+      }
+     },
+     {
+      "variant": "copy1",
+      "reps": 1,
+      "round": 4,
+      "body_ticks": 34442,
+      "phase_ticks": {
+       "weights": 318,
+       "stage": 6097,
+       "pack": 22133,
+       "hmx": 5364,
+       "post": 360,
+       "spill": 0,
+       "store": 84,
+       "setup": 64
+      },
+      "wrapper_ms": 3.4091145833333334,
+      "error": {
+       "values": 7168,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.19603679086456632,
+       "exact_semantics_max_abs": 0.00044509395956993103
+      }
+     },
+     {
+      "variant": "main",
+      "reps": 4,
+      "round": 4,
+      "body_ticks": 148887,
+      "phase_ticks": {
+       "weights": 24521,
+       "stage": 10386,
+       "pack": 93725,
+       "hmx": 18512,
+       "post": 1224,
+       "spill": 0,
+       "store": 336,
+       "setup": 182
+      },
+      "wrapper_ms": 9.409895833333334,
+      "error": {
+       "values": 7168,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.19603679086456632,
+       "exact_semantics_max_abs": 0.00044509395956993103
+      }
+     },
+     {
+      "variant": "main",
+      "reps": 1,
+      "round": 4,
+      "body_ticks": 37625,
+      "phase_ticks": {
+       "weights": 6287,
+       "stage": 2585,
+       "pack": 23507,
+       "hmx": 4681,
+       "post": 382,
+       "spill": 0,
+       "store": 84,
+       "setup": 68
+      },
+      "wrapper_ms": 3.6002604166666665,
+      "error": {
+       "values": 7168,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.19603679086456632,
+       "exact_semantics_max_abs": 0.00044509395956993103
+      }
+     },
+     {
+      "variant": "nohmx",
+      "reps": 4,
+      "round": 4,
+      "body_ticks": 144793,
+      "phase_ticks": {
+       "weights": 24440,
+       "stage": 10239,
+       "pack": 93901,
+       "hmx": 14458,
+       "post": 1211,
+       "spill": 0,
+       "store": 370,
+       "setup": 172
+      },
+      "wrapper_ms": 9.175677083333333,
+      "error": null
+     },
+     {
+      "variant": "nohmx",
+      "reps": 1,
+      "round": 4,
+      "body_ticks": 36464,
+      "phase_ticks": {
+       "weights": 6178,
+       "stage": 2603,
+       "pack": 23474,
+       "hmx": 3629,
+       "post": 372,
+       "spill": 0,
+       "store": 118,
+       "setup": 88
+      },
+      "wrapper_ms": 3.5538020833333333,
+      "error": null
+     },
+     {
+      "variant": "noreuse",
+      "reps": 4,
+      "round": 4,
+      "body_ticks": 153771,
+      "phase_ticks": {
+       "weights": 29399,
+       "stage": 10206,
+       "pack": 93897,
+       "hmx": 18515,
+       "post": 1224,
+       "spill": 0,
+       "store": 346,
+       "setup": 183
+      },
+      "wrapper_ms": 9.656145833333333,
+      "error": {
+       "values": 7168,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.19603679086456632,
+       "exact_semantics_max_abs": 0.00044509395956993103
+      }
+     },
+     {
+      "variant": "noreuse",
+      "reps": 1,
+      "round": 4,
+      "body_ticks": 38628,
+      "phase_ticks": {
+       "weights": 7317,
+       "stage": 2661,
+       "pack": 23433,
+       "hmx": 4681,
+       "post": 362,
+       "spill": 0,
+       "store": 84,
+       "setup": 68
+      },
+      "wrapper_ms": 3.6559375,
+      "error": {
+       "values": 7168,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.19603679086456632,
+       "exact_semantics_max_abs": 0.00044509395956993103
+      }
+     },
+     {
+      "variant": "notime",
+      "reps": 4,
+      "round": 4,
+      "body_ticks": 124286,
+      "phase_ticks": {
+       "weights": 0,
+       "stage": 0,
+       "pack": 0,
+       "hmx": 0,
+       "post": 0,
+       "spill": 0,
+       "store": 0,
+       "setup": 0
+      },
+      "wrapper_ms": 8.129114583333333,
+      "error": {
+       "values": 7168,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.19603679086456632,
+       "exact_semantics_max_abs": 0.00044509395956993103
+      }
+     },
+     {
+      "variant": "notime",
+      "reps": 1,
+      "round": 4,
+      "body_ticks": 31431,
+      "phase_ticks": {
+       "weights": 0,
+       "stage": 0,
+       "pack": 0,
+       "hmx": 0,
+       "post": 0,
+       "spill": 0,
+       "store": 0,
+       "setup": 0
+      },
+      "wrapper_ms": 3.280572916666667,
+      "error": {
+       "values": 7168,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.19603679086456632,
+       "exact_semantics_max_abs": 0.00044509395956993103
+      }
+     }
+    ],
+    "repeat_counts": [
+     1,
+     4
+    ]
+   },
+   {
+    "geometry": "w050_14",
+    "fixture": "synthetic",
+    "role": "half-width fused 3x3 at 14x14 (convclip_6+convdwclip_6+conv_22 shape), whole map, synthetic weights",
+    "payload_sha256": "80f128de09187a5daeec4eaeb0f564bcaea2fe2b9884f0f2c035a7996dcc6ad9",
+    "host_payload_ms": 0.741078,
+    "per_block": {
+     "k_tiles": 40,
+     "transactions": 6,
+     "blocks_per_job_rep": 7
+    },
+    "samples": [
+     {
+      "variant": "copy1",
+      "reps": 2,
+      "round": 0,
+      "body_ticks": 121438,
+      "phase_ticks": {
+       "weights": 4374,
+       "stage": 16404,
+       "pack": 83219,
+       "hmx": 16273,
+       "post": 782,
+       "spill": 154,
+       "store": 102,
+       "setup": 92
+      },
+      "wrapper_ms": 7.962552083333334,
+      "error": {
+       "values": 4704,
+       "max_abs": 0.0003662109375,
+       "max_error_to_bound_ratio": 0.0744978614603367,
+       "exact_semantics_max_abs": 0.00034263968063896755,
+       "spilled_mid_max_abs": 0.000244140625
+      }
+     },
+     {
+      "variant": "copy1",
+      "reps": 1,
+      "round": 0,
+      "body_ticks": 60818,
+      "phase_ticks": {
+       "weights": 2190,
+       "stage": 8208,
+       "pack": 41531,
+       "hmx": 8217,
+       "post": 433,
+       "spill": 77,
+       "store": 53,
+       "setup": 78
+      },
+      "wrapper_ms": 4.822552083333333,
+      "error": {
+       "values": 4704,
+       "max_abs": 0.0003662109375,
+       "max_error_to_bound_ratio": 0.0744978614603367,
+       "exact_semantics_max_abs": 0.00034263968063896755,
+       "spilled_mid_max_abs": 0.000244140625
+      }
+     },
+     {
+      "variant": "main",
+      "reps": 2,
+      "round": 0,
+      "body_ticks": 133376,
+      "phase_ticks": {
+       "weights": 24615,
+       "stage": 9227,
+       "pack": 82022,
+       "hmx": 13677,
+       "post": 790,
+       "spill": 2805,
+       "store": 99,
+       "setup": 103
+      },
+      "wrapper_ms": 8.585625,
+      "error": {
+       "values": 4704,
+       "max_abs": 0.0003662109375,
+       "max_error_to_bound_ratio": 0.0744978614603367,
+       "exact_semantics_max_abs": 0.00034263968063896755,
+       "spilled_mid_max_abs": 0.000244140625
+      }
+     },
+     {
+      "variant": "main",
+      "reps": 1,
+      "round": 0,
+      "body_ticks": 65121,
+      "phase_ticks": {
+       "weights": 11612,
+       "stage": 5303,
+       "pack": 39504,
+       "hmx": 6708,
+       "post": 431,
+       "spill": 1401,
+       "store": 51,
+       "setup": 81
+      },
+      "wrapper_ms": 5.019947916666666,
+      "error": {
+       "values": 4704,
+       "max_abs": 0.0003662109375,
+       "max_error_to_bound_ratio": 0.0744978614603367,
+       "exact_semantics_max_abs": 0.00034263968063896755,
+       "spilled_mid_max_abs": 0.000244140625
+      }
+     },
+     {
+      "variant": "nohmx",
+      "reps": 2,
+      "round": 0,
+      "body_ticks": 128681,
+      "phase_ticks": {
+       "weights": 23914,
+       "stage": 9428,
+       "pack": 79608,
+       "hmx": 11883,
+       "post": 790,
+       "spill": 2866,
+       "store": 112,
+       "setup": 79
+      },
+      "wrapper_ms": 8.362083333333333,
+      "error": null
+     },
+     {
+      "variant": "nohmx",
+      "reps": 1,
+      "round": 0,
+      "body_ticks": 65197,
+      "phase_ticks": {
+       "weights": 12318,
+       "stage": 4468,
+       "pack": 40388,
+       "hmx": 5995,
+       "post": 441,
+       "spill": 1447,
+       "store": 56,
+       "setup": 83
+      },
+      "wrapper_ms": 5.049322916666667,
+      "error": null
+     },
+     {
+      "variant": "notime",
+      "reps": 2,
+      "round": 0,
+      "body_ticks": 115161,
+      "phase_ticks": {
+       "weights": 0,
+       "stage": 0,
+       "pack": 0,
+       "hmx": 0,
+       "post": 0,
+       "spill": 0,
+       "store": 0,
+       "setup": 0
+      },
+      "wrapper_ms": 7.644114583333334,
+      "error": {
+       "values": 4704,
+       "max_abs": 0.0003662109375,
+       "max_error_to_bound_ratio": 0.0744978614603367,
+       "exact_semantics_max_abs": 0.00034263968063896755,
+       "spilled_mid_max_abs": 0.000244140625
+      }
+     },
+     {
+      "variant": "notime",
+      "reps": 1,
+      "round": 0,
+      "body_ticks": 57055,
+      "phase_ticks": {
+       "weights": 0,
+       "stage": 0,
+       "pack": 0,
+       "hmx": 0,
+       "post": 0,
+       "spill": 0,
+       "store": 0,
+       "setup": 0
+      },
+      "wrapper_ms": 4.619791666666667,
+      "error": {
+       "values": 4704,
+       "max_abs": 0.0003662109375,
+       "max_error_to_bound_ratio": 0.0744978614603367,
+       "exact_semantics_max_abs": 0.00034263968063896755,
+       "spilled_mid_max_abs": 0.000244140625
+      }
+     },
+     {
+      "variant": "notime",
+      "reps": 1,
+      "round": 1,
+      "body_ticks": 57775,
+      "phase_ticks": {
+       "weights": 0,
+       "stage": 0,
+       "pack": 0,
+       "hmx": 0,
+       "post": 0,
+       "spill": 0,
+       "store": 0,
+       "setup": 0
+      },
+      "wrapper_ms": 4.671822916666667,
+      "error": {
+       "values": 4704,
+       "max_abs": 0.0003662109375,
+       "max_error_to_bound_ratio": 0.0744978614603367,
+       "exact_semantics_max_abs": 0.00034263968063896755,
+       "spilled_mid_max_abs": 0.000244140625
+      }
+     },
+     {
+      "variant": "notime",
+      "reps": 2,
+      "round": 1,
+      "body_ticks": 113404,
+      "phase_ticks": {
+       "weights": 0,
+       "stage": 0,
+       "pack": 0,
+       "hmx": 0,
+       "post": 0,
+       "spill": 0,
+       "store": 0,
+       "setup": 0
+      },
+      "wrapper_ms": 7.528802083333333,
+      "error": {
+       "values": 4704,
+       "max_abs": 0.0003662109375,
+       "max_error_to_bound_ratio": 0.0744978614603367,
+       "exact_semantics_max_abs": 0.00034263968063896755,
+       "spilled_mid_max_abs": 0.000244140625
+      }
+     },
+     {
+      "variant": "nohmx",
+      "reps": 1,
+      "round": 1,
+      "body_ticks": 64887,
+      "phase_ticks": {
+       "weights": 12171,
+       "stage": 4603,
+       "pack": 40135,
+       "hmx": 5957,
+       "post": 441,
+       "spill": 1446,
+       "store": 56,
+       "setup": 77
+      },
+      "wrapper_ms": 5.030625,
+      "error": null
+     },
+     {
+      "variant": "nohmx",
+      "reps": 2,
+      "round": 1,
+      "body_ticks": 130039,
+      "phase_ticks": {
+       "weights": 24550,
+       "stage": 8838,
+       "pack": 80837,
+       "hmx": 11964,
+       "post": 790,
+       "spill": 2867,
+       "store": 112,
+       "setup": 80
+      },
+      "wrapper_ms": 8.429739583333333,
+      "error": null
+     },
+     {
+      "variant": "main",
+      "reps": 1,
+      "round": 1,
+      "body_ticks": 67109,
+      "phase_ticks": {
+       "weights": 12430,
+       "stage": 4539,
+       "pack": 41201,
+       "hmx": 6894,
+       "post": 435,
+       "spill": 1431,
+       "store": 50,
+       "setup": 91
+      },
+      "wrapper_ms": 5.13875,
+      "error": {
+       "values": 4704,
+       "max_abs": 0.0003662109375,
+       "max_error_to_bound_ratio": 0.0744978614603367,
+       "exact_semantics_max_abs": 0.00034263968063896755,
+       "spilled_mid_max_abs": 0.000244140625
+      }
+     },
+     {
+      "variant": "main",
+      "reps": 2,
+      "round": 1,
+      "body_ticks": 133012,
+      "phase_ticks": {
+       "weights": 24458,
+       "stage": 9389,
+       "pack": 81676,
+       "hmx": 13665,
+       "post": 784,
+       "spill": 2801,
+       "store": 99,
+       "setup": 102
+      },
+      "wrapper_ms": 8.591666666666667,
+      "error": {
+       "values": 4704,
+       "max_abs": 0.0003662109375,
+       "max_error_to_bound_ratio": 0.0744978614603367,
+       "exact_semantics_max_abs": 0.00034263968063896755,
+       "spilled_mid_max_abs": 0.000244140625
+      }
+     },
+     {
+      "variant": "copy1",
+      "reps": 1,
+      "round": 1,
+      "body_ticks": 60924,
+      "phase_ticks": {
+       "weights": 2176,
+       "stage": 8245,
+       "pack": 41614,
+       "hmx": 8212,
+       "post": 431,
+       "spill": 77,
+       "store": 53,
+       "setup": 78
+      },
+      "wrapper_ms": 4.81265625,
+      "error": {
+       "values": 4704,
+       "max_abs": 0.0003662109375,
+       "max_error_to_bound_ratio": 0.0744978614603367,
+       "exact_semantics_max_abs": 0.00034263968063896755,
+       "spilled_mid_max_abs": 0.000244140625
+      }
+     },
+     {
+      "variant": "copy1",
+      "reps": 2,
+      "round": 1,
+      "body_ticks": 120893,
+      "phase_ticks": {
+       "weights": 4354,
+       "stage": 16390,
+       "pack": 82698,
+       "hmx": 16281,
+       "post": 782,
+       "spill": 154,
+       "store": 103,
+       "setup": 93
+      },
+      "wrapper_ms": 7.949427083333333,
+      "error": {
+       "values": 4704,
+       "max_abs": 0.0003662109375,
+       "max_error_to_bound_ratio": 0.0744978614603367,
+       "exact_semantics_max_abs": 0.00034263968063896755,
+       "spilled_mid_max_abs": 0.000244140625
+      }
+     },
+     {
+      "variant": "copy1",
+      "reps": 2,
+      "round": 2,
+      "body_ticks": 121023,
+      "phase_ticks": {
+       "weights": 4383,
+       "stage": 16423,
+       "pack": 82787,
+       "hmx": 16264,
+       "post": 782,
+       "spill": 154,
+       "store": 102,
+       "setup": 90
+      },
+      "wrapper_ms": 7.940677083333333,
+      "error": {
+       "values": 4704,
+       "max_abs": 0.0003662109375,
+       "max_error_to_bound_ratio": 0.0744978614603367,
+       "exact_semantics_max_abs": 0.00034263968063896755,
+       "spilled_mid_max_abs": 0.000244140625
+      }
+     },
+     {
+      "variant": "copy1",
+      "reps": 1,
+      "round": 2,
+      "body_ticks": 60593,
+      "phase_ticks": {
+       "weights": 2177,
+       "stage": 8221,
+       "pack": 41315,
+       "hmx": 8202,
+       "post": 431,
+       "spill": 77,
+       "store": 53,
+       "setup": 78
+      },
+      "wrapper_ms": 4.807447916666667,
+      "error": {
+       "values": 4704,
+       "max_abs": 0.0003662109375,
+       "max_error_to_bound_ratio": 0.0744978614603367,
+       "exact_semantics_max_abs": 0.00034263968063896755,
+       "spilled_mid_max_abs": 0.000244140625
+      }
+     },
+     {
+      "variant": "main",
+      "reps": 2,
+      "round": 2,
+      "body_ticks": 132944,
+      "phase_ticks": {
+       "weights": 24469,
+       "stage": 9397,
+       "pack": 81642,
+       "hmx": 13599,
+       "post": 793,
+       "spill": 2812,
+       "store": 101,
+       "setup": 93
+      },
+      "wrapper_ms": 8.57796875,
+      "error": {
+       "values": 4704,
+       "max_abs": 0.0003662109375,
+       "max_error_to_bound_ratio": 0.0744978614603367,
+       "exact_semantics_max_abs": 0.00034263968063896755,
+       "spilled_mid_max_abs": 0.000244140625
+      }
+     },
+     {
+      "variant": "main",
+      "reps": 1,
+      "round": 2,
+      "body_ticks": 67062,
+      "phase_ticks": {
+       "weights": 12392,
+       "stage": 4577,
+       "pack": 41193,
+       "hmx": 6881,
+       "post": 432,
+       "spill": 1410,
+       "store": 50,
+       "setup": 89
+      },
+      "wrapper_ms": 5.14578125,
+      "error": {
+       "values": 4704,
+       "max_abs": 0.0003662109375,
+       "max_error_to_bound_ratio": 0.0744978614603367,
+       "exact_semantics_max_abs": 0.00034263968063896755,
+       "spilled_mid_max_abs": 0.000244140625
+      }
+     },
+     {
+      "variant": "nohmx",
+      "reps": 2,
+      "round": 2,
+      "body_ticks": 129758,
+      "phase_ticks": {
+       "weights": 24480,
+       "stage": 8934,
+       "pack": 80564,
+       "hmx": 11925,
+       "post": 792,
+       "spill": 2860,
+       "store": 112,
+       "setup": 90
+      },
+      "wrapper_ms": 8.407916666666667,
+      "error": null
+     },
+     {
+      "variant": "nohmx",
+      "reps": 1,
+      "round": 2,
+      "body_ticks": 64833,
+      "phase_ticks": {
+       "weights": 12185,
+       "stage": 4587,
+       "pack": 40039,
+       "hmx": 6006,
+       "post": 441,
+       "spill": 1435,
+       "store": 56,
+       "setup": 83
+      },
+      "wrapper_ms": 5.028958333333334,
+      "error": null
+     },
+     {
+      "variant": "notime",
+      "reps": 2,
+      "round": 2,
+      "body_ticks": 115069,
+      "phase_ticks": {
+       "weights": 0,
+       "stage": 0,
+       "pack": 0,
+       "hmx": 0,
+       "post": 0,
+       "spill": 0,
+       "store": 0,
+       "setup": 0
+      },
+      "wrapper_ms": 7.651197916666667,
+      "error": {
+       "values": 4704,
+       "max_abs": 0.0003662109375,
+       "max_error_to_bound_ratio": 0.0744978614603367,
+       "exact_semantics_max_abs": 0.00034263968063896755,
+       "spilled_mid_max_abs": 0.000244140625
+      }
+     },
+     {
+      "variant": "notime",
+      "reps": 1,
+      "round": 2,
+      "body_ticks": 58208,
+      "phase_ticks": {
+       "weights": 0,
+       "stage": 0,
+       "pack": 0,
+       "hmx": 0,
+       "post": 0,
+       "spill": 0,
+       "store": 0,
+       "setup": 0
+      },
+      "wrapper_ms": 4.690989583333334,
+      "error": {
+       "values": 4704,
+       "max_abs": 0.0003662109375,
+       "max_error_to_bound_ratio": 0.0744978614603367,
+       "exact_semantics_max_abs": 0.00034263968063896755,
+       "spilled_mid_max_abs": 0.000244140625
+      }
+     },
+     {
+      "variant": "notime",
+      "reps": 1,
+      "round": 3,
+      "body_ticks": 58181,
+      "phase_ticks": {
+       "weights": 0,
+       "stage": 0,
+       "pack": 0,
+       "hmx": 0,
+       "post": 0,
+       "spill": 0,
+       "store": 0,
+       "setup": 0
+      },
+      "wrapper_ms": 4.68671875,
+      "error": {
+       "values": 4704,
+       "max_abs": 0.0003662109375,
+       "max_error_to_bound_ratio": 0.0744978614603367,
+       "exact_semantics_max_abs": 0.00034263968063896755,
+       "spilled_mid_max_abs": 0.000244140625
+      }
+     },
+     {
+      "variant": "notime",
+      "reps": 2,
+      "round": 3,
+      "body_ticks": 114740,
+      "phase_ticks": {
+       "weights": 0,
+       "stage": 0,
+       "pack": 0,
+       "hmx": 0,
+       "post": 0,
+       "spill": 0,
+       "store": 0,
+       "setup": 0
+      },
+      "wrapper_ms": 7.61609375,
+      "error": {
+       "values": 4704,
+       "max_abs": 0.0003662109375,
+       "max_error_to_bound_ratio": 0.0744978614603367,
+       "exact_semantics_max_abs": 0.00034263968063896755,
+       "spilled_mid_max_abs": 0.000244140625
+      }
+     },
+     {
+      "variant": "nohmx",
+      "reps": 1,
+      "round": 3,
+      "body_ticks": 64453,
+      "phase_ticks": {
+       "weights": 11991,
+       "stage": 4754,
+       "pack": 39732,
+       "hmx": 5971,
+       "post": 441,
+       "spill": 1435,
+       "store": 56,
+       "setup": 72
+      },
+      "wrapper_ms": 5.008020833333333,
+      "error": null
+     },
+     {
+      "variant": "nohmx",
+      "reps": 2,
+      "round": 3,
+      "body_ticks": 129843,
+      "phase_ticks": {
+       "weights": 24566,
+       "stage": 8916,
+       "pack": 80542,
+       "hmx": 11927,
+       "post": 791,
+       "spill": 2897,
+       "store": 112,
+       "setup": 91
+      },
+      "wrapper_ms": 8.417864583333333,
+      "error": null
+     },
+     {
+      "variant": "main",
+      "reps": 1,
+      "round": 3,
+      "body_ticks": 66925,
+      "phase_ticks": {
+       "weights": 12331,
+       "stage": 4648,
+       "pack": 41055,
+       "hmx": 6879,
+       "post": 433,
+       "spill": 1413,
+       "store": 51,
+       "setup": 78
+      },
+      "wrapper_ms": 5.125729166666667,
+      "error": {
+       "values": 4704,
+       "max_abs": 0.0003662109375,
+       "max_error_to_bound_ratio": 0.0744978614603367,
+       "exact_semantics_max_abs": 0.00034263968063896755,
+       "spilled_mid_max_abs": 0.000244140625
+      }
+     },
+     {
+      "variant": "main",
+      "reps": 2,
+      "round": 3,
+      "body_ticks": 132239,
+      "phase_ticks": {
+       "weights": 24101,
+       "stage": 9796,
+       "pack": 80823,
+       "hmx": 13675,
+       "post": 784,
+       "spill": 2825,
+       "store": 102,
+       "setup": 95
+      },
+      "wrapper_ms": 8.516145833333333,
+      "error": {
+       "values": 4704,
+       "max_abs": 0.0003662109375,
+       "max_error_to_bound_ratio": 0.0744978614603367,
+       "exact_semantics_max_abs": 0.00034263968063896755,
+       "spilled_mid_max_abs": 0.000244140625
+      }
+     },
+     {
+      "variant": "copy1",
+      "reps": 1,
+      "round": 3,
+      "body_ticks": 60750,
+      "phase_ticks": {
+       "weights": 2178,
+       "stage": 8237,
+       "pack": 41456,
+       "hmx": 8208,
+       "post": 432,
+       "spill": 77,
+       "store": 53,
+       "setup": 78
+      },
+      "wrapper_ms": 4.806666666666667,
+      "error": {
+       "values": 4704,
+       "max_abs": 0.0003662109375,
+       "max_error_to_bound_ratio": 0.0744978614603367,
+       "exact_semantics_max_abs": 0.00034263968063896755,
+       "spilled_mid_max_abs": 0.000244140625
+      }
+     },
+     {
+      "variant": "copy1",
+      "reps": 2,
+      "round": 3,
+      "body_ticks": 120646,
+      "phase_ticks": {
+       "weights": 4387,
+       "stage": 16443,
+       "pack": 82420,
+       "hmx": 16233,
+       "post": 782,
+       "spill": 153,
+       "store": 104,
+       "setup": 86
+      },
+      "wrapper_ms": 7.944322916666667,
+      "error": {
+       "values": 4704,
+       "max_abs": 0.0003662109375,
+       "max_error_to_bound_ratio": 0.0744978614603367,
+       "exact_semantics_max_abs": 0.00034263968063896755,
+       "spilled_mid_max_abs": 0.000244140625
+      }
+     },
+     {
+      "variant": "copy1",
+      "reps": 2,
+      "round": 4,
+      "body_ticks": 121242,
+      "phase_ticks": {
+       "weights": 4350,
+       "stage": 16426,
+       "pack": 83021,
+       "hmx": 16278,
+       "post": 782,
+       "spill": 154,
+       "store": 102,
+       "setup": 92
+      },
+      "wrapper_ms": 7.9753645833333335,
+      "error": {
+       "values": 4704,
+       "max_abs": 0.0003662109375,
+       "max_error_to_bound_ratio": 0.0744978614603367,
+       "exact_semantics_max_abs": 0.00034263968063896755,
+       "spilled_mid_max_abs": 0.000244140625
+      }
+     },
+     {
+      "variant": "copy1",
+      "reps": 1,
+      "round": 4,
+      "body_ticks": 60760,
+      "phase_ticks": {
+       "weights": 2193,
+       "stage": 8216,
+       "pack": 41474,
+       "hmx": 8198,
+       "post": 434,
+       "spill": 77,
+       "store": 52,
+       "setup": 78
+      },
+      "wrapper_ms": 4.8230208333333335,
+      "error": {
+       "values": 4704,
+       "max_abs": 0.0003662109375,
+       "max_error_to_bound_ratio": 0.0744978614603367,
+       "exact_semantics_max_abs": 0.00034263968063896755,
+       "spilled_mid_max_abs": 0.000244140625
+      }
+     },
+     {
+      "variant": "main",
+      "reps": 2,
+      "round": 4,
+      "body_ticks": 131781,
+      "phase_ticks": {
+       "weights": 23792,
+       "stage": 9996,
+       "pack": 80612,
+       "hmx": 13592,
+       "post": 782,
+       "spill": 2777,
+       "store": 100,
+       "setup": 92
+      },
+      "wrapper_ms": 8.481145833333333,
+      "error": {
+       "values": 4704,
+       "max_abs": 0.0003662109375,
+       "max_error_to_bound_ratio": 0.0744978614603367,
+       "exact_semantics_max_abs": 0.00034263968063896755,
+       "spilled_mid_max_abs": 0.000244140625
+      }
+     },
+     {
+      "variant": "main",
+      "reps": 1,
+      "round": 4,
+      "body_ticks": 66379,
+      "phase_ticks": {
+       "weights": 12101,
+       "stage": 4856,
+       "pack": 40526,
+       "hmx": 6872,
+       "post": 434,
+       "spill": 1415,
+       "store": 51,
+       "setup": 86
+      },
+      "wrapper_ms": 5.110052083333334,
+      "error": {
+       "values": 4704,
+       "max_abs": 0.0003662109375,
+       "max_error_to_bound_ratio": 0.0744978614603367,
+       "exact_semantics_max_abs": 0.00034263968063896755,
+       "spilled_mid_max_abs": 0.000244140625
+      }
+     },
+     {
+      "variant": "nohmx",
+      "reps": 2,
+      "round": 4,
+      "body_ticks": 127774,
+      "phase_ticks": {
+       "weights": 23666,
+       "stage": 9670,
+       "pack": 78738,
+       "hmx": 11858,
+       "post": 781,
+       "spill": 2861,
+       "store": 112,
+       "setup": 87
+      },
+      "wrapper_ms": 8.282916666666667,
+      "error": null
+     },
+     {
+      "variant": "nohmx",
+      "reps": 1,
+      "round": 4,
+      "body_ticks": 64549,
+      "phase_ticks": {
+       "weights": 12017,
+       "stage": 4743,
+       "pack": 39815,
+       "hmx": 5953,
+       "post": 437,
+       "spill": 1444,
+       "store": 56,
+       "setup": 83
+      },
+      "wrapper_ms": 5.010260416666667,
+      "error": null
+     },
+     {
+      "variant": "notime",
+      "reps": 2,
+      "round": 4,
+      "body_ticks": 114517,
+      "phase_ticks": {
+       "weights": 0,
+       "stage": 0,
+       "pack": 0,
+       "hmx": 0,
+       "post": 0,
+       "spill": 0,
+       "store": 0,
+       "setup": 0
+      },
+      "wrapper_ms": 7.595260416666667,
+      "error": {
+       "values": 4704,
+       "max_abs": 0.0003662109375,
+       "max_error_to_bound_ratio": 0.0744978614603367,
+       "exact_semantics_max_abs": 0.00034263968063896755,
+       "spilled_mid_max_abs": 0.000244140625
+      }
+     },
+     {
+      "variant": "notime",
+      "reps": 1,
+      "round": 4,
+      "body_ticks": 58230,
+      "phase_ticks": {
+       "weights": 0,
+       "stage": 0,
+       "pack": 0,
+       "hmx": 0,
+       "post": 0,
+       "spill": 0,
+       "store": 0,
+       "setup": 0
+      },
+      "wrapper_ms": 4.660677083333334,
+      "error": {
+       "values": 4704,
+       "max_abs": 0.0003662109375,
+       "max_error_to_bound_ratio": 0.0744978614603367,
+       "exact_semantics_max_abs": 0.00034263968063896755,
+       "spilled_mid_max_abs": 0.000244140625
+      }
+     }
+    ],
+    "repeat_counts": [
+     1,
+     2
+    ]
+   },
+   {
+    "geometry": "w050_7",
+    "fixture": "synthetic",
+    "role": "half-width fused 3x3 at 7x7 (convclip_12+convdwclip_12+conv_34 shape); 64 of 336 mid channels per job (arena bound), synthetic weights",
+    "payload_sha256": "27449a1a495932a1e3491043958087a990d93c8c8ebe1227a2b25e0400061f86",
+    "host_payload_ms": 0.358482,
+    "per_block": {
+     "k_tiles": 36,
+     "transactions": 4,
+     "blocks_per_job_rep": 2
+    },
+    "samples": [
+     {
+      "variant": "copy1",
+      "reps": 4,
+      "round": 0,
+      "body_ticks": 67946,
+      "phase_ticks": {
+       "weights": 2164,
+       "stage": 11657,
+       "pack": 46041,
+       "hmx": 7470,
+       "post": 220,
+       "spill": 137,
+       "store": 136,
+       "setup": 119
+      },
+      "wrapper_ms": 5.179270833333334,
+      "error": {
+       "values": 2744,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.1094208076085851,
+       "exact_semantics_max_abs": 0.0005149617791175842,
+       "spilled_mid_max_abs": 0.00048828125
+      }
+     },
+     {
+      "variant": "copy1",
+      "reps": 1,
+      "round": 0,
+      "body_ticks": 17282,
+      "phase_ticks": {
+       "weights": 528,
+       "stage": 3011,
+       "pack": 11460,
+       "hmx": 1941,
+       "post": 102,
+       "spill": 98,
+       "store": 34,
+       "setup": 106
+      },
+      "wrapper_ms": 2.5477604166666667,
+      "error": {
+       "values": 2744,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.1094208076085851,
+       "exact_semantics_max_abs": 0.0005149617791175842,
+       "spilled_mid_max_abs": 0.00048828125
+      }
+     },
+     {
+      "variant": "main",
+      "reps": 4,
+      "round": 0,
+      "body_ticks": 74305,
+      "phase_ticks": {
+       "weights": 12685,
+       "stage": 7085,
+       "pack": 46007,
+       "hmx": 6697,
+       "post": 244,
+       "spill": 1356,
+       "store": 137,
+       "setup": 92
+      },
+      "wrapper_ms": 5.515677083333333,
+      "error": {
+       "values": 2744,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.1094208076085851,
+       "exact_semantics_max_abs": 0.0005149617791175842,
+       "spilled_mid_max_abs": 0.00048828125
+      }
+     },
+     {
+      "variant": "main",
+      "reps": 1,
+      "round": 0,
+      "body_ticks": 18905,
+      "phase_ticks": {
+       "weights": 3208,
+       "stage": 1816,
+       "pack": 11552,
+       "hmx": 1732,
+       "post": 128,
+       "spill": 350,
+       "store": 35,
+       "setup": 83
+      },
+      "wrapper_ms": 2.6347916666666666,
+      "error": {
+       "values": 2744,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.1094208076085851,
+       "exact_semantics_max_abs": 0.0005149617791175842,
+       "spilled_mid_max_abs": 0.00048828125
+      }
+     },
+     {
+      "variant": "nohmx",
+      "reps": 4,
+      "round": 0,
+      "body_ticks": 73174,
+      "phase_ticks": {
+       "weights": 12294,
+       "stage": 7112,
+       "pack": 45761,
+       "hmx": 6118,
+       "post": 242,
+       "spill": 1378,
+       "store": 159,
+       "setup": 109
+      },
+      "wrapper_ms": 5.458177083333333,
+      "error": null
+     },
+     {
+      "variant": "nohmx",
+      "reps": 1,
+      "round": 0,
+      "body_ticks": 18410,
+      "phase_ticks": {
+       "weights": 2920,
+       "stage": 1794,
+       "pack": 11505,
+       "hmx": 1591,
+       "post": 121,
+       "spill": 335,
+       "store": 54,
+       "setup": 89
+      },
+      "wrapper_ms": 2.60890625,
+      "error": null
+     },
+     {
+      "variant": "notime",
+      "reps": 4,
+      "round": 0,
+      "body_ticks": 65371,
+      "phase_ticks": {
+       "weights": 0,
+       "stage": 0,
+       "pack": 0,
+       "hmx": 0,
+       "post": 0,
+       "spill": 0,
+       "store": 0,
+       "setup": 0
+      },
+      "wrapper_ms": 5.066666666666666,
+      "error": {
+       "values": 2744,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.1094208076085851,
+       "exact_semantics_max_abs": 0.0005149617791175842,
+       "spilled_mid_max_abs": 0.00048828125
+      }
+     },
+     {
+      "variant": "notime",
+      "reps": 1,
+      "round": 0,
+      "body_ticks": 16770,
+      "phase_ticks": {
+       "weights": 0,
+       "stage": 0,
+       "pack": 0,
+       "hmx": 0,
+       "post": 0,
+       "spill": 0,
+       "store": 0,
+       "setup": 0
+      },
+      "wrapper_ms": 2.4873958333333333,
+      "error": {
+       "values": 2744,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.1094208076085851,
+       "exact_semantics_max_abs": 0.0005149617791175842,
+       "spilled_mid_max_abs": 0.00048828125
+      }
+     },
+     {
+      "variant": "notime",
+      "reps": 1,
+      "round": 1,
+      "body_ticks": 16755,
+      "phase_ticks": {
+       "weights": 0,
+       "stage": 0,
+       "pack": 0,
+       "hmx": 0,
+       "post": 0,
+       "spill": 0,
+       "store": 0,
+       "setup": 0
+      },
+      "wrapper_ms": 2.5508333333333333,
+      "error": {
+       "values": 2744,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.1094208076085851,
+       "exact_semantics_max_abs": 0.0005149617791175842,
+       "spilled_mid_max_abs": 0.00048828125
+      }
+     },
+     {
+      "variant": "notime",
+      "reps": 4,
+      "round": 1,
+      "body_ticks": 65051,
+      "phase_ticks": {
+       "weights": 0,
+       "stage": 0,
+       "pack": 0,
+       "hmx": 0,
+       "post": 0,
+       "spill": 0,
+       "store": 0,
+       "setup": 0
+      },
+      "wrapper_ms": 5.054114583333333,
+      "error": {
+       "values": 2744,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.1094208076085851,
+       "exact_semantics_max_abs": 0.0005149617791175842,
+       "spilled_mid_max_abs": 0.00048828125
+      }
+     },
+     {
+      "variant": "nohmx",
+      "reps": 1,
+      "round": 1,
+      "body_ticks": 18422,
+      "phase_ticks": {
+       "weights": 2942,
+       "stage": 1764,
+       "pack": 11533,
+       "hmx": 1592,
+       "post": 121,
+       "spill": 330,
+       "store": 53,
+       "setup": 86
+      },
+      "wrapper_ms": 2.5919791666666665,
+      "error": null
+     },
+     {
+      "variant": "nohmx",
+      "reps": 4,
+      "round": 1,
+      "body_ticks": 73127,
+      "phase_ticks": {
+       "weights": 12288,
+       "stage": 7107,
+       "pack": 45765,
+       "hmx": 6088,
+       "post": 241,
+       "spill": 1369,
+       "store": 158,
+       "setup": 110
+      },
+      "wrapper_ms": 5.42625,
+      "error": null
+     },
+     {
+      "variant": "main",
+      "reps": 1,
+      "round": 1,
+      "body_ticks": 18644,
+      "phase_ticks": {
+       "weights": 2999,
+       "stage": 1671,
+       "pack": 11663,
+       "hmx": 1723,
+       "post": 116,
+       "spill": 355,
+       "store": 35,
+       "setup": 81
+      },
+      "wrapper_ms": 2.6164583333333336,
+      "error": {
+       "values": 2744,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.1094208076085851,
+       "exact_semantics_max_abs": 0.0005149617791175842,
+       "spilled_mid_max_abs": 0.00048828125
+      }
+     },
+     {
+      "variant": "main",
+      "reps": 4,
+      "round": 1,
+      "body_ticks": 74086,
+      "phase_ticks": {
+       "weights": 12469,
+       "stage": 7071,
+       "pack": 45987,
+       "hmx": 6693,
+       "post": 244,
+       "spill": 1388,
+       "store": 139,
+       "setup": 94
+      },
+      "wrapper_ms": 5.492760416666667,
+      "error": {
+       "values": 2744,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.1094208076085851,
+       "exact_semantics_max_abs": 0.0005149617791175842,
+       "spilled_mid_max_abs": 0.00048828125
+      }
+     },
+     {
+      "variant": "copy1",
+      "reps": 1,
+      "round": 1,
+      "body_ticks": 17256,
+      "phase_ticks": {
+       "weights": 511,
+       "stage": 2966,
+       "pack": 11497,
+       "hmx": 1956,
+       "post": 101,
+       "spill": 97,
+       "store": 35,
+       "setup": 91
+      },
+      "wrapper_ms": 2.549166666666667,
+      "error": {
+       "values": 2744,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.1094208076085851,
+       "exact_semantics_max_abs": 0.0005149617791175842,
+       "spilled_mid_max_abs": 0.00048828125
+      }
+     },
+     {
+      "variant": "copy1",
+      "reps": 4,
+      "round": 1,
+      "body_ticks": 67913,
+      "phase_ticks": {
+       "weights": 2170,
+       "stage": 10732,
+       "pack": 46887,
+       "hmx": 7523,
+       "post": 220,
+       "spill": 130,
+       "store": 137,
+       "setup": 112
+      },
+      "wrapper_ms": 5.17296875,
+      "error": {
+       "values": 2744,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.1094208076085851,
+       "exact_semantics_max_abs": 0.0005149617791175842,
+       "spilled_mid_max_abs": 0.00048828125
+      }
+     },
+     {
+      "variant": "copy1",
+      "reps": 4,
+      "round": 2,
+      "body_ticks": 67903,
+      "phase_ticks": {
+       "weights": 2150,
+       "stage": 11386,
+       "pack": 46257,
+       "hmx": 7494,
+       "post": 221,
+       "spill": 138,
+       "store": 136,
+       "setup": 119
+      },
+      "wrapper_ms": 5.17296875,
+      "error": {
+       "values": 2744,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.1094208076085851,
+       "exact_semantics_max_abs": 0.0005149617791175842,
+       "spilled_mid_max_abs": 0.00048828125
+      }
+     },
+     {
+      "variant": "copy1",
+      "reps": 1,
+      "round": 2,
+      "body_ticks": 17238,
+      "phase_ticks": {
+       "weights": 533,
+       "stage": 2733,
+       "pack": 11727,
+       "hmx": 1928,
+       "post": 100,
+       "spill": 90,
+       "store": 34,
+       "setup": 91
+      },
+      "wrapper_ms": 2.52953125,
+      "error": {
+       "values": 2744,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.1094208076085851,
+       "exact_semantics_max_abs": 0.0005149617791175842,
+       "spilled_mid_max_abs": 0.00048828125
+      }
+     },
+     {
+      "variant": "main",
+      "reps": 4,
+      "round": 2,
+      "body_ticks": 74323,
+      "phase_ticks": {
+       "weights": 12637,
+       "stage": 7025,
+       "pack": 46114,
+       "hmx": 6696,
+       "post": 234,
+       "spill": 1383,
+       "store": 137,
+       "setup": 95
+      },
+      "wrapper_ms": 5.50640625,
+      "error": {
+       "values": 2744,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.1094208076085851,
+       "exact_semantics_max_abs": 0.0005149617791175842,
+       "spilled_mid_max_abs": 0.00048828125
+      }
+     },
+     {
+      "variant": "main",
+      "reps": 1,
+      "round": 2,
+      "body_ticks": 19015,
+      "phase_ticks": {
+       "weights": 3304,
+       "stage": 1885,
+       "pack": 11496,
+       "hmx": 1746,
+       "post": 115,
+       "spill": 350,
+       "store": 35,
+       "setup": 83
+      },
+      "wrapper_ms": 2.6195833333333334,
+      "error": {
+       "values": 2744,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.1094208076085851,
+       "exact_semantics_max_abs": 0.0005149617791175842,
+       "spilled_mid_max_abs": 0.00048828125
+      }
+     },
+     {
+      "variant": "nohmx",
+      "reps": 4,
+      "round": 2,
+      "body_ticks": 73397,
+      "phase_ticks": {
+       "weights": 12477,
+       "stage": 7081,
+       "pack": 45848,
+       "hmx": 6113,
+       "post": 242,
+       "spill": 1366,
+       "store": 158,
+       "setup": 110
+      },
+      "wrapper_ms": 5.470572916666667,
+      "error": null
+     },
+     {
+      "variant": "nohmx",
+      "reps": 1,
+      "round": 2,
+      "body_ticks": 18604,
+      "phase_ticks": {
+       "weights": 3068,
+       "stage": 1841,
+       "pack": 11486,
+       "hmx": 1604,
+       "post": 121,
+       "spill": 328,
+       "store": 54,
+       "setup": 101
+      },
+      "wrapper_ms": 2.60984375,
+      "error": null
+     },
+     {
+      "variant": "notime",
+      "reps": 4,
+      "round": 2,
+      "body_ticks": 65409,
+      "phase_ticks": {
+       "weights": 0,
+       "stage": 0,
+       "pack": 0,
+       "hmx": 0,
+       "post": 0,
+       "spill": 0,
+       "store": 0,
+       "setup": 0
+      },
+      "wrapper_ms": 5.065989583333334,
+      "error": {
+       "values": 2744,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.1094208076085851,
+       "exact_semantics_max_abs": 0.0005149617791175842,
+       "spilled_mid_max_abs": 0.00048828125
+      }
+     },
+     {
+      "variant": "notime",
+      "reps": 1,
+      "round": 2,
+      "body_ticks": 16837,
+      "phase_ticks": {
+       "weights": 0,
+       "stage": 0,
+       "pack": 0,
+       "hmx": 0,
+       "post": 0,
+       "spill": 0,
+       "store": 0,
+       "setup": 0
+      },
+      "wrapper_ms": 2.5033333333333334,
+      "error": {
+       "values": 2744,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.1094208076085851,
+       "exact_semantics_max_abs": 0.0005149617791175842,
+       "spilled_mid_max_abs": 0.00048828125
+      }
+     },
+     {
+      "variant": "notime",
+      "reps": 1,
+      "round": 3,
+      "body_ticks": 16682,
+      "phase_ticks": {
+       "weights": 0,
+       "stage": 0,
+       "pack": 0,
+       "hmx": 0,
+       "post": 0,
+       "spill": 0,
+       "store": 0,
+       "setup": 0
+      },
+      "wrapper_ms": 2.51,
+      "error": {
+       "values": 2744,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.1094208076085851,
+       "exact_semantics_max_abs": 0.0005149617791175842,
+       "spilled_mid_max_abs": 0.00048828125
+      }
+     },
+     {
+      "variant": "notime",
+      "reps": 4,
+      "round": 3,
+      "body_ticks": 65329,
+      "phase_ticks": {
+       "weights": 0,
+       "stage": 0,
+       "pack": 0,
+       "hmx": 0,
+       "post": 0,
+       "spill": 0,
+       "store": 0,
+       "setup": 0
+      },
+      "wrapper_ms": 5.038333333333333,
+      "error": {
+       "values": 2744,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.1094208076085851,
+       "exact_semantics_max_abs": 0.0005149617791175842,
+       "spilled_mid_max_abs": 0.00048828125
+      }
+     },
+     {
+      "variant": "nohmx",
+      "reps": 1,
+      "round": 3,
+      "body_ticks": 18680,
+      "phase_ticks": {
+       "weights": 3132,
+       "stage": 1886,
+       "pack": 11458,
+       "hmx": 1598,
+       "post": 121,
+       "spill": 328,
+       "store": 53,
+       "setup": 103
+      },
+      "wrapper_ms": 2.6155208333333335,
+      "error": null
+     },
+     {
+      "variant": "nohmx",
+      "reps": 4,
+      "round": 3,
+      "body_ticks": 72858,
+      "phase_ticks": {
+       "weights": 12047,
+       "stage": 6924,
+       "pack": 45928,
+       "hmx": 6077,
+       "post": 241,
+       "spill": 1378,
+       "store": 160,
+       "setup": 101
+      },
+      "wrapper_ms": 5.419895833333333,
+      "error": null
+     },
+     {
+      "variant": "main",
+      "reps": 1,
+      "round": 3,
+      "body_ticks": 18965,
+      "phase_ticks": {
+       "weights": 3275,
+       "stage": 1835,
+       "pack": 11520,
+       "hmx": 1742,
+       "post": 124,
+       "spill": 350,
+       "store": 35,
+       "setup": 83
+      },
+      "wrapper_ms": 2.636927083333333,
+      "error": {
+       "values": 2744,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.1094208076085851,
+       "exact_semantics_max_abs": 0.0005149617791175842,
+       "spilled_mid_max_abs": 0.00048828125
+      }
+     },
+     {
+      "variant": "main",
+      "reps": 4,
+      "round": 3,
+      "body_ticks": 74447,
+      "phase_ticks": {
+       "weights": 12794,
+       "stage": 7243,
+       "pack": 45880,
+       "hmx": 6697,
+       "post": 243,
+       "spill": 1359,
+       "store": 137,
+       "setup": 92
+      },
+      "wrapper_ms": 5.540416666666666,
+      "error": {
+       "values": 2744,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.1094208076085851,
+       "exact_semantics_max_abs": 0.0005149617791175842,
+       "spilled_mid_max_abs": 0.00048828125
+      }
+     },
+     {
+      "variant": "copy1",
+      "reps": 1,
+      "round": 3,
+      "body_ticks": 17266,
+      "phase_ticks": {
+       "weights": 533,
+       "stage": 2945,
+       "pack": 11522,
+       "hmx": 1937,
+       "post": 99,
+       "spill": 89,
+       "store": 34,
+       "setup": 105
+      },
+      "wrapper_ms": 2.52515625,
+      "error": {
+       "values": 2744,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.1094208076085851,
+       "exact_semantics_max_abs": 0.0005149617791175842,
+       "spilled_mid_max_abs": 0.00048828125
+      }
+     },
+     {
+      "variant": "copy1",
+      "reps": 4,
+      "round": 3,
+      "body_ticks": 68005,
+      "phase_ticks": {
+       "weights": 2149,
+       "stage": 12001,
+       "pack": 45747,
+       "hmx": 7483,
+       "post": 221,
+       "spill": 147,
+       "store": 136,
+       "setup": 119
+      },
+      "wrapper_ms": 5.176927083333333,
+      "error": {
+       "values": 2744,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.1094208076085851,
+       "exact_semantics_max_abs": 0.0005149617791175842,
+       "spilled_mid_max_abs": 0.00048828125
+      }
+     },
+     {
+      "variant": "copy1",
+      "reps": 4,
+      "round": 4,
+      "body_ticks": 67689,
+      "phase_ticks": {
+       "weights": 2158,
+       "stage": 10977,
+       "pack": 46478,
+       "hmx": 7471,
+       "post": 220,
+       "spill": 128,
+       "store": 137,
+       "setup": 118
+      },
+      "wrapper_ms": 5.172447916666667,
+      "error": {
+       "values": 2744,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.1094208076085851,
+       "exact_semantics_max_abs": 0.0005149617791175842,
+       "spilled_mid_max_abs": 0.00048828125
+      }
+     },
+     {
+      "variant": "copy1",
+      "reps": 1,
+      "round": 4,
+      "body_ticks": 17257,
+      "phase_ticks": {
+       "weights": 552,
+       "stage": 2915,
+       "pack": 11533,
+       "hmx": 1919,
+       "post": 100,
+       "spill": 97,
+       "store": 34,
+       "setup": 105
+      },
+      "wrapper_ms": 2.5347916666666666,
+      "error": {
+       "values": 2744,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.1094208076085851,
+       "exact_semantics_max_abs": 0.0005149617791175842,
+       "spilled_mid_max_abs": 0.00048828125
+      }
+     },
+     {
+      "variant": "main",
+      "reps": 4,
+      "round": 4,
+      "body_ticks": 74490,
+      "phase_ticks": {
+       "weights": 12739,
+       "stage": 7215,
+       "pack": 46000,
+       "hmx": 6694,
+       "post": 244,
+       "spill": 1366,
+       "store": 137,
+       "setup": 93
+      },
+      "wrapper_ms": 5.530833333333334,
+      "error": {
+       "values": 2744,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.1094208076085851,
+       "exact_semantics_max_abs": 0.0005149617791175842,
+       "spilled_mid_max_abs": 0.00048828125
+      }
+     },
+     {
+      "variant": "main",
+      "reps": 1,
+      "round": 4,
+      "body_ticks": 18747,
+      "phase_ticks": {
+       "weights": 3100,
+       "stage": 1794,
+       "pack": 11535,
+       "hmx": 1727,
+       "post": 115,
+       "spill": 359,
+       "store": 35,
+       "setup": 81
+      },
+      "wrapper_ms": 2.6074479166666666,
+      "error": {
+       "values": 2744,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.1094208076085851,
+       "exact_semantics_max_abs": 0.0005149617791175842,
+       "spilled_mid_max_abs": 0.00048828125
+      }
+     },
+     {
+      "variant": "nohmx",
+      "reps": 4,
+      "round": 4,
+      "body_ticks": 73142,
+      "phase_ticks": {
+       "weights": 12289,
+       "stage": 7022,
+       "pack": 45853,
+       "hmx": 6117,
+       "post": 242,
+       "spill": 1363,
+       "store": 158,
+       "setup": 96
+      },
+      "wrapper_ms": 5.46453125,
+      "error": null
+     },
+     {
+      "variant": "nohmx",
+      "reps": 1,
+      "round": 4,
+      "body_ticks": 18582,
+      "phase_ticks": {
+       "weights": 3075,
+       "stage": 1808,
+       "pack": 11512,
+       "hmx": 1596,
+       "post": 121,
+       "spill": 329,
+       "store": 53,
+       "setup": 87
+      },
+      "wrapper_ms": 2.6069270833333333,
+      "error": null
+     },
+     {
+      "variant": "notime",
+      "reps": 4,
+      "round": 4,
+      "body_ticks": 65032,
+      "phase_ticks": {
+       "weights": 0,
+       "stage": 0,
+       "pack": 0,
+       "hmx": 0,
+       "post": 0,
+       "spill": 0,
+       "store": 0,
+       "setup": 0
+      },
+      "wrapper_ms": 5.00859375,
+      "error": {
+       "values": 2744,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.1094208076085851,
+       "exact_semantics_max_abs": 0.0005149617791175842,
+       "spilled_mid_max_abs": 0.00048828125
+      }
+     },
+     {
+      "variant": "notime",
+      "reps": 1,
+      "round": 4,
+      "body_ticks": 16582,
+      "phase_ticks": {
+       "weights": 0,
+       "stage": 0,
+       "pack": 0,
+       "hmx": 0,
+       "post": 0,
+       "spill": 0,
+       "store": 0,
+       "setup": 0
+      },
+      "wrapper_ms": 2.5216666666666665,
+      "error": {
+       "values": 2744,
+       "max_abs": 0.00048828125,
+       "max_error_to_bound_ratio": 0.1094208076085851,
+       "exact_semantics_max_abs": 0.0005149617791175842,
+       "spilled_mid_max_abs": 0.00048828125
+      }
+     }
+    ],
+    "repeat_counts": [
+     1,
+     4
+    ]
+   },
+   {
+    "geometry": "teacher_112",
+    "fixture": "public_y0",
+    "role": "public v20a convdwclip_0 embedded diagonally + conv_10 projection, 8-row band, real weights",
+    "payload_sha256": "80cc84ec5191410fa3dcd052b16ee18a3026bb5263e98b4081b986613e5112c0",
+    "host_payload_ms": 0.386607,
+    "per_block": {
+     "k_tiles": 8,
+     "transactions": 2,
+     "blocks_per_job_rep": 28
+    },
+    "samples": [
+     {
+      "variant": "copy1",
+      "reps": 3,
+      "round": 0,
+      "body_ticks": 137505,
+      "phase_ticks": {
+       "weights": 1125,
+       "stage": 29879,
+       "pack": 85668,
+       "hmx": 19318,
+       "post": 934,
+       "spill": 0,
+       "store": 420,
+       "setup": 159
+      },
+      "wrapper_ms": 8.813697916666667,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11319311955994335,
+       "exact_semantics_max_abs": 0.016975099982303732
+      }
+     },
+     {
+      "variant": "copy1",
+      "reps": 1,
+      "round": 0,
+      "body_ticks": 46379,
+      "phase_ticks": {
+       "weights": 397,
+       "stage": 10632,
+       "pack": 28207,
+       "hmx": 6529,
+       "post": 374,
+       "spill": 0,
+       "store": 140,
+       "setup": 68
+      },
+      "wrapper_ms": 4.07859375,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11319311955994335,
+       "exact_semantics_max_abs": 0.016975099982303732
+      }
+     },
+     {
+      "variant": "main",
+      "reps": 3,
+      "round": 0,
+      "body_ticks": 148675,
+      "phase_ticks": {
+       "weights": 26718,
+       "stage": 15901,
+       "pack": 87021,
+       "hmx": 17465,
+       "post": 944,
+       "spill": 0,
+       "store": 420,
+       "setup": 204
+      },
+      "wrapper_ms": 9.3978125,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11319311955994335,
+       "exact_semantics_max_abs": 0.016975099982303732
+      }
+     },
+     {
+      "variant": "main",
+      "reps": 1,
+      "round": 0,
+      "body_ticks": 49857,
+      "phase_ticks": {
+       "weights": 8970,
+       "stage": 5360,
+       "pack": 29033,
+       "hmx": 5868,
+       "post": 362,
+       "spill": 0,
+       "store": 140,
+       "setup": 92
+      },
+      "wrapper_ms": 4.231875,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11319311955994335,
+       "exact_semantics_max_abs": 0.016975099982303732
+      }
+     },
+     {
+      "variant": "nohmx",
+      "reps": 3,
+      "round": 0,
+      "body_ticks": 144481,
+      "phase_ticks": {
+       "weights": 25725,
+       "stage": 15811,
+       "pack": 87108,
+       "hmx": 14233,
+       "post": 931,
+       "spill": 0,
+       "store": 450,
+       "setup": 221
+      },
+      "wrapper_ms": 9.169010416666667,
+      "error": null
+     },
+     {
+      "variant": "nohmx",
+      "reps": 1,
+      "round": 0,
+      "body_ticks": 48135,
+      "phase_ticks": {
+       "weights": 8384,
+       "stage": 5174,
+       "pack": 29188,
+       "hmx": 4739,
+       "post": 369,
+       "spill": 0,
+       "store": 169,
+       "setup": 110
+      },
+      "wrapper_ms": 4.140885416666666,
+      "error": null
+     },
+     {
+      "variant": "noreuse",
+      "reps": 3,
+      "round": 0,
+      "body_ticks": 152457,
+      "phase_ticks": {
+       "weights": 30448,
+       "stage": 15985,
+       "pack": 86881,
+       "hmx": 17555,
+       "post": 942,
+       "spill": 0,
+       "store": 420,
+       "setup": 224
+      },
+      "wrapper_ms": 9.579270833333334,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11319311955994335,
+       "exact_semantics_max_abs": 0.016975099982303732
+      }
+     },
+     {
+      "variant": "noreuse",
+      "reps": 1,
+      "round": 0,
+      "body_ticks": 50791,
+      "phase_ticks": {
+       "weights": 9947,
+       "stage": 5214,
+       "pack": 29117,
+       "hmx": 5876,
+       "post": 382,
+       "spill": 0,
+       "store": 140,
+       "setup": 92
+      },
+      "wrapper_ms": 4.28375,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11319311955994335,
+       "exact_semantics_max_abs": 0.016975099982303732
+      }
+     },
+     {
+      "variant": "notime",
+      "reps": 3,
+      "round": 0,
+      "body_ticks": 123603,
+      "phase_ticks": {
+       "weights": 0,
+       "stage": 0,
+       "pack": 0,
+       "hmx": 0,
+       "post": 0,
+       "spill": 0,
+       "store": 0,
+       "setup": 0
+      },
+      "wrapper_ms": 8.05078125,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11319311955994335,
+       "exact_semantics_max_abs": 0.016975099982303732
+      }
+     },
+     {
+      "variant": "notime",
+      "reps": 1,
+      "round": 0,
+      "body_ticks": 41445,
+      "phase_ticks": {
+       "weights": 0,
+       "stage": 0,
+       "pack": 0,
+       "hmx": 0,
+       "post": 0,
+       "spill": 0,
+       "store": 0,
+       "setup": 0
+      },
+      "wrapper_ms": 3.78515625,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11319311955994335,
+       "exact_semantics_max_abs": 0.016975099982303732
+      }
+     },
+     {
+      "variant": "notime",
+      "reps": 1,
+      "round": 1,
+      "body_ticks": 41190,
+      "phase_ticks": {
+       "weights": 0,
+       "stage": 0,
+       "pack": 0,
+       "hmx": 0,
+       "post": 0,
+       "spill": 0,
+       "store": 0,
+       "setup": 0
+      },
+      "wrapper_ms": 3.741510416666667,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11319311955994335,
+       "exact_semantics_max_abs": 0.016975099982303732
+      }
+     },
+     {
+      "variant": "notime",
+      "reps": 3,
+      "round": 1,
+      "body_ticks": 123978,
+      "phase_ticks": {
+       "weights": 0,
+       "stage": 0,
+       "pack": 0,
+       "hmx": 0,
+       "post": 0,
+       "spill": 0,
+       "store": 0,
+       "setup": 0
+      },
+      "wrapper_ms": 8.118645833333334,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11319311955994335,
+       "exact_semantics_max_abs": 0.016975099982303732
+      }
+     },
+     {
+      "variant": "noreuse",
+      "reps": 1,
+      "round": 1,
+      "body_ticks": 50804,
+      "phase_ticks": {
+       "weights": 9946,
+       "stage": 5271,
+       "pack": 29059,
+       "hmx": 5890,
+       "post": 384,
+       "spill": 0,
+       "store": 140,
+       "setup": 91
+      },
+      "wrapper_ms": 4.306145833333333,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11319311955994335,
+       "exact_semantics_max_abs": 0.016975099982303732
+      }
+     },
+     {
+      "variant": "noreuse",
+      "reps": 3,
+      "round": 1,
+      "body_ticks": 151908,
+      "phase_ticks": {
+       "weights": 29984,
+       "stage": 15835,
+       "pack": 86999,
+       "hmx": 17520,
+       "post": 924,
+       "spill": 0,
+       "store": 420,
+       "setup": 224
+      },
+      "wrapper_ms": 9.560572916666667,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11319311955994335,
+       "exact_semantics_max_abs": 0.016975099982303732
+      }
+     },
+     {
+      "variant": "nohmx",
+      "reps": 1,
+      "round": 1,
+      "body_ticks": 48486,
+      "phase_ticks": {
+       "weights": 8675,
+       "stage": 5343,
+       "pack": 29041,
+       "hmx": 4776,
+       "post": 369,
+       "spill": 0,
+       "store": 170,
+       "setup": 110
+      },
+      "wrapper_ms": 4.174791666666667,
+      "error": null
+     },
+     {
+      "variant": "nohmx",
+      "reps": 3,
+      "round": 1,
+      "body_ticks": 144358,
+      "phase_ticks": {
+       "weights": 25688,
+       "stage": 15722,
+       "pack": 87143,
+       "hmx": 14215,
+       "post": 918,
+       "spill": 0,
+       "store": 450,
+       "setup": 220
+      },
+      "wrapper_ms": 9.167135416666667,
+      "error": null
+     },
+     {
+      "variant": "main",
+      "reps": 1,
+      "round": 1,
+      "body_ticks": 50006,
+      "phase_ticks": {
+       "weights": 9130,
+       "stage": 5478,
+       "pack": 28887,
+       "hmx": 5865,
+       "post": 383,
+       "spill": 0,
+       "store": 140,
+       "setup": 91
+      },
+      "wrapper_ms": 4.26296875,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11319311955994335,
+       "exact_semantics_max_abs": 0.016975099982303732
+      }
+     },
+     {
+      "variant": "main",
+      "reps": 3,
+      "round": 1,
+      "body_ticks": 147188,
+      "phase_ticks": {
+       "weights": 25292,
+       "stage": 15088,
+       "pack": 87795,
+       "hmx": 17447,
+       "post": 941,
+       "spill": 0,
+       "store": 420,
+       "setup": 203
+      },
+      "wrapper_ms": 9.295677083333333,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11319311955994335,
+       "exact_semantics_max_abs": 0.016975099982303732
+      }
+     },
+     {
+      "variant": "copy1",
+      "reps": 1,
+      "round": 1,
+      "body_ticks": 45085,
+      "phase_ticks": {
+       "weights": 402,
+       "stage": 7726,
+       "pack": 29861,
+       "hmx": 6496,
+       "post": 370,
+       "spill": 0,
+       "store": 140,
+       "setup": 67
+      },
+      "wrapper_ms": 3.982083333333333,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11319311955994335,
+       "exact_semantics_max_abs": 0.016975099982303732
+      }
+     },
+     {
+      "variant": "copy1",
+      "reps": 3,
+      "round": 1,
+      "body_ticks": 137821,
+      "phase_ticks": {
+       "weights": 1125,
+       "stage": 30447,
+       "pack": 85445,
+       "hmx": 19321,
+       "post": 934,
+       "spill": 0,
+       "store": 420,
+       "setup": 127
+      },
+      "wrapper_ms": 8.83203125,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11319311955994335,
+       "exact_semantics_max_abs": 0.016975099982303732
+      }
+     },
+     {
+      "variant": "copy1",
+      "reps": 3,
+      "round": 2,
+      "body_ticks": 137708,
+      "phase_ticks": {
+       "weights": 1124,
+       "stage": 30058,
+       "pack": 85693,
+       "hmx": 19326,
+       "post": 934,
+       "spill": 0,
+       "store": 420,
+       "setup": 151
+      },
+      "wrapper_ms": 8.839791666666667,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11319311955994335,
+       "exact_semantics_max_abs": 0.016975099982303732
+      }
+     },
+     {
+      "variant": "copy1",
+      "reps": 1,
+      "round": 2,
+      "body_ticks": 46377,
+      "phase_ticks": {
+       "weights": 397,
+       "stage": 10454,
+       "pack": 28386,
+       "hmx": 6525,
+       "post": 373,
+       "spill": 0,
+       "store": 140,
+       "setup": 70
+      },
+      "wrapper_ms": 4.0711458333333335,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11319311955994335,
+       "exact_semantics_max_abs": 0.016975099982303732
+      }
+     },
+     {
+      "variant": "main",
+      "reps": 3,
+      "round": 2,
+      "body_ticks": 147509,
+      "phase_ticks": {
+       "weights": 25686,
+       "stage": 15173,
+       "pack": 87688,
+       "hmx": 17394,
+       "post": 943,
+       "spill": 0,
+       "store": 420,
+       "setup": 203
+      },
+      "wrapper_ms": 9.312708333333333,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11319311955994335,
+       "exact_semantics_max_abs": 0.016975099982303732
+      }
+     },
+     {
+      "variant": "main",
+      "reps": 1,
+      "round": 2,
+      "body_ticks": 49689,
+      "phase_ticks": {
+       "weights": 8825,
+       "stage": 5273,
+       "pack": 29092,
+       "hmx": 5860,
+       "post": 384,
+       "spill": 0,
+       "store": 140,
+       "setup": 92
+      },
+      "wrapper_ms": 4.203645833333334,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11319311955994335,
+       "exact_semantics_max_abs": 0.016975099982303732
+      }
+     },
+     {
+      "variant": "nohmx",
+      "reps": 3,
+      "round": 2,
+      "body_ticks": 143975,
+      "phase_ticks": {
+       "weights": 25327,
+       "stage": 15597,
+       "pack": 87242,
+       "hmx": 14213,
+       "post": 919,
+       "spill": 0,
+       "store": 454,
+       "setup": 221
+      },
+      "wrapper_ms": 9.16640625,
+      "error": null
+     },
+     {
+      "variant": "nohmx",
+      "reps": 1,
+      "round": 2,
+      "body_ticks": 48253,
+      "phase_ticks": {
+       "weights": 8504,
+       "stage": 5228,
+       "pack": 29127,
+       "hmx": 4746,
+       "post": 368,
+       "spill": 0,
+       "store": 169,
+       "setup": 109
+      },
+      "wrapper_ms": 4.162708333333334,
+      "error": null
+     },
+     {
+      "variant": "noreuse",
+      "reps": 3,
+      "round": 2,
+      "body_ticks": 152322,
+      "phase_ticks": {
+       "weights": 30346,
+       "stage": 15968,
+       "pack": 86876,
+       "hmx": 17543,
+       "post": 943,
+       "spill": 0,
+       "store": 420,
+       "setup": 224
+      },
+      "wrapper_ms": 9.584739583333333,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11319311955994335,
+       "exact_semantics_max_abs": 0.016975099982303732
+      }
+     },
+     {
+      "variant": "noreuse",
+      "reps": 1,
+      "round": 2,
+      "body_ticks": 50946,
+      "phase_ticks": {
+       "weights": 10050,
+       "stage": 5302,
+       "pack": 29061,
+       "hmx": 5896,
+       "post": 384,
+       "spill": 0,
+       "store": 140,
+       "setup": 91
+      },
+      "wrapper_ms": 4.2990104166666665,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11319311955994335,
+       "exact_semantics_max_abs": 0.016975099982303732
+      }
+     },
+     {
+      "variant": "notime",
+      "reps": 3,
+      "round": 2,
+      "body_ticks": 123628,
+      "phase_ticks": {
+       "weights": 0,
+       "stage": 0,
+       "pack": 0,
+       "hmx": 0,
+       "post": 0,
+       "spill": 0,
+       "store": 0,
+       "setup": 0
+      },
+      "wrapper_ms": 8.050729166666667,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11319311955994335,
+       "exact_semantics_max_abs": 0.016975099982303732
+      }
+     },
+     {
+      "variant": "notime",
+      "reps": 1,
+      "round": 2,
+      "body_ticks": 41475,
+      "phase_ticks": {
+       "weights": 0,
+       "stage": 0,
+       "pack": 0,
+       "hmx": 0,
+       "post": 0,
+       "spill": 0,
+       "store": 0,
+       "setup": 0
+      },
+      "wrapper_ms": 3.8194270833333333,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11319311955994335,
+       "exact_semantics_max_abs": 0.016975099982303732
+      }
+     },
+     {
+      "variant": "notime",
+      "reps": 1,
+      "round": 3,
+      "body_ticks": 41470,
+      "phase_ticks": {
+       "weights": 0,
+       "stage": 0,
+       "pack": 0,
+       "hmx": 0,
+       "post": 0,
+       "spill": 0,
+       "store": 0,
+       "setup": 0
+      },
+      "wrapper_ms": 3.8058854166666665,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11319311955994335,
+       "exact_semantics_max_abs": 0.016975099982303732
+      }
+     },
+     {
+      "variant": "notime",
+      "reps": 3,
+      "round": 3,
+      "body_ticks": 123826,
+      "phase_ticks": {
+       "weights": 0,
+       "stage": 0,
+       "pack": 0,
+       "hmx": 0,
+       "post": 0,
+       "spill": 0,
+       "store": 0,
+       "setup": 0
+      },
+      "wrapper_ms": 8.09078125,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11319311955994335,
+       "exact_semantics_max_abs": 0.016975099982303732
+      }
+     },
+     {
+      "variant": "noreuse",
+      "reps": 1,
+      "round": 3,
+      "body_ticks": 50716,
+      "phase_ticks": {
+       "weights": 9895,
+       "stage": 5196,
+       "pack": 29108,
+       "hmx": 5891,
+       "post": 373,
+       "spill": 0,
+       "store": 140,
+       "setup": 90
+      },
+      "wrapper_ms": 4.285625,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11319311955994335,
+       "exact_semantics_max_abs": 0.016975099982303732
+      }
+     },
+     {
+      "variant": "noreuse",
+      "reps": 3,
+      "round": 3,
+      "body_ticks": 150808,
+      "phase_ticks": {
+       "weights": 28922,
+       "stage": 15280,
+       "pack": 87584,
+       "hmx": 17433,
+       "post": 943,
+       "spill": 0,
+       "store": 420,
+       "setup": 224
+      },
+      "wrapper_ms": 9.486614583333333,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11319311955994335,
+       "exact_semantics_max_abs": 0.016975099982303732
+      }
+     },
+     {
+      "variant": "nohmx",
+      "reps": 1,
+      "round": 3,
+      "body_ticks": 48416,
+      "phase_ticks": {
+       "weights": 8614,
+       "stage": 5357,
+       "pack": 29025,
+       "hmx": 4771,
+       "post": 368,
+       "spill": 0,
+       "store": 169,
+       "setup": 110
+      },
+      "wrapper_ms": 4.156822916666667,
+      "error": null
+     },
+     {
+      "variant": "nohmx",
+      "reps": 3,
+      "round": 3,
+      "body_ticks": 144082,
+      "phase_ticks": {
+       "weights": 25393,
+       "stage": 15680,
+       "pack": 87198,
+       "hmx": 14209,
+       "post": 929,
+       "spill": 0,
+       "store": 449,
+       "setup": 222
+      },
+      "wrapper_ms": 9.150104166666667,
+      "error": null
+     },
+     {
+      "variant": "main",
+      "reps": 1,
+      "round": 3,
+      "body_ticks": 49415,
+      "phase_ticks": {
+       "weights": 8601,
+       "stage": 5129,
+       "pack": 29228,
+       "hmx": 5829,
+       "post": 374,
+       "spill": 0,
+       "store": 140,
+       "setup": 91
+      },
+      "wrapper_ms": 4.198125,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11319311955994335,
+       "exact_semantics_max_abs": 0.016975099982303732
+      }
+     },
+     {
+      "variant": "main",
+      "reps": 3,
+      "round": 3,
+      "body_ticks": 148767,
+      "phase_ticks": {
+       "weights": 26817,
+       "stage": 16040,
+       "pack": 86891,
+       "hmx": 17463,
+       "post": 931,
+       "spill": 0,
+       "store": 420,
+       "setup": 203
+      },
+      "wrapper_ms": 9.391510416666666,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11319311955994335,
+       "exact_semantics_max_abs": 0.016975099982303732
+      }
+     },
+     {
+      "variant": "copy1",
+      "reps": 1,
+      "round": 3,
+      "body_ticks": 46403,
+      "phase_ticks": {
+       "weights": 397,
+       "stage": 10527,
+       "pack": 28338,
+       "hmx": 6529,
+       "post": 371,
+       "spill": 0,
+       "store": 140,
+       "setup": 69
+      },
+      "wrapper_ms": 4.0609375,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11319311955994335,
+       "exact_semantics_max_abs": 0.016975099982303732
+      }
+     },
+     {
+      "variant": "copy1",
+      "reps": 3,
+      "round": 3,
+      "body_ticks": 135510,
+      "phase_ticks": {
+       "weights": 1125,
+       "stage": 25878,
+       "pack": 87805,
+       "hmx": 19211,
+       "post": 934,
+       "spill": 0,
+       "store": 420,
+       "setup": 135
+      },
+      "wrapper_ms": 8.689322916666667,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11319311955994335,
+       "exact_semantics_max_abs": 0.016975099982303732
+      }
+     },
+     {
+      "variant": "copy1",
+      "reps": 3,
+      "round": 4,
+      "body_ticks": 138070,
+      "phase_ticks": {
+       "weights": 1131,
+       "stage": 30817,
+       "pack": 85296,
+       "hmx": 19316,
+       "post": 930,
+       "spill": 0,
+       "store": 420,
+       "setup": 158
+      },
+      "wrapper_ms": 8.848854166666667,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11319311955994335,
+       "exact_semantics_max_abs": 0.016975099982303732
+      }
+     },
+     {
+      "variant": "copy1",
+      "reps": 1,
+      "round": 4,
+      "body_ticks": 46139,
+      "phase_ticks": {
+       "weights": 398,
+       "stage": 10053,
+       "pack": 28565,
+       "hmx": 6518,
+       "post": 372,
+       "spill": 0,
+       "store": 140,
+       "setup": 70
+      },
+      "wrapper_ms": 4.052708333333333,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11319311955994335,
+       "exact_semantics_max_abs": 0.016975099982303732
+      }
+     },
+     {
+      "variant": "main",
+      "reps": 3,
+      "round": 4,
+      "body_ticks": 148711,
+      "phase_ticks": {
+       "weights": 26798,
+       "stage": 15963,
+       "pack": 86940,
+       "hmx": 17458,
+       "post": 923,
+       "spill": 0,
+       "store": 420,
+       "setup": 207
+      },
+      "wrapper_ms": 9.390833333333333,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11319311955994335,
+       "exact_semantics_max_abs": 0.016975099982303732
+      }
+     },
+     {
+      "variant": "main",
+      "reps": 1,
+      "round": 4,
+      "body_ticks": 49790,
+      "phase_ticks": {
+       "weights": 8952,
+       "stage": 5332,
+       "pack": 29032,
+       "hmx": 5848,
+       "post": 363,
+       "spill": 0,
+       "store": 140,
+       "setup": 91
+      },
+      "wrapper_ms": 4.2511979166666665,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11319311955994335,
+       "exact_semantics_max_abs": 0.016975099982303732
+      }
+     },
+     {
+      "variant": "nohmx",
+      "reps": 3,
+      "round": 4,
+      "body_ticks": 144445,
+      "phase_ticks": {
+       "weights": 25765,
+       "stage": 15705,
+       "pack": 87163,
+       "hmx": 14209,
+       "post": 929,
+       "spill": 0,
+       "store": 448,
+       "setup": 224
+      },
+      "wrapper_ms": 9.173958333333333,
+      "error": null
+     },
+     {
+      "variant": "nohmx",
+      "reps": 1,
+      "round": 4,
+      "body_ticks": 47912,
+      "phase_ticks": {
+       "weights": 8148,
+       "stage": 5039,
+       "pack": 29343,
+       "hmx": 4731,
+       "post": 370,
+       "spill": 0,
+       "store": 169,
+       "setup": 110
+      },
+      "wrapper_ms": 4.11625,
+      "error": null
+     },
+     {
+      "variant": "noreuse",
+      "reps": 3,
+      "round": 4,
+      "body_ticks": 152283,
+      "phase_ticks": {
+       "weights": 30306,
+       "stage": 16035,
+       "pack": 86822,
+       "hmx": 17531,
+       "post": 943,
+       "spill": 0,
+       "store": 420,
+       "setup": 224
+      },
+      "wrapper_ms": 9.572135416666667,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11319311955994335,
+       "exact_semantics_max_abs": 0.016975099982303732
+      }
+     },
+     {
+      "variant": "noreuse",
+      "reps": 1,
+      "round": 4,
+      "body_ticks": 50652,
+      "phase_ticks": {
+       "weights": 9810,
+       "stage": 5175,
+       "pack": 29155,
+       "hmx": 5874,
+       "post": 384,
+       "spill": 0,
+       "store": 140,
+       "setup": 91
+      },
+      "wrapper_ms": 4.294635416666667,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11319311955994335,
+       "exact_semantics_max_abs": 0.016975099982303732
+      }
+     },
+     {
+      "variant": "notime",
+      "reps": 3,
+      "round": 4,
+      "body_ticks": 123916,
+      "phase_ticks": {
+       "weights": 0,
+       "stage": 0,
+       "pack": 0,
+       "hmx": 0,
+       "post": 0,
+       "spill": 0,
+       "store": 0,
+       "setup": 0
+      },
+      "wrapper_ms": 8.100572916666666,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11319311955994335,
+       "exact_semantics_max_abs": 0.016975099982303732
+      }
+     },
+     {
+      "variant": "notime",
+      "reps": 1,
+      "round": 4,
+      "body_ticks": 41496,
+      "phase_ticks": {
+       "weights": 0,
+       "stage": 0,
+       "pack": 0,
+       "hmx": 0,
+       "post": 0,
+       "spill": 0,
+       "store": 0,
+       "setup": 0
+      },
+      "wrapper_ms": 3.81875,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11319311955994335,
+       "exact_semantics_max_abs": 0.016975099982303732
+      }
+     }
+    ],
+    "repeat_counts": [
+     1,
+     3
+    ]
+   },
+   {
+    "geometry": "teacher_112",
+    "fixture": "public_y48",
+    "role": "public v20a convdwclip_0 embedded diagonally + conv_10 projection, 8-row band, real weights",
+    "payload_sha256": "9587eefbf188ce13e2c712f9a191e44264e0937228431e088b4f02659c865ea2",
+    "host_payload_ms": 0.289056,
+    "per_block": {
+     "k_tiles": 8,
+     "transactions": 2,
+     "blocks_per_job_rep": 28
+    },
+    "samples": [
+     {
+      "variant": "copy1",
+      "reps": 3,
+      "round": 0,
+      "body_ticks": 137762,
+      "phase_ticks": {
+       "weights": 1131,
+       "stage": 30215,
+       "pack": 85598,
+       "hmx": 19325,
+       "post": 920,
+       "spill": 0,
+       "store": 420,
+       "setup": 151
+      },
+      "wrapper_ms": 8.821822916666667,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11400528875836505,
+       "exact_semantics_max_abs": 0.018260142946033397
+      }
+     },
+     {
+      "variant": "copy1",
+      "reps": 1,
+      "round": 0,
+      "body_ticks": 46170,
+      "phase_ticks": {
+       "weights": 397,
+       "stage": 10116,
+       "pack": 28518,
+       "hmx": 6524,
+       "post": 374,
+       "spill": 0,
+       "store": 140,
+       "setup": 69
+      },
+      "wrapper_ms": 4.05921875,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11400528875836505,
+       "exact_semantics_max_abs": 0.018260142946033397
+      }
+     },
+     {
+      "variant": "main",
+      "reps": 3,
+      "round": 0,
+      "body_ticks": 148421,
+      "phase_ticks": {
+       "weights": 26494,
+       "stage": 15792,
+       "pack": 87122,
+       "hmx": 17457,
+       "post": 931,
+       "spill": 0,
+       "store": 420,
+       "setup": 203
+      },
+      "wrapper_ms": 9.375364583333333,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11400528875836505,
+       "exact_semantics_max_abs": 0.018260142946033397
+      }
+     },
+     {
+      "variant": "main",
+      "reps": 1,
+      "round": 0,
+      "body_ticks": 49194,
+      "phase_ticks": {
+       "weights": 8321,
+       "stage": 4890,
+       "pack": 29467,
+       "hmx": 5889,
+       "post": 363,
+       "spill": 0,
+       "store": 140,
+       "setup": 92
+      },
+      "wrapper_ms": 4.20640625,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11400528875836505,
+       "exact_semantics_max_abs": 0.018260142946033397
+      }
+     },
+     {
+      "variant": "nohmx",
+      "reps": 3,
+      "round": 0,
+      "body_ticks": 144292,
+      "phase_ticks": {
+       "weights": 25548,
+       "stage": 15591,
+       "pack": 87323,
+       "hmx": 14227,
+       "post": 930,
+       "spill": 0,
+       "store": 451,
+       "setup": 220
+      },
+      "wrapper_ms": 9.1725,
+      "error": null
+     },
+     {
+      "variant": "nohmx",
+      "reps": 1,
+      "round": 0,
+      "body_ticks": 48277,
+      "phase_ticks": {
+       "weights": 8502,
+       "stage": 5215,
+       "pack": 29173,
+       "hmx": 4746,
+       "post": 360,
+       "spill": 0,
+       "store": 169,
+       "setup": 110
+      },
+      "wrapper_ms": 4.17,
+      "error": null
+     },
+     {
+      "variant": "noreuse",
+      "reps": 3,
+      "round": 0,
+      "body_ticks": 151912,
+      "phase_ticks": {
+       "weights": 29940,
+       "stage": 15703,
+       "pack": 87138,
+       "hmx": 17544,
+       "post": 932,
+       "spill": 0,
+       "store": 420,
+       "setup": 233
+      },
+      "wrapper_ms": 9.546927083333333,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11400528875836505,
+       "exact_semantics_max_abs": 0.018260142946033397
+      }
+     },
+     {
+      "variant": "noreuse",
+      "reps": 1,
+      "round": 0,
+      "body_ticks": 50708,
+      "phase_ticks": {
+       "weights": 9859,
+       "stage": 5195,
+       "pack": 29143,
+       "hmx": 5869,
+       "post": 383,
+       "spill": 0,
+       "store": 140,
+       "setup": 96
+      },
+      "wrapper_ms": 4.304947916666666,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11400528875836505,
+       "exact_semantics_max_abs": 0.018260142946033397
+      }
+     },
+     {
+      "variant": "notime",
+      "reps": 3,
+      "round": 0,
+      "body_ticks": 123327,
+      "phase_ticks": {
+       "weights": 0,
+       "stage": 0,
+       "pack": 0,
+       "hmx": 0,
+       "post": 0,
+       "spill": 0,
+       "store": 0,
+       "setup": 0
+      },
+      "wrapper_ms": 8.040052083333334,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11400528875836505,
+       "exact_semantics_max_abs": 0.018260142946033397
+      }
+     },
+     {
+      "variant": "notime",
+      "reps": 1,
+      "round": 0,
+      "body_ticks": 41644,
+      "phase_ticks": {
+       "weights": 0,
+       "stage": 0,
+       "pack": 0,
+       "hmx": 0,
+       "post": 0,
+       "spill": 0,
+       "store": 0,
+       "setup": 0
+      },
+      "wrapper_ms": 3.813125,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11400528875836505,
+       "exact_semantics_max_abs": 0.018260142946033397
+      }
+     },
+     {
+      "variant": "notime",
+      "reps": 1,
+      "round": 1,
+      "body_ticks": 41416,
+      "phase_ticks": {
+       "weights": 0,
+       "stage": 0,
+       "pack": 0,
+       "hmx": 0,
+       "post": 0,
+       "spill": 0,
+       "store": 0,
+       "setup": 0
+      },
+      "wrapper_ms": 3.8183333333333334,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11400528875836505,
+       "exact_semantics_max_abs": 0.018260142946033397
+      }
+     },
+     {
+      "variant": "notime",
+      "reps": 3,
+      "round": 1,
+      "body_ticks": 123631,
+      "phase_ticks": {
+       "weights": 0,
+       "stage": 0,
+       "pack": 0,
+       "hmx": 0,
+       "post": 0,
+       "spill": 0,
+       "store": 0,
+       "setup": 0
+      },
+      "wrapper_ms": 8.068697916666666,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11400528875836505,
+       "exact_semantics_max_abs": 0.018260142946033397
+      }
+     },
+     {
+      "variant": "noreuse",
+      "reps": 1,
+      "round": 1,
+      "body_ticks": 50893,
+      "phase_ticks": {
+       "weights": 10009,
+       "stage": 5346,
+       "pack": 29010,
+       "hmx": 5895,
+       "post": 370,
+       "spill": 0,
+       "store": 140,
+       "setup": 91
+      },
+      "wrapper_ms": 4.285208333333333,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11400528875836505,
+       "exact_semantics_max_abs": 0.018260142946033397
+      }
+     },
+     {
+      "variant": "noreuse",
+      "reps": 3,
+      "round": 1,
+      "body_ticks": 151892,
+      "phase_ticks": {
+       "weights": 29885,
+       "stage": 15755,
+       "pack": 87127,
+       "hmx": 17536,
+       "post": 943,
+       "spill": 0,
+       "store": 420,
+       "setup": 224
+      },
+      "wrapper_ms": 9.55171875,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11400528875836505,
+       "exact_semantics_max_abs": 0.018260142946033397
+      }
+     },
+     {
+      "variant": "nohmx",
+      "reps": 1,
+      "round": 1,
+      "body_ticks": 48284,
+      "phase_ticks": {
+       "weights": 8512,
+       "stage": 5224,
+       "pack": 29143,
+       "hmx": 4765,
+       "post": 358,
+       "spill": 0,
+       "store": 171,
+       "setup": 109
+      },
+      "wrapper_ms": 4.160572916666666,
+      "error": null
+     },
+     {
+      "variant": "nohmx",
+      "reps": 3,
+      "round": 1,
+      "body_ticks": 144089,
+      "phase_ticks": {
+       "weights": 25413,
+       "stage": 15584,
+       "pack": 87299,
+       "hmx": 14201,
+       "post": 919,
+       "spill": 0,
+       "store": 451,
+       "setup": 220
+      },
+      "wrapper_ms": 9.141979166666667,
+      "error": null
+     },
+     {
+      "variant": "main",
+      "reps": 1,
+      "round": 1,
+      "body_ticks": 49805,
+      "phase_ticks": {
+       "weights": 8932,
+       "stage": 5391,
+       "pack": 28969,
+       "hmx": 5868,
+       "post": 383,
+       "spill": 0,
+       "store": 140,
+       "setup": 90
+      },
+      "wrapper_ms": 4.250625,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11400528875836505,
+       "exact_semantics_max_abs": 0.018260142946033397
+      }
+     },
+     {
+      "variant": "main",
+      "reps": 3,
+      "round": 1,
+      "body_ticks": 148137,
+      "phase_ticks": {
+       "weights": 26278,
+       "stage": 15757,
+       "pack": 87107,
+       "hmx": 17425,
+       "post": 944,
+       "spill": 0,
+       "store": 420,
+       "setup": 204
+      },
+      "wrapper_ms": 9.370677083333334,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11400528875836505,
+       "exact_semantics_max_abs": 0.018260142946033397
+      }
+     },
+     {
+      "variant": "copy1",
+      "reps": 1,
+      "round": 1,
+      "body_ticks": 46194,
+      "phase_ticks": {
+       "weights": 396,
+       "stage": 10046,
+       "pack": 28621,
+       "hmx": 6519,
+       "post": 372,
+       "spill": 0,
+       "store": 140,
+       "setup": 68
+      },
+      "wrapper_ms": 4.06671875,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11400528875836505,
+       "exact_semantics_max_abs": 0.018260142946033397
+      }
+     },
+     {
+      "variant": "copy1",
+      "reps": 3,
+      "round": 1,
+      "body_ticks": 135527,
+      "phase_ticks": {
+       "weights": 1125,
+       "stage": 25446,
+       "pack": 88213,
+       "hmx": 19259,
+       "post": 932,
+       "spill": 0,
+       "store": 420,
+       "setup": 130
+      },
+      "wrapper_ms": 8.6975,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11400528875836505,
+       "exact_semantics_max_abs": 0.018260142946033397
+      }
+     },
+     {
+      "variant": "copy1",
+      "reps": 3,
+      "round": 2,
+      "body_ticks": 136098,
+      "phase_ticks": {
+       "weights": 1131,
+       "stage": 26667,
+       "pack": 87554,
+       "hmx": 19253,
+       "post": 921,
+       "spill": 0,
+       "store": 420,
+       "setup": 150
+      },
+      "wrapper_ms": 8.749114583333334,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11400528875836505,
+       "exact_semantics_max_abs": 0.018260142946033397
+      }
+     },
+     {
+      "variant": "copy1",
+      "reps": 1,
+      "round": 2,
+      "body_ticks": 45839,
+      "phase_ticks": {
+       "weights": 397,
+       "stage": 9443,
+       "pack": 28880,
+       "hmx": 6509,
+       "post": 370,
+       "spill": 0,
+       "store": 140,
+       "setup": 68
+      },
+      "wrapper_ms": 4.029947916666667,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11400528875836505,
+       "exact_semantics_max_abs": 0.018260142946033397
+      }
+     },
+     {
+      "variant": "main",
+      "reps": 3,
+      "round": 2,
+      "body_ticks": 148601,
+      "phase_ticks": {
+       "weights": 26644,
+       "stage": 15881,
+       "pack": 87052,
+       "hmx": 17455,
+       "post": 942,
+       "spill": 0,
+       "store": 420,
+       "setup": 205
+      },
+      "wrapper_ms": 9.3978125,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11400528875836505,
+       "exact_semantics_max_abs": 0.018260142946033397
+      }
+     },
+     {
+      "variant": "main",
+      "reps": 1,
+      "round": 2,
+      "body_ticks": 49760,
+      "phase_ticks": {
+       "weights": 8901,
+       "stage": 5363,
+       "pack": 28997,
+       "hmx": 5861,
+       "post": 384,
+       "spill": 0,
+       "store": 140,
+       "setup": 92
+      },
+      "wrapper_ms": 4.255625,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11400528875836505,
+       "exact_semantics_max_abs": 0.018260142946033397
+      }
+     },
+     {
+      "variant": "nohmx",
+      "reps": 3,
+      "round": 2,
+      "body_ticks": 144535,
+      "phase_ticks": {
+       "weights": 25817,
+       "stage": 15840,
+       "pack": 87076,
+       "hmx": 14202,
+       "post": 928,
+       "spill": 0,
+       "store": 449,
+       "setup": 221
+      },
+      "wrapper_ms": 9.1759375,
+      "error": null
+     },
+     {
+      "variant": "nohmx",
+      "reps": 1,
+      "round": 2,
+      "body_ticks": 48341,
+      "phase_ticks": {
+       "weights": 8608,
+       "stage": 5285,
+       "pack": 29064,
+       "hmx": 4745,
+       "post": 358,
+       "spill": 0,
+       "store": 169,
+       "setup": 110
+      },
+      "wrapper_ms": 4.11828125,
+      "error": null
+     },
+     {
+      "variant": "noreuse",
+      "reps": 3,
+      "round": 2,
+      "body_ticks": 152627,
+      "phase_ticks": {
+       "weights": 30585,
+       "stage": 16102,
+       "pack": 86770,
+       "hmx": 17581,
+       "post": 943,
+       "spill": 0,
+       "store": 420,
+       "setup": 224
+      },
+      "wrapper_ms": 9.587395833333334,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11400528875836505,
+       "exact_semantics_max_abs": 0.018260142946033397
+      }
+     },
+     {
+      "variant": "noreuse",
+      "reps": 1,
+      "round": 2,
+      "body_ticks": 49944,
+      "phase_ticks": {
+       "weights": 9183,
+       "stage": 4906,
+       "pack": 29411,
+       "hmx": 5828,
+       "post": 363,
+       "spill": 0,
+       "store": 140,
+       "setup": 90
+      },
+      "wrapper_ms": 4.2156770833333335,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11400528875836505,
+       "exact_semantics_max_abs": 0.018260142946033397
+      }
+     },
+     {
+      "variant": "notime",
+      "reps": 3,
+      "round": 2,
+      "body_ticks": 123618,
+      "phase_ticks": {
+       "weights": 0,
+       "stage": 0,
+       "pack": 0,
+       "hmx": 0,
+       "post": 0,
+       "spill": 0,
+       "store": 0,
+       "setup": 0
+      },
+      "wrapper_ms": 8.091197916666667,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11400528875836505,
+       "exact_semantics_max_abs": 0.018260142946033397
+      }
+     },
+     {
+      "variant": "notime",
+      "reps": 1,
+      "round": 2,
+      "body_ticks": 41424,
+      "phase_ticks": {
+       "weights": 0,
+       "stage": 0,
+       "pack": 0,
+       "hmx": 0,
+       "post": 0,
+       "spill": 0,
+       "store": 0,
+       "setup": 0
+      },
+      "wrapper_ms": 3.820520833333333,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11400528875836505,
+       "exact_semantics_max_abs": 0.018260142946033397
+      }
+     },
+     {
+      "variant": "notime",
+      "reps": 1,
+      "round": 3,
+      "body_ticks": 41557,
+      "phase_ticks": {
+       "weights": 0,
+       "stage": 0,
+       "pack": 0,
+       "hmx": 0,
+       "post": 0,
+       "spill": 0,
+       "store": 0,
+       "setup": 0
+      },
+      "wrapper_ms": 3.812708333333333,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11400528875836505,
+       "exact_semantics_max_abs": 0.018260142946033397
+      }
+     },
+     {
+      "variant": "notime",
+      "reps": 3,
+      "round": 3,
+      "body_ticks": 123895,
+      "phase_ticks": {
+       "weights": 0,
+       "stage": 0,
+       "pack": 0,
+       "hmx": 0,
+       "post": 0,
+       "spill": 0,
+       "store": 0,
+       "setup": 0
+      },
+      "wrapper_ms": 8.085677083333334,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11400528875836505,
+       "exact_semantics_max_abs": 0.018260142946033397
+      }
+     },
+     {
+      "variant": "noreuse",
+      "reps": 1,
+      "round": 3,
+      "body_ticks": 51160,
+      "phase_ticks": {
+       "weights": 10286,
+       "stage": 5394,
+       "pack": 28940,
+       "hmx": 5906,
+       "post": 380,
+       "spill": 0,
+       "store": 140,
+       "setup": 91
+      },
+      "wrapper_ms": 4.316770833333333,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11400528875836505,
+       "exact_semantics_max_abs": 0.018260142946033397
+      }
+     },
+     {
+      "variant": "noreuse",
+      "reps": 3,
+      "round": 3,
+      "body_ticks": 152239,
+      "phase_ticks": {
+       "weights": 30232,
+       "stage": 15905,
+       "pack": 86958,
+       "hmx": 17549,
+       "post": 944,
+       "spill": 0,
+       "store": 420,
+       "setup": 229
+      },
+      "wrapper_ms": 9.58625,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11400528875836505,
+       "exact_semantics_max_abs": 0.018260142946033397
+      }
+     },
+     {
+      "variant": "nohmx",
+      "reps": 1,
+      "round": 3,
+      "body_ticks": 48487,
+      "phase_ticks": {
+       "weights": 8684,
+       "stage": 5331,
+       "pack": 29049,
+       "hmx": 4773,
+       "post": 369,
+       "spill": 0,
+       "store": 169,
+       "setup": 110
+      },
+      "wrapper_ms": 4.18765625,
+      "error": null
+     },
+     {
+      "variant": "nohmx",
+      "reps": 3,
+      "round": 3,
+      "body_ticks": 143530,
+      "phase_ticks": {
+       "weights": 24931,
+       "stage": 15253,
+       "pack": 87566,
+       "hmx": 14174,
+       "post": 930,
+       "spill": 0,
+       "store": 448,
+       "setup": 226
+      },
+      "wrapper_ms": 9.111927083333333,
+      "error": null
+     },
+     {
+      "variant": "main",
+      "reps": 1,
+      "round": 3,
+      "body_ticks": 49881,
+      "phase_ticks": {
+       "weights": 9016,
+       "stage": 5342,
+       "pack": 29010,
+       "hmx": 5867,
+       "post": 383,
+       "spill": 0,
+       "store": 140,
+       "setup": 91
+      },
+      "wrapper_ms": 4.252552083333334,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11400528875836505,
+       "exact_semantics_max_abs": 0.018260142946033397
+      }
+     },
+     {
+      "variant": "main",
+      "reps": 3,
+      "round": 3,
+      "body_ticks": 148494,
+      "phase_ticks": {
+       "weights": 26563,
+       "stage": 15847,
+       "pack": 87065,
+       "hmx": 17447,
+       "post": 943,
+       "spill": 0,
+       "store": 420,
+       "setup": 207
+      },
+      "wrapper_ms": 9.382552083333334,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11400528875836505,
+       "exact_semantics_max_abs": 0.018260142946033397
+      }
+     },
+     {
+      "variant": "copy1",
+      "reps": 1,
+      "round": 3,
+      "body_ticks": 46165,
+      "phase_ticks": {
+       "weights": 396,
+       "stage": 10116,
+       "pack": 28523,
+       "hmx": 6522,
+       "post": 370,
+       "spill": 0,
+       "store": 140,
+       "setup": 66
+      },
+      "wrapper_ms": 4.065364583333333,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11400528875836505,
+       "exact_semantics_max_abs": 0.018260142946033397
+      }
+     },
+     {
+      "variant": "copy1",
+      "reps": 3,
+      "round": 3,
+      "body_ticks": 137770,
+      "phase_ticks": {
+       "weights": 1131,
+       "stage": 30320,
+       "pack": 85510,
+       "hmx": 19324,
+       "post": 932,
+       "spill": 0,
+       "store": 420,
+       "setup": 131
+      },
+      "wrapper_ms": 8.80984375,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11400528875836505,
+       "exact_semantics_max_abs": 0.018260142946033397
+      }
+     },
+     {
+      "variant": "copy1",
+      "reps": 3,
+      "round": 4,
+      "body_ticks": 137987,
+      "phase_ticks": {
+       "weights": 1125,
+       "stage": 30705,
+       "pack": 85295,
+       "hmx": 19347,
+       "post": 935,
+       "spill": 0,
+       "store": 420,
+       "setup": 158
+      },
+      "wrapper_ms": 8.856041666666666,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11400528875836505,
+       "exact_semantics_max_abs": 0.018260142946033397
+      }
+     },
+     {
+      "variant": "copy1",
+      "reps": 1,
+      "round": 4,
+      "body_ticks": 46155,
+      "phase_ticks": {
+       "weights": 397,
+       "stage": 10134,
+       "pack": 28487,
+       "hmx": 6524,
+       "post": 373,
+       "spill": 0,
+       "store": 140,
+       "setup": 68
+      },
+      "wrapper_ms": 4.05265625,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11400528875836505,
+       "exact_semantics_max_abs": 0.018260142946033397
+      }
+     },
+     {
+      "variant": "main",
+      "reps": 3,
+      "round": 4,
+      "body_ticks": 148193,
+      "phase_ticks": {
+       "weights": 26306,
+       "stage": 15688,
+       "pack": 87188,
+       "hmx": 17441,
+       "post": 944,
+       "spill": 0,
+       "store": 420,
+       "setup": 204
+      },
+      "wrapper_ms": 9.37109375,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11400528875836505,
+       "exact_semantics_max_abs": 0.018260142946033397
+      }
+     },
+     {
+      "variant": "main",
+      "reps": 1,
+      "round": 4,
+      "body_ticks": 49553,
+      "phase_ticks": {
+       "weights": 8723,
+       "stage": 5178,
+       "pack": 29178,
+       "hmx": 5848,
+       "post": 363,
+       "spill": 0,
+       "store": 140,
+       "setup": 91
+      },
+      "wrapper_ms": 4.197864583333334,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11400528875836505,
+       "exact_semantics_max_abs": 0.018260142946033397
+      }
+     },
+     {
+      "variant": "nohmx",
+      "reps": 3,
+      "round": 4,
+      "body_ticks": 144036,
+      "phase_ticks": {
+       "weights": 25376,
+       "stage": 15563,
+       "pack": 87292,
+       "hmx": 14204,
+       "post": 928,
+       "spill": 0,
+       "store": 450,
+       "setup": 221
+      },
+      "wrapper_ms": 9.150729166666666,
+      "error": null
+     },
+     {
+      "variant": "nohmx",
+      "reps": 1,
+      "round": 4,
+      "body_ticks": 48379,
+      "phase_ticks": {
+       "weights": 8625,
+       "stage": 5294,
+       "pack": 29055,
+       "hmx": 4755,
+       "post": 369,
+       "spill": 0,
+       "store": 169,
+       "setup": 110
+      },
+      "wrapper_ms": 4.173333333333333,
+      "error": null
+     },
+     {
+      "variant": "noreuse",
+      "reps": 3,
+      "round": 4,
+      "body_ticks": 150864,
+      "phase_ticks": {
+       "weights": 28909,
+       "stage": 15158,
+       "pack": 87721,
+       "hmx": 17497,
+       "post": 933,
+       "spill": 0,
+       "store": 420,
+       "setup": 224
+      },
+      "wrapper_ms": 9.47953125,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11400528875836505,
+       "exact_semantics_max_abs": 0.018260142946033397
+      }
+     },
+     {
+      "variant": "noreuse",
+      "reps": 1,
+      "round": 4,
+      "body_ticks": 50674,
+      "phase_ticks": {
+       "weights": 9857,
+       "stage": 5202,
+       "pack": 29132,
+       "hmx": 5868,
+       "post": 362,
+       "spill": 0,
+       "store": 140,
+       "setup": 90
+      },
+      "wrapper_ms": 4.2728125,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11400528875836505,
+       "exact_semantics_max_abs": 0.018260142946033397
+      }
+     },
+     {
+      "variant": "notime",
+      "reps": 3,
+      "round": 4,
+      "body_ticks": 123902,
+      "phase_ticks": {
+       "weights": 0,
+       "stage": 0,
+       "pack": 0,
+       "hmx": 0,
+       "post": 0,
+       "spill": 0,
+       "store": 0,
+       "setup": 0
+      },
+      "wrapper_ms": 8.103385416666667,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11400528875836505,
+       "exact_semantics_max_abs": 0.018260142946033397
+      }
+     },
+     {
+      "variant": "notime",
+      "reps": 1,
+      "round": 4,
+      "body_ticks": 41492,
+      "phase_ticks": {
+       "weights": 0,
+       "stage": 0,
+       "pack": 0,
+       "hmx": 0,
+       "post": 0,
+       "spill": 0,
+       "store": 0,
+       "setup": 0
+      },
+      "wrapper_ms": 3.8207291666666667,
+      "error": {
+       "values": 14336,
+       "max_abs": 0.015625,
+       "max_error_to_bound_ratio": 0.11400528875836505,
+       "exact_semantics_max_abs": 0.018260142946033397
+      }
+     }
+    ],
+    "repeat_counts": [
+     1,
+     3
+    ]
+   }
+  ],
+  "service_before": "MainPID=1015\nNRestarts=0\nActiveState=active\n",
+  "initial_health": {
+   "state": {
+    "abi": 9,
+    "control": [
+     1,
+     0,
+     1
+    ],
+    "callback": 0,
+    "poisoned": false
+   },
+   "firmware_code_prefix_bytes": 114688,
+   "firmware_code_prefix_sha256": "55679e13486357627ea22e494b25342acd9d24d73450f3f28eb1113b82c71b95",
+   "power_configuration_sha256": "2405bda200a51fd0bd699568e8415e53ba7b631cbaa9d4812c656b7240159bbd",
+   "power_restored": true
+  },
+  "arena_before_sha256": "94674964076f61f96f8eb7e5ba78b1e5defde8c1d2f320ba45fda8c3ac6c3b48",
+  "guarded_faults": 4,
+  "wrong_geometry_rejections": 4,
+  "post_fault_valid_results": 4,
+  "arena_after_sha256": "94674964076f61f96f8eb7e5ba78b1e5defde8c1d2f320ba45fda8c3ac6c3b48",
+  "final_health": {
+   "state": {
+    "abi": 9,
+    "control": [
+     1,
+     0,
+     1
+    ],
+    "callback": 0,
+    "poisoned": false
+   },
+   "firmware_code_prefix_bytes": 114688,
+   "firmware_code_prefix_sha256": "55679e13486357627ea22e494b25342acd9d24d73450f3f28eb1113b82c71b95",
+   "power_configuration_sha256": "2405bda200a51fd0bd699568e8415e53ba7b631cbaa9d4812c656b7240159bbd",
+   "power_restored": true
+  },
+  "service_after": "MainPID=1015\nNRestarts=0\nActiveState=active\n",
+  "all_checks_passed": true
+ },
+ "run2_summary": {
+  "format": "framenpu-hmx-block-summary",
+  "geometries": {
+   "w050_112/synthetic": {
+    "variants": {
+     "main": {
+      "block_us_median": 69.33872767857143,
+      "block_us_slope_median": 69.04265873015873,
+      "phase_us_per_block": {
+       "weights": 11.507161458333334,
+       "stage": 4.746558779761905,
+       "pack": 43.664434523809526,
+       "hmx": 8.610956101190476,
+       "post": 0.5608258928571429,
+       "spill": 0.0,
+       "store": 0.15625,
+       "setup": 0.08277529761904762
+      }
+     },
+     "copy1": {
+      "block_us_median": 63.84347098214286,
+      "block_us_slope_median": 63.69419642857142,
+      "phase_us_per_block": {
+       "weights": 0.5329241071428572,
+       "stage": 11.387183779761905,
+       "pack": 41.27790178571429,
+       "hmx": 9.835379464285715,
+       "post": 0.5640811011904762,
+       "spill": 0.0,
+       "store": 0.15625,
+       "setup": 0.0841703869047619
+      }
+     },
+     "notime": {
+      "block_us_median": 57.82784598214286,
+      "block_us_slope_median": 57.58866567460318,
+      "phase_us_per_block": {
+       "weights": 0.0,
+       "stage": 0.0,
+       "pack": 0.0,
+       "hmx": 0.0,
+       "post": 0.0,
+       "spill": 0.0,
+       "store": 0.0,
+       "setup": 0.0
+      }
+     },
+     "noreuse": {
+      "block_us_median": 71.69084821428572,
+      "block_us_slope_median": 71.49119543650794,
+      "phase_us_per_block": {
+       "weights": 13.816034226190478,
+       "stage": 4.660528273809525,
+       "pack": 43.78208705357143,
+       "hmx": 8.619326636904761,
+       "post": 0.5687313988095238,
+       "spill": 0.0,
+       "store": 0.16090029761904764,
+       "setup": 0.08463541666666667
+      }
+     },
+     "nohmx": {
+      "block_us_median": 67.22423735119048,
+      "block_us_slope_median": 67.12921626984127,
+      "phase_us_per_block": {
+       "weights": 11.294642857142858,
+       "stage": 4.801432291666667,
+       "pack": 43.588634672619044,
+       "hmx": 6.723400297619048,
+       "post": 0.5631510416666667,
+       "spill": 0.0,
+       "store": 0.1720610119047619,
+       "setup": 0.08138020833333334
+      }
+     }
+    },
+    "units": {
+     "weight_tile_us": 2.301432291666667,
+     "gather_k_tile_us": 9.682198660714286,
+     "stage_k_tile_us": 0.949311755952381,
+     "pack_k_tile_us": 8.732886904761905,
+     "hmx_per_load_us": 1.4351593501984128,
+     "post_per_mid_tile_us": 0.5608258928571429,
+     "store_per_out_tile_us": 0.15625,
+     "spill_tile_us": null,
+     "setup_per_block_us": 0.08277529761904762
+    },
+    "phase_share": {
+     "weights": 0.16597913941711104,
+     "stage": 0.06846429888989503,
+     "pack": 0.6298152060904852,
+     "hmx": 0.12420431297581916,
+     "post": 0.008089345004527619,
+     "spill": 0.0,
+     "store": 0.0022537478619579433,
+     "setup": 0.0011939497602039104
+    },
+    "instrumentation_overhead": 0.19905430508311017,
+    "batched_copy_speedup": {
+     "weights": 0.04631238634067489,
+     "stage": 2.3990398745958657
+    },
+    "hmx_inclusive_us_per_load": 0.3524150545634915,
+    "nohmx_phase_us_per_block": {
+     "weights": 11.294642857142858,
+     "stage": 4.801432291666667,
+     "pack": 43.588634672619044,
+     "hmx": 6.723400297619048,
+     "post": 0.5631510416666667,
+     "spill": 0.0,
+     "store": 0.1720610119047619,
+     "setup": 0.08138020833333334
+    },
+    "stage2_weight_residency_saving_us_per_block": 2.352120535714292
+   },
+   "w050_14/synthetic": {
+    "variants": {
+     "main": {
+      "block_us_median": 494.58333333333337,
+      "block_us_slope_median": 490.1934523809524,
+      "phase_us_per_block": {
+       "weights": 90.98958333333334,
+       "stage": 34.95907738095238,
+       "pack": 303.72767857142856,
+       "hmx": 50.83705357142857,
+       "post": 2.916666666666667,
+       "spill": 10.435267857142858,
+       "store": 0.37202380952380953,
+       "setup": 0.35342261904761907
+      }
+     },
+     "copy1": {
+      "block_us_median": 450.234375,
+      "block_us_slope_median": 449.6279761904762,
+      "phase_us_per_block": {
+       "weights": 16.27232142857143,
+       "stage": 61.09747023809525,
+       "pack": 307.9873511904762,
+       "hmx": 60.539434523809526,
+       "post": 2.9092261904761902,
+       "spill": 0.5729166666666667,
+       "store": 0.3794642857142857,
+       "setup": 0.34226190476190477
+      }
+     },
+     "notime": {
+      "block_us_median": 426.8601190476191,
+      "block_us_slope_median": 420.8258928571429,
+      "phase_us_per_block": {
+       "weights": 0.0,
+       "stage": 0.0,
+       "pack": 0.0,
+       "hmx": 0.0,
+       "post": 0.0,
+       "spill": 0.0,
+       "store": 0.0,
+       "setup": 0.0
+      }
+     },
+     "nohmx": {
+      "block_us_median": 482.73065476190476,
+      "block_us_slope_median": 483.0729166666667,
+      "phase_us_per_block": {
+       "weights": 91.07142857142858,
+       "stage": 33.236607142857146,
+       "pack": 299.6354166666667,
+       "hmx": 44.36383928571429,
+       "post": 2.9389880952380953,
+       "spill": 10.662202380952381,
+       "store": 0.4166666666666667,
+       "setup": 0.3236607142857143
+      }
+     }
+    },
+    "units": {
+     "weight_tile_us": 2.2747395833333335,
+     "gather_k_tile_us": 9.676764455782314,
+     "stage_k_tile_us": 0.9988307823129251,
+     "pack_k_tile_us": 8.677933673469388,
+     "hmx_per_load_us": 1.2709263392857142,
+     "post_per_mid_tile_us": 0.5833333333333334,
+     "store_per_out_tile_us": 0.37202380952380953,
+     "spill_tile_us": 1.0435267857142858,
+     "setup_per_block_us": 0.35342261904761907
+    },
+    "phase_share": {
+     "weights": 0.18396943119762912,
+     "stage": 0.07068283363170008,
+     "pack": 0.6140989574714546,
+     "hmx": 0.10278609360191356,
+     "post": 0.005897131166037339,
+     "spill": 0.02109879199073308,
+     "store": 0.0007521850977088442,
+     "setup": 0.0007145758428234021
+    },
+    "instrumentation_overhead": 0.15865434896287245,
+    "batched_copy_speedup": {
+     "weights": 0.1788371902853872,
+     "stage": 1.7476854315206984
+    },
+    "hmx_inclusive_us_per_load": 0.2963169642857153,
+    "nohmx_phase_us_per_block": {
+     "weights": 91.07142857142858,
+     "stage": 33.236607142857146,
+     "pack": 299.6354166666667,
+     "hmx": 44.36383928571429,
+     "post": 2.9389880952380953,
+     "spill": 10.662202380952381,
+     "store": 0.4166666666666667,
+     "setup": 0.3236607142857143
+    }
+   },
+   "w050_7/synthetic": {
+    "variants": {
+     "main": {
+      "block_us_median": 483.8736979166667,
+      "block_us_slope_median": 481.26736111111114,
+      "phase_us_per_block": {
+       "weights": 82.58463541666667,
+       "stage": 46.126302083333336,
+       "pack": 299.4791666666667,
+       "hmx": 43.59375,
+       "post": 1.5885416666666667,
+       "spill": 8.893229166666668,
+       "store": 0.8919270833333334,
+       "setup": 0.60546875
+      }
+     },
+     "copy1": {
+      "block_us_median": 442.14192708333337,
+      "block_us_slope_median": 439.7916666666667,
+      "phase_us_per_block": {
+       "weights": 14.049479166666668,
+       "stage": 74.12760416666667,
+       "pack": 301.15234375,
+       "hmx": 48.71744791666667,
+       "post": 1.4322916666666667,
+       "spill": 0.8919270833333334,
+       "store": 0.8854166666666667,
+       "setup": 0.7747395833333334
+      }
+     },
+     "notime": {
+      "block_us_median": 425.3190104166667,
+      "block_us_slope_median": 421.63194444444446,
+      "phase_us_per_block": {
+       "weights": 0.0,
+       "stage": 0.0,
+       "pack": 0.0,
+       "hmx": 0.0,
+       "post": 0.0,
+       "spill": 0.0,
+       "store": 0.0,
+       "setup": 0.0
+      }
+     },
+     "nohmx": {
+      "block_us_median": 476.18489583333337,
+      "block_us_slope_median": 474.8697916666667,
+      "phase_us_per_block": {
+       "weights": 80.00651041666667,
+       "stage": 46.10026041666667,
+       "pack": 298.48958333333337,
+       "hmx": 39.798177083333336,
+       "post": 1.5755208333333335,
+       "spill": 8.912760416666668,
+       "store": 1.0286458333333335,
+       "setup": 0.7096354166666667
+      }
+     }
+    },
+    "units": {
+     "weight_tile_us": 2.2940176504629632,
+     "gather_k_tile_us": 10.8001708984375,
+     "stage_k_tile_us": 1.4414469401041667,
+     "pack_k_tile_us": 9.358723958333334,
+     "hmx_per_load_us": 1.2109375,
+     "post_per_mid_tile_us": 0.7942708333333334,
+     "store_per_out_tile_us": 0.4459635416666667,
+     "spill_tile_us": 1.4822048611111114,
+     "setup_per_block_us": 0.60546875
+    },
+    "phase_share": {
+     "weights": 0.17071299760450032,
+     "stage": 0.09534896239872957,
+     "pack": 0.6190617177616882,
+     "hmx": 0.09011385352461443,
+     "post": 0.0032837186768228674,
+     "spill": 0.01838344144483622,
+     "store": 0.0018437272898554624,
+     "setup": 0.0012515812989529781
+    },
+    "instrumentation_overhead": 0.13767239663855246,
+    "batched_copy_speedup": {
+     "weights": 0.17012219156484037,
+     "stage": 1.6070571630204658
+    },
+    "hmx_inclusive_us_per_load": 0.2135778356481476,
+    "nohmx_phase_us_per_block": {
+     "weights": 80.00651041666667,
+     "stage": 46.10026041666667,
+     "pack": 298.48958333333337,
+     "hmx": 39.798177083333336,
+     "post": 1.5755208333333335,
+     "spill": 8.912760416666668,
+     "store": 1.0286458333333335,
+     "setup": 0.7096354166666667
+    }
+   },
+   "teacher_112/public_y0": {
+    "variants": {
+     "main": {
+      "block_us_median": 92.1843998015873,
+      "block_us_slope_median": 91.90662202380953,
+      "phase_us_per_block": {
+       "weights": 16.566220238095237,
+       "stage": 9.859250992063492,
+       "pack": 53.95647321428572,
+       "hmx": 10.824652777777779,
+       "post": 0.5834573412698413,
+       "spill": 0.0,
+       "store": 0.2604166666666667,
+       "setup": 0.12586805555555555
+      }
+     },
+     "copy1": {
+      "block_us_median": 85.38442460317461,
+      "block_us_slope_median": 84.94326636904762,
+      "phase_us_per_block": {
+       "weights": 0.6975446428571429,
+       "stage": 18.63715277777778,
+       "pack": 53.117559523809526,
+       "hmx": 11.977926587301589,
+       "post": 0.5791170634920635,
+       "spill": 0.0,
+       "store": 0.2604166666666667,
+       "setup": 0.09362599206349206
+      }
+     },
+     "notime": {
+      "block_us_median": 76.77703373015873,
+      "block_us_slope_median": 76.59598214285714,
+      "phase_us_per_block": {
+       "weights": 0.0,
+       "stage": 0.0,
+       "pack": 0.0,
+       "hmx": 0.0,
+       "post": 0.0,
+       "spill": 0.0,
+       "store": 0.0,
+       "setup": 0.0
+      }
+     },
+     "noreuse": {
+      "block_us_median": 94.42150297619048,
+      "block_us_slope_median": 94.28571428571429,
+      "phase_us_per_block": {
+       "weights": 18.79092261904762,
+       "stage": 9.900793650793652,
+       "pack": 53.86966765873016,
+       "hmx": 10.869915674603176,
+       "post": 0.5846974206349207,
+       "spill": 0.0,
+       "store": 0.2604166666666667,
+       "setup": 0.1388888888888889
+      }
+     },
+     "nohmx": {
+      "block_us_median": 89.5076884920635,
+      "block_us_slope_median": 89.16666666666667,
+      "phase_us_per_block": {
+       "weights": 15.927579365079366,
+       "stage": 9.737723214285715,
+       "pack": 54.044518849206355,
+       "hmx": 8.81262400793651,
+       "post": 0.5760168650793651,
+       "spill": 0.0,
+       "store": 0.27901785714285715,
+       "setup": 0.13702876984126985
+      }
+     }
+    },
+    "units": {
+     "weight_tile_us": 2.3666028911564623,
+     "gather_k_tile_us": 9.11653202947846,
+     "stage_k_tile_us": 1.4084644274376417,
+     "pack_k_tile_us": 7.708067602040818,
+     "hmx_per_load_us": 1.3530815972222223,
+     "post_per_mid_tile_us": 0.5834573412698413,
+     "store_per_out_tile_us": 0.2604166666666667,
+     "spill_tile_us": null,
+     "setup_per_block_us": 0.12586805555555555
+    },
+    "phase_share": {
+     "weights": 0.17972313032247647,
+     "stage": 0.10696075661567851,
+     "pack": 0.5853614239011987,
+     "hmx": 0.11743417954823694,
+     "post": 0.006329795105675963,
+     "spill": 0.0,
+     "store": 0.0028252007910562213,
+     "setup": 0.0013655137156771736
+    },
+    "instrumentation_overhead": 0.20067675609322766,
+    "batched_copy_speedup": {
+     "weights": 0.0421064450931956,
+     "stage": 1.890321363436262
+    },
+    "hmx_inclusive_us_per_load": 0.3345889136904763,
+    "nohmx_phase_us_per_block": {
+     "weights": 15.927579365079366,
+     "stage": 9.737723214285715,
+     "pack": 54.044518849206355,
+     "hmx": 8.81262400793651,
+     "post": 0.5760168650793651,
+     "spill": 0.0,
+     "store": 0.27901785714285715,
+     "setup": 0.13702876984126985
+    },
+    "stage2_weight_residency_saving_us_per_block": 2.2371031746031775
+   },
+   "teacher_112/public_y48": {
+    "variants": {
+     "main": {
+      "block_us_median": 92.02690972222223,
+      "block_us_slope_median": 91.74107142857143,
+      "phase_us_per_block": {
+       "weights": 16.42733134920635,
+       "stage": 9.791666666666668,
+       "pack": 54.00979662698413,
+       "hmx": 10.817832341269842,
+       "post": 0.5846974206349207,
+       "spill": 0.0,
+       "store": 0.2604166666666667,
+       "setup": 0.12648809523809523
+      }
+     },
+     "copy1": {
+      "block_us_median": 85.41790674603176,
+      "block_us_slope_median": 85.18601190476191,
+      "phase_us_per_block": {
+       "weights": 0.7012648809523809,
+       "stage": 18.73449900793651,
+       "pack": 53.07415674603175,
+       "hmx": 11.981646825396826,
+       "post": 0.5778769841269842,
+       "spill": 0.0,
+       "store": 0.2604166666666667,
+       "setup": 0.09300595238095238
+      }
+     },
+     "notime": {
+      "block_us_median": 76.6561259920635,
+      "block_us_slope_median": 76.46484375,
+      "phase_us_per_block": {
+       "weights": 0.0,
+       "stage": 0.0,
+       "pack": 0.0,
+       "hmx": 0.0,
+       "post": 0.0,
+       "spill": 0.0,
+       "store": 0.0,
+       "setup": 0.0
+      }
+     },
+     "noreuse": {
+      "block_us_median": 94.19146825396825,
+      "block_us_slope_median": 94.00948660714286,
+      "phase_us_per_block": {
+       "weights": 18.5639880952381,
+       "stage": 9.768725198412698,
+       "pack": 54.02219742063492,
+       "hmx": 10.877976190476192,
+       "post": 0.5846974206349207,
+       "spill": 0.0,
+       "store": 0.2604166666666667,
+       "setup": 0.1388888888888889
+      }
+     },
+     "nohmx": {
+      "block_us_median": 89.34089781746032,
+      "block_us_slope_median": 89.10435267857143,
+      "phase_us_per_block": {
+       "weights": 15.757068452380953,
+       "stage": 9.662698412698413,
+       "pack": 54.128844246031754,
+       "hmx": 8.805803571428573,
+       "post": 0.5753968253968255,
+       "spill": 0.0,
+       "store": 0.27901785714285715,
+       "setup": 0.13702876984126985
+      }
+     }
+    },
+    "units": {
+     "weight_tile_us": 2.346761621315193,
+     "gather_k_tile_us": 9.114494756235828,
+     "stage_k_tile_us": 1.398809523809524,
+     "pack_k_tile_us": 7.715685232426304,
+     "hmx_per_load_us": 1.3522290426587302,
+     "post_per_mid_tile_us": 0.5846974206349207,
+     "store_per_out_tile_us": 0.2604166666666667,
+     "spill_tile_us": null,
+     "setup_per_block_us": 0.12648809523809523
+    },
+    "phase_share": {
+     "weights": 0.1785225764283356,
+     "stage": 0.10641007499646243,
+     "pack": 0.5869467073655555,
+     "hmx": 0.11756184007492908,
+     "post": 0.00635414771540426,
+     "spill": 0.0,
+     "store": 0.0028300551860761286,
+     "setup": 0.0013745982332369765
+    },
+    "instrumentation_overhead": 0.2005160517993061,
+    "batched_copy_speedup": {
+     "weights": 0.04268891069676153,
+     "stage": 1.9133105369807497
+    },
+    "hmx_inclusive_us_per_load": 0.335751488095239,
+    "nohmx_phase_us_per_block": {
+     "weights": 15.757068452380953,
+     "stage": 9.662698412698413,
+     "pack": 54.128844246031754,
+     "hmx": 8.805803571428573,
+     "post": 0.5753968253968255,
+     "spill": 0.0,
+     "store": 0.27901785714285715,
+     "setup": 0.13702876984126985
+    },
+    "stage2_weight_residency_saving_us_per_block": 2.1645585317460245
+   }
+  },
+  "forecast": {
+   "variant": "fused3_w050",
+   "unit_costs_us": {
+    "weight_tile_us": 2.2940176504629632,
+    "gather_k_tile_us": 9.682198660714286,
+    "stage_k_tile_us": 0.9988307823129251,
+    "pack_k_tile_us": 8.732886904761905,
+    "hmx_per_load_us": 1.2709263392857142,
+    "post_per_mid_tile_us": 0.5833333333333334,
+    "store_per_out_tile_us": 0.37202380952380953,
+    "spill_tile_us": 1.2628658234126986,
+    "setup_per_block_us": 0.35342261904761907
+   },
+   "convolution_ms": 99.0886747375165,
+   "convolution_ms_if_weights_were_vtcm_resident": 80.3465505332341,
+   "decision_gate_ms": [
+    12,
+    20
+   ],
+   "approximated_layers": [
+    "convclip_0",
+    "convclip_1+convdwclip_1",
+    "convclip_3+convdwclip_3",
+    "convclip_5+convdwclip_5",
+    "convclip_11+convdwclip_11"
+   ],
+   "assumptions": [
+    "1x1 layers read their B operand as a prepacked tile copy (spill-reload unit cost).",
+    "Stride-2 and RGB-stem layers reuse stride-1 gather costs (not measured).",
+    "Residual adds, pooling, sigmoid heads, graph control and host work excluded.",
+    "Weight-resident figure is a counterfactual: 8 KiB VTCM cannot hold layer weights."
+   ]
+  }
+ },
+ "run1_headline": {
+  "audits": {
+   "restored_jobs": 212,
+   "restored_hmx_jobs": 210
+  },
+  "guarded_faults": 4,
+  "all_checks_passed": true,
+  "block_us_median": {
+   "w050_112/synthetic": 69.53776041666667,
+   "w050_14/synthetic": 495.15252976190476,
+   "w050_7/synthetic": 482.47395833333337,
+   "teacher_112/public_y0": 92.01450892857143,
+   "teacher_112/public_y48": 92.1856398809524
+  },
+  "note": "first run without the nohmx control; the 15 shared kernels are byte-identical to run 2"
+ }
+}

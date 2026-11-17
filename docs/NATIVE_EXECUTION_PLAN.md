@@ -7,7 +7,9 @@ fused 3x3 student has a conditional 47 ms convolution forecast, still requiring
 2.4–3.9x backend improvement plus <=5 ms of other work for the 17–25 ms target.
 The next experiment is a bounded packed-FP16 spatial/projection block with real
 gathering and coefficient/activation reuse, before training a replacement.
-No new graph speedup or accuracy result is claimed.
+No new graph speedup or accuracy result is claimed. That block is now
+[measured](HMX_SPATIAL_BLOCK.md): about 99 ms forecast, gather-dominated; within the
+existing 8 KiB VTCM the 12-20 ms gate is not reachable.
 
 The earlier [step-1 arithmetic experiments](NATIVE_ARITHMETIC.md) found that
 IEEE vector arithmetic returns all-zero results in the tested configuration;

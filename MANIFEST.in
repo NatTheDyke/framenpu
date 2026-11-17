@@ -44,3 +44,5 @@ include evidence/conv-fast-deadcode-validation.json
 include evidence/host-profile.json
 include evidence/native-arithmetic-validation.json
 include evidence/hmx-model-feasibility.json
+include evidence/hmx-spatial-block.json
+include evidence/vtcm-ownership.json

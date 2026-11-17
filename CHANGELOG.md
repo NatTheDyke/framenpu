@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Mapped VTCM ownership from the firmware and a read-only all-VTCM survey
+  ([VTCM_MAP.md](docs/VTCM_MAP.md)). FeatureNN worker-0/1 scratch
+  `0x31002000`-`0x311e0000` (1,912 KiB) is per-request scratch, serialized
+  with direct jobs. An approved write canary passed: fill and verify, host
+  pattern check, persistence across two sessions, and no change elsewhere
+  in VTCM. Gaze and the FeatureNN model range stay excluded. Not yet used
+  by any kernel; the headset was idle and hand tracking was not exercised.
+- Added and measured a fused HMX spatial->projection block prototype
+  (device gather, packed FP16, 8 KiB VTCM, one HMX owner) with per-phase
+  timing and batching, residency, instrumentation and no-HMX controls. All
+  numerical, fault and restoration checks pass. HMX costs 0.2-0.35 us per
+  load; gathering dominates. The half-width forecast is about 99 ms of
+  convolution, missing the 12-20 ms gate. Weight copies and barriers alone
+  exceed it inside 8 KiB of VTCM.
 - Added public-weight HMX model feasibility accounting and distinct-operand
   native probes. Packed streaming dominates the tested pipeline; a half-width
   fused 3x3 candidate forecasts 47 ms of prepacked convolution work and still
