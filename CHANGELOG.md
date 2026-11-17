@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- Added opt-in row tiling for the 7- and 14-wide depthwise layers
+  (`--dw-reuse 6 --dw-row-tile`): four or two output rows per pass, still one
+  row per work unit, with a 16 KiB operator reservation and its own loader for
+  tiled builds only. Depthwise time falls from 421 to 291 ms and a frame from
+  1.28–1.38 to 1.08–1.19 seconds (50 to 43 requests). Four crops keep
+  bit-identical heads across 26,745 main audits, including frames interrupted
+  at every offset inside a pass; four guarded faults, controls and the SDK
+  regression pass. Default and reuse builds are byte-identical. Added seven
+  offline regressions.
+- Added opt-in linked depthwise broadcast-coefficient and product-mask reuse
+  (`--dw-reuse 6`) within existing VTCM/code/budget limits. A sequential pilot
+  reduces depthwise wrapper time 7.9% and frame time 6.1%, from 52 to 50
+  requests. Four crops preserve all saved head bits under the frozen policy;
+  1,571 main restoration audits, guarded faults, mask controls and ordinary
+  SDK regression pass. Added five offline reuse/bounds regressions. Numeric
+  format and tap accumulation order remain unchanged.
+
 - Added opt-in session-held HMX power for the resident landmark executor
   (`hold_power=True`): one power-on under the operation gate at open, a
   read-only register proof under the gate before every request, one verified

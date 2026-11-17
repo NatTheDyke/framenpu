@@ -10,7 +10,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "src"), str(ROOT / "tools")]
-from framenpu.resident_landmark import CODE, CODE_BYTES, SEAL, STATE, load_linked
+from framenpu.resident_landmark import CODE, CODE_LAYOUTS, SEAL, STATE, load_linked
 from check_resident_cache import verify_relocations, verify_vectors
 
 UNCACHED, CACHED = 0xF0000000, 0x87000000
@@ -41,12 +41,12 @@ def verify_loader(disassembly, symbols):
         raise ValueError("loader must not publish or clean the code slot")
 
 
-def verify_image(disassembly, symbols):
+def verify_image(disassembly, symbols, code_bytes=CODE_LAYOUTS["resident_graph_loader_link_v1"]):
     """Entry at offset zero, direct calls only and no self-referencing addresses."""
     base = UNCACHED + CODE
     if symbols.get("rg_batch") != base:
         raise ValueError("linked entry is not at image offset zero")
-    if any(not base <= address < base + CODE_BYTES for address in symbols.values()):
+    if any(not base <= address < base + code_bytes for address in symbols.values()):
         raise ValueError("linked symbol lies outside the image reservation")
     for line in disassembly.splitlines():
         if re.search(r"\b(callr|icinva|dcinva|dccleaninva|dccleana|dczeroa|rte|trap1)\b", line):
@@ -54,7 +54,7 @@ def verify_image(disassembly, symbols):
         if "jumpr" in line and not re.search(r"jumpr(:n?t)? r31\b", line):
             raise ValueError("linked image contains an indirect jump")
     for value in _constants(disassembly):
-        if any(a + CODE <= value < a + CODE + CODE_BYTES for a in (UNCACHED, CACHED)):
+        if any(a + CODE <= value < a + CODE + code_bytes for a in (UNCACHED, CACHED)):
             raise ValueError("linked image embeds its own absolute address")
 
 
@@ -63,7 +63,7 @@ def _symbols(elf):
     return {
         m[2]: int(m[0], 16)
         for line in listing.splitlines()
-        if len(m := line.split()) == 3 and re.fullmatch("[0-9a-f]+", m[0])
+        if len(m := line.split()) == 3 and re.fullmatch("[0-9a-f]+", m[0]) and m[1] not in "Aa"
     }
 
 
@@ -76,7 +76,11 @@ def main():
     proof = {}
     for name, code, check in (
         ("loader", loader.code, verify_loader),
-        ("linked", image, verify_image),
+        (
+            "linked",
+            image,
+            lambda text, symbols: verify_image(text, symbols, CODE_LAYOUTS[loader.name]),
+        ),
     ):
         folder = args.jobs / name
         elf = folder / "kernel.elf"

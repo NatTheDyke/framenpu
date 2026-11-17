@@ -20,7 +20,7 @@ read that data.
 | Image | Where | Size | Contents |
 |---|---|---:|---|
 | Loader | existing 4 KiB code slot, copied per request as before | 3,836 bytes | entry/fault vectors and the admin commands |
-| Operators | owned DDR `0x1ff0000`, 12 KiB reservation | 11,476 bytes | the ten compute operators and `rg_batch` |
+| Operators | owned DDR `0x1ff0000`, 12 KiB reservation (16 KiB for [row-tiled builds](DEPTHWISE_TILE.md)) | 11,476 bytes | the ten compute operators and `rg_batch` |
 
 The reservation lies in previously unused pages between the activation
 high-water mark (`0x1fef000`) and the packed-input page (`0x1ff4000`), with one
@@ -127,9 +127,9 @@ bytes.
   from there. Partial vectors, the strided stem gather and the 7×7 average
   pool read whole vectors and mask or transpose them instead of reading
   scalars. Bytes read beyond a tensor stay inside the owned arena.
-- **No vector on the stack.** Per-unit paths contain no call, so no HVX
-  register is spilled; where a call remains (FP16 packing) the live vectors
-  wait in VTCM. The guarded trap is reached by leaving the operator.
+- **Reduce vector spills.** Guarded traps leave the operator before calling.
+  Some live packing vectors are parked in VTCM; the disassembly results below
+  identify remaining stack accesses in pack, stem and HMX.
 - **Bias and tap words.** One vector load serves the next 32 bias words and
   one serves a depthwise channel's kernel.
 - **Input upload.** The host already wrote the input under each request's
@@ -162,9 +162,48 @@ The cached data alias does not speed vector loads, so tensors were left where
 they are. These are measurements on one device and firmware, not a model of
 the memory system.
 
+
+The completed native-time investigation adds stack, VTCM forwarding, alignment
+and state-flush controls. The five-image probe passes 545 restoration audits.
+Selected empty-loop-subtracted slopes (microseconds per iteration):
+
+| Primitive | µs |
+|---|---:|
+| Scalar read from cached job stack / framed call with two leaf calls | .0007 / .0094 |
+| VTCM vector store then reload / overlapping unaligned reload | .0174 / .0196 |
+| Scalar VTCM write then vector load of the same vector | .0032 |
+| Scalar VTCM write then vector copied to DDR / direct register-vector DDR store | .2072 / .2074 |
+| Two aligned DDR loads joined by valign / staged through VTCM | .2763 / .3987 |
+| Partial store through 17 scalar copies / masked vector store | .4288 / .1042 |
+
+The scalar-write-to-vector-load fixture does not show the suspected microsecond
+state-flush stall. The stack scalar/call and VTCM forwarding fixtures also do
+not explain the remaining per-unit cost. These are timing controls; adopting
+valign or masked stores requires separate bounds, arithmetic and model checks.
+
+A fresh calibration crop passes all 77 layer checks, with all 128 saved head
+values independently byte-identical to the held-power baseline. A following
+frame takes 1.320 seconds and 52 requests. The phase profile's depthwise work
+uses 81,760 units and 455.9 ms across 31 requests. Pack uses 39,392 units,
+postprocessing 95,328, stem packing 7,168 and HMX 3,439. Their measured wrapper
+totals include roughly 0.1 ms of fixed overhead per profiling request; the
+profile deliberately makes thousands of small requests, so those totals must
+not be added as production native time. The complete graph/profile session
+passes 6,125 restoration audits and independent whole-arena restoration.
+
+Disassembly corrects the earlier broad statement about stack spills: pack and
+stem each still contain five vector stack stores and five loads; HMX contains
+six stores and seven loads. Depthwise and postprocessing contain none. These
+are static instruction counts, not dynamic counts per unit. Removing remaining
+pack/stem vector spills is the first bounded optimization to try; fusing bias
+and clip into HMX stores would then remove a separate postprocessing pass.
+The native image is unchanged during this profiling run. Raw phase rows,
+probe slopes/samples, hashes and caveats are preserved in
+[native-time-profile.json](../evidence/native-time-profile.json).
+
 ```sh
 python tools/build_access_probe.py --output /path/to/probe
-sudo .venv/bin/python tests/hardware_access_probe.py --run-on-device --reads /path/to/probe/access_reads.fjob --stores /path/to/probe/access_stores.fjob --taps /path/to/probe/access_taps.fjob --output /path/to/access.json
+sudo .venv/bin/python tests/hardware_access_probe.py --run-on-device --reads /path/to/probe/access_reads.fjob --stores /path/to/probe/access_stores.fjob --taps /path/to/probe/access_taps.fjob --stack /path/to/probe/access_stack.fjob --unit /path/to/probe/access_unit.fjob --output /path/to/access.json
 ```
 
 ## Qualification and performance
@@ -302,3 +341,11 @@ with ResidentLandmark(
 ) as session:
     heads = session.run(chw)
 ```
+
+The subsequent [depthwise component profile](DEPTHWISE_PROFILE.md) times staging,
+gathering, arithmetic, stores and state updates separately, with baseline controls
+and numerical validation of each instrumentation variant.
+
+The subsequent [depthwise reuse build](DEPTHWISE_REUSE.md) caches broadcast
+coefficients and shares product masks. All four crops retain identical heads;
+a sequential pilot reduces depthwise time 7.9% and frame time 6.1%.

@@ -44,6 +44,24 @@ PRIMITIVES = {
     20: "uncached job-arena unaligned store, 4-byte steps",
     21: "VTCM unaligned vector load, 4-byte steps",
     22: "stack vector store + reload",
+    23: "job-stack scalar read",
+    24: "job-stack scalar write",
+    25: "framed call and return (two leaf calls inside)",
+    26: "VTCM vector store + load of the same vector",
+    27: "VTCM two vector stores + overlapping unaligned load",
+    28: "VTCM vector store + scalar read of it",
+    29: "VTCM vector store + load of another vector",
+    30: "vector lane to scalar register (vextract)",
+    31: "unaligned DDR span: two aligned loads joined by valign",
+    32: "unaligned DDR span: two aligned loads through a VTCM pair",
+    33: "VTCM vector store + eight tap computations + load of it",
+    34: "reference tick read",
+    35: "partial store: VTCM vector + 17 scalar copies to the job arena",
+    36: "partial store: one masked aligned vector store to the job arena",
+    37: "VTCM scalar write + vector load of that vector",
+    38: "VTCM scalar write + that vector copied to the job arena",
+    39: "VTCM scalar write + scalar read of it",
+    40: "register vector stored to the job arena",
 }
 
 
@@ -53,12 +71,20 @@ def main():
     p.add_argument("--reads", required=True, type=Path)
     p.add_argument("--stores", required=True, type=Path)
     p.add_argument("--taps", required=True, type=Path)
+    p.add_argument("--stack", required=True, type=Path)
+    p.add_argument("--unit", required=True, type=Path)
     p.add_argument("--output", required=True, type=Path)
     p.add_argument("--rounds", type=int, default=6)
     args = p.parse_args()
     if not args.run_on_device or os.geteuid() != 0:
         p.error("--run-on-device and Frame root are required")
-    jobs = [Job.load(args.reads), Job.load(args.stores), Job.load(args.taps)]
+    jobs = [
+        Job.load(args.reads),
+        Job.load(args.stores),
+        Job.load(args.taps),
+        Job.load(args.stack),
+        Job.load(args.unit),
+    ]
     report = {
         "format": "framenpu-access-probe",
         "jobs": [
@@ -81,7 +107,19 @@ def main():
             with audited_device(power, report["audits"])(dispatch="direct") as device:
 
                 def run(kind, count, which=None):
-                    which = (2 if kind >= 15 else int(kind >= 10)) if which is None else which
+                    which = (
+                        (
+                            4
+                            if kind >= 34
+                            else 3
+                            if kind >= 23
+                            else 2
+                            if kind >= 15
+                            else int(kind >= 10)
+                        )
+                        if which is None
+                        else which
+                    )
                     job = jobs[which]
                     seen = []
 
@@ -114,6 +152,8 @@ def main():
                             body = (meta[6] | meta[7] << 32) - (meta[4] | meta[5] << 32)
                             if not 0 <= body < 768000:
                                 raise ValueError("probe timing differs")
+                            if which == 3:
+                                report["stack_address"] = f"{meta[12]:08x}"
                             seen.append((body, ticks, meta[3]))
                         except BaseException as exc:
                             raise RecoveryRequired("access probe validation failed") from exc
@@ -143,7 +183,7 @@ def main():
                     counts[kind] = (high // 8, high)
                 # The empty loop is measured in both images.
                 report["empty_ticks"] = [
-                    [run(0, n, which)[0] for n in counts[0]] for which in (0, 1, 2)
+                    [run(0, n, which)[0] for n in counts[0]] for which in (0, 1, 2, 3, 4)
                 ]
                 report["counts"] = counts
                 for round_ in range(args.rounds):

@@ -34,3 +34,8 @@ include evidence/resident-power-validation.json
 global-exclude *.pyc
 include .gitignore .gitattributes
 recursive-include .github *.yml
+include evidence/native-time-profile.json
+include evidence/depthwise-profile.json
+include evidence/depthwise-arithmetic-profile.json
+include evidence/depthwise-reuse-validation.json
+include evidence/depthwise-row-tile-validation.json

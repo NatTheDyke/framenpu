@@ -14,6 +14,7 @@ sys.path[:0] = [str(ROOT / "src"), str(ROOT / "tools")]
 from framenpu import Device, DeviceBusy, Job, JobFailed, RecoveryRequired
 from framenpu.convolution import load_landmark_graph
 from framenpu.landmark import OUTPUTS, ALIASES, specifications
+import framenpu.resident_landmark as rl
 from framenpu.resident_landmark import (
     ResidentLandmark,
     JOB_KINDS,
@@ -198,6 +199,53 @@ def metadata_controls(owner):
     return rows
 
 
+def phase_profile(owner, chw):
+    """Timing-only frame, one request per phase: native ticks by (layer, kind)."""
+    owner._command(3)
+    owner._command(4, offset=rl.ACTIVATIONS, data=rl._fp32(chw))
+    rows = {}
+    while owner.native[0] == 3:
+        layer = owner.native[19]
+        kind = rl._kind(owner.native, owner.records[layer])
+        owner._command(
+            5, rl.BATCH, units=rl.UNIT_LIMIT, stop=rl._phase_end(owner.native, owner.records)
+        )
+        done = owner.metrics["commands"][-1]
+        row = rows.setdefault((layer, kind), [0, 0, 0.0])
+        row[0] += 1
+        row[1] += done["count"]
+        row[2] += done["wrapper_ms"]
+    heads = {k: hashlib.sha256(owner._read_tensor(k).tobytes()).hexdigest() for k in OUTPUTS}
+    return {
+        "heads": heads,
+        "rows": [
+            {"layer": layer, "kind": kind, "requests": v[0], "units": v[1], "wrapper_ms": v[2]}
+            for (layer, kind), v in rows.items()
+        ],
+    }
+
+
+def interrupted_tiles(owner, chw):
+    """Timing-only frame whose small-map depthwise layers run in requests of
+    three or five units, so requests end at every offset inside a tiled pass
+    and the following request must recompute the rows that were waiting."""
+    owner._command(3)
+    owner._command(4, offset=rl.ACTIVATIONS, data=rl._fp32(chw))
+    short = 0
+    while owner.native[0] == 3:
+        layer = owner.native[19]
+        record = owner.records[layer]
+        if record[0] == 3 and record[9] in (7, 14) and not record[23]:
+            owner._command(5, rl.BATCH, units=5 if record[9] == 7 else 3)
+            short += 1
+        else:
+            owner._drive((layer + 1, 0))
+    return {
+        "short_requests": short,
+        "heads": {k: hashlib.sha256(owner._read_tensor(k).tobytes()).hexdigest() for k in OUTPUTS},
+    }
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--run-on-device", action="store_true")
@@ -213,6 +261,8 @@ def main():
     p.add_argument("--budget-ms", type=float, default=5.0)
     p.add_argument("--hold-power", action="store_true")
     p.add_argument("--hold-idle-s", type=float, default=0.0)
+    p.add_argument("--phase-profile", action="store_true")
+    p.add_argument("--interrupt-tiles", action="store_true")
     p.add_argument("--unqualified-frames", type=int, default=0)
     p.add_argument("--controls", action="store_true")
     p.add_argument("--fault-at", nargs=2, metavar=("LAYER", "KIND"))
@@ -247,6 +297,8 @@ def main():
         "tests/resident_graph_entry.S",
         "tests/resident_graph.h",
         "tests/resident_graph_gather.h",
+        "tests/resident_dw_masks.h",
+        "tests/resident_dw_tile.h",
         "tests/resident_fp16.h",
         "tests/landmark_common.h",
         "tests/resident_graph_link.c",
@@ -456,6 +508,22 @@ def main():
                         report.setdefault("unqualified_frames", []).append(
                             {"name": crop["name"], "execution": owner.metrics["runs"][-1]}
                         )
+                if args.phase_profile and args.linked and report["crops"] and not args.fault_at:
+                    report["phase_profile"] = phase_profile(
+                        owner, np.fromfile(args.corpus / crops[0]["name"] / "in0.f32", dtype="<f4")
+                    )
+                    if report["phase_profile"].pop("heads") != {
+                        k: v["sha256"] for k, v in report["crops"][0]["outputs"].items()
+                    }:
+                        raise ValueError("phase-profile frame heads differ from qualified frame")
+                if args.interrupt_tiles and args.linked and report["crops"] and not args.fault_at:
+                    report["interrupted_tiles"] = interrupted_tiles(
+                        owner, np.fromfile(args.corpus / crops[0]["name"] / "in0.f32", dtype="<f4")
+                    )
+                    if report["interrupted_tiles"].pop("heads") != {
+                        k: v["sha256"] for k, v in report["crops"][0]["outputs"].items()
+                    }:
+                        raise ValueError("interrupted-tile frame heads differ from qualified frame")
                 if power.read() != held:
                     raise RecoveryRequired("HMX power changed during the session")
             report["metrics"] = owner.metrics

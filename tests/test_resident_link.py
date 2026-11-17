@@ -147,11 +147,11 @@ class LinkTransport(AdminTransport):
                 raise AssertionError("input upload exceeds the loader's bound")
             state[8:10], state[29:31] = words[8:10], [0, 0]
             state[27] += words[22]
-        elif op in (7, 8) and accepted and words[21:23] == [rg.CODE, rg.CODE_BYTES]:
+        elif op in (7, 8) and accepted and words[21:23] == [rg.CODE, len(self.image)]:
             state[8:10], state[29:31] = words[8:10], [0, 0]
             state[31] = rg.SEAL if op == 7 else 0
         elif op == 5 and opcode == 32 and state[31] == rg.SEAL and words[3] == rg.BATCH:
-            if bytes(self.memory[rg.CODE : rg.CODE + rg.CODE_BYTES]) != self.image:
+            if bytes(self.memory[rg.CODE : rg.CODE + len(self.image)]) != self.image:
                 raise AssertionError("batch entered an image that is not the sealed one")
             probe, allowed = list(state), 0
             while allowed < words[19]:
@@ -214,7 +214,7 @@ def linked_owner(
         "high_water_offset": 0x1FEF000,
     }
     image = bytes(range(1, 201)) * 4
-    transport.image = image.ljust(rg.CODE_BYTES, b"\0")
+    transport.image = image.ljust(rg.CODE_LAYOUTS.get(loader, rg.CODE_BYTES), b"\0")
     transport.records = records
     with (
         patch.object(rg, "resident_landmark_plan", return_value=plan),
@@ -305,6 +305,39 @@ class LinkedLifecycleTests(unittest.TestCase):
         self.assertEqual(owner.metrics["commands"][-1]["pc"] >> 24, 0xF1)
         owner.close()
         self.assertEqual(bytes(t.memory[rg.ARENA_START : rg.ARENA_END]), original)
+
+
+class WideReservationTests(unittest.TestCase):
+    def test_wide_loader_seals_checks_and_retires_sixteen_kibibytes(self):
+        t = LinkTransport(program())
+        original = bytes(t.memory[rg.ARENA_START : rg.ARENA_END])
+        with linked_owner(t, loader="resident_graph_loader_link_wide_v1") as owner:
+            self.assertEqual(owner.code_bytes, 16384)
+            self.assertEqual(len(owner.image), 16384)
+            self.assertLessEqual(rg.CODE + owner.code_bytes, rg.SCRATCH)
+            self.assertEqual(bytes(t.memory[rg.CODE : rg.CODE + 16384]), t.image)
+            begin_frame(owner)
+            # A changed byte in the added page is refused before publication.
+            t.memory[rg.CODE + 12288 + 64] ^= 1
+            with self.assertRaises(RecoveryRequired):
+                owner._command(5, rg.BATCH, units=8)
+            t.memory[rg.CODE + 12288 + 64] ^= 1
+        self.assertTrue(t.poisoned)
+        t = LinkTransport(program())
+        with linked_owner(t, loader="resident_graph_loader_link_wide_v1") as owner:
+            begin_frame(owner)
+            owner._command(5, rg.BATCH, units=8)
+        sizes = [d[22] for d in t.requests if d[2] in (7, 8)]
+        self.assertEqual(sizes, [16384, 16384])
+        self.assertEqual(bytes(t.memory[rg.ARENA_START : rg.ARENA_END]), original)
+        self.assertFalse(t.poisoned)
+
+    def test_reservation_must_end_below_scratch_and_match_the_loader(self):
+        self.assertEqual(rg.CODE + 16384, rg.SCRATCH)
+        self.assertEqual(max(rg.CODE_LAYOUTS.values()), 16384)
+        with patch.dict(rg.CODE_LAYOUTS, {"resident_graph_loader_link_wide_v1": 20480}):
+            with self.assertRaises(InvalidModel):
+                linked_owner(LinkTransport(program()), loader="resident_graph_loader_link_wide_v1")
 
 
 class HeldPowerTests(unittest.TestCase):

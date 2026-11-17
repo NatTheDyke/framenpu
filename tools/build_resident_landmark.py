@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 from framenpu.compiler import BUILD_FLAGS, SDK, Toolchain, _run, build_job
 from framenpu import Job
-from framenpu.resident_landmark import JOB_KINDS, CODE, CODE_BYTES
+from framenpu.resident_landmark import JOB_KINDS, CODE, CODE_LAYOUTS
 
 TESTS = ROOT / "tests"
 LINK_SOURCES = (
@@ -23,6 +23,8 @@ LINK_SOURCES = (
             "resident_graph_link.c",
             "resident_graph.h",
             "resident_graph_gather.h",
+            "resident_dw_masks.h",
+            "resident_dw_tile.h",
             "resident_fp16.h",
             "landmark_common.h",
         )
@@ -38,8 +40,14 @@ def _pc_relative(tools, obj, folder, label):
     (folder / f"{label}-relocations.txt").write_text(relocations)
 
 
-def build_linked(output, tools=None):
+def build_linked(output, tools=None, profile_dw=0, dw_reuse=0, dw_row_tile=False):
     """Build the slot loader and the one linked operator image; opens no device."""
+    if dw_row_tile and (dw_reuse != 6 or profile_dw):
+        raise ValueError("row tiling requires --dw-reuse 6 and ordinary graph timing")
+    if dw_reuse & 5 == 5:
+        raise ValueError("select scalar or broadcast coefficient caching")
+    if dw_reuse and profile_dw:
+        raise ValueError("reuse builds require ordinary graph timing, not component timer modes")
     tools = tools or Toolchain.discover()
     output.mkdir(parents=True, exist_ok=True)
     flags = [*BUILD_FLAGS, "-fno-jump-tables", "-I", str(SDK / "include")]
@@ -49,9 +57,14 @@ def build_linked(output, tools=None):
         _run([tools.clang, *flags, *defines, "-c", str(source), "-o", str(obj)])
         return obj
 
-    def link(folder, script, objects):
+    # Row tiling needs the wide reservation; loader and image must agree on it.
+    name = "resident_graph_loader_link_wide_v1" if dw_row_tile else "resident_graph_loader_link_v1"
+    code_bytes = CODE_LAYOUTS[name]
+    wide = ["-DRG_CODE_WIDE"] if dw_row_tile else []
+
+    def link(folder, script, objects, *options):
         elf, binary = folder / "kernel.elf", folder / "kernel.bin"
-        _run([tools.linker, "-T", str(script), *map(str, objects), "-o", str(elf)])
+        _run([tools.linker, "-T", str(script), *options, *map(str, objects), "-o", str(elf)])
         _run([tools.objcopy, "-O", "binary", "--only-section=.payload", str(elf), str(binary)])
         return binary.read_bytes()
 
@@ -60,30 +73,41 @@ def build_linked(output, tools=None):
     objects = [
         compile_(folder, 0, TESTS / "resident_graph_entry.S", "-DRG_LINK_ENTRY"),
         compile_(folder, 1, SDK / "hmx.S"),
-        compile_(folder, 2, TESTS / "resident_graph_admin.c", "-DRG_LOADER"),
+        compile_(folder, 2, TESTS / "resident_graph_admin.c", "-DRG_LOADER", *wide),
     ]
     _pc_relative(tools, objects[2], folder, "loader")
-    loader = Job(
-        link(folder, SDK / "link.ld", objects), "resident_graph_loader_link_v1", True, True
-    )
+    loader = Job(link(folder, SDK / "link.ld", objects), name, True, True)
     loader.save(output / "resident_graph_loader.fjob")
 
     folder = output / "linked"
     folder.mkdir(parents=True, exist_ok=True)
     objects = [
-        compile_(folder, 0, TESTS / "resident_graph_link.c"),
+        compile_(
+            folder,
+            0,
+            TESTS / "resident_graph_link.c",
+            *([f"-DRG_DW_PROFILE={profile_dw}"] if profile_dw else []),
+            *([f"-DRG_DW_REUSE={dw_reuse}"] if dw_reuse else []),
+            *(["-DRG_DW_TILE"] if dw_row_tile else []),
+            *wide,
+        ),
         compile_(folder, 1, SDK / "hmx.S"),
     ]
     _pc_relative(tools, objects[0], folder, "linked")
-    image = link(folder, TESTS / "resident_link.ld", objects)
-    if not 0 < len(image) <= CODE_BYTES or len(image) % 4:
+    image = link(
+        folder, TESTS / "resident_link.ld", objects, f"--defsym=rg_code_bytes={code_bytes:#x}"
+    )
+    if not 0 < len(image) <= code_bytes or len(image) % 4:
         raise ValueError("linked resident image size differs from its reservation")
     (output / "resident_graph_linked.bin").write_bytes(image)
     record = {
         "format": "framenpu-resident-link-build",
+        "profile_dw": profile_dw,
+        "dw_reuse": dw_reuse,
+        "dw_row_tile": dw_row_tile,
         "version": 1,
         "code_offset": CODE,
-        "code_reservation_bytes": CODE_BYTES,
+        "code_reservation_bytes": code_bytes,
         "loader": {"bytes": len(loader.code), "sha256": hashlib.sha256(loader.code).hexdigest()},
         "linked": {"bytes": len(image), "sha256": hashlib.sha256(image).hexdigest()},
         "flags": [*BUILD_FLAGS, "-fno-jump-tables"],
@@ -103,11 +127,30 @@ def main():
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--cached-entry", action="store_true")
     parser.add_argument("--linked", action="store_true")
+    parser.add_argument("--profile-dw", type=int, choices=range(1, 13))
+    parser.add_argument("--dw-reuse", type=int, choices=(0, 1, 2, 3, 4, 6), default=0)
+    parser.add_argument("--dw-row-tile", action="store_true")
     args = parser.parse_args()
+    if args.dw_row_tile and not args.linked:
+        parser.error("--dw-row-tile requires --linked")
+    if args.dw_reuse and not args.linked:
+        parser.error("--dw-reuse requires --linked")
+    if args.profile_dw and not args.linked:
+        parser.error("--profile-dw requires --linked")
     if args.linked:
         if args.cached_entry:
             parser.error("--linked builds its own loader entry")
-        print(json.dumps(build_linked(args.output), indent=2))
+        print(
+            json.dumps(
+                build_linked(
+                    args.output,
+                    profile_dw=args.profile_dw or 0,
+                    dw_reuse=args.dw_reuse,
+                    dw_row_tile=args.dw_row_tile,
+                ),
+                indent=2,
+            )
+        )
         return
     args.output.mkdir(parents=True, exist_ok=True)
     record = {}

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the three memory-access cost probe images (cache-v1 entry); opens no device."""
+"""Build the five memory-access cost probe images (cache-v1 entry); opens no device."""
 
 import argparse
 import hashlib
@@ -12,7 +12,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from framenpu import Job
 from framenpu.compiler import BUILD_FLAGS, SDK, Toolchain, _run
 
-NAMES = ("reads", "stores", "taps")
+NAMES = ("reads", "stores", "taps", "stack", "unit")
 
 
 def main():

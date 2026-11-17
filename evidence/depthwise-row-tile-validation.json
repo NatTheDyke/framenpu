@@ -1,0 +1,642 @@
+{
+  "format": "framenpu-depthwise-row-tile-validation",
+  "version": 1,
+  "date": "2026-11-16",
+  "status": "qualified_with_unchanged_four_crop_policy",
+  "baseline_evidence": [
+    "resident-power-validation.json",
+    "depthwise-reuse-validation.json"
+  ],
+  "scope": "Opt-in build (--linked --dw-reuse 6 --dw-row-tile): 7- and 14-wide depthwise layers compute four or two output rows per pass and hand them out one work unit at a time; the operator image uses a 16 KiB reservation (one more owned page below the packed-input scratch) with its own loader. Arithmetic order, tensor layout, work units, replay, budget, 40 ms timeout and frozen policy unchanged. Default and --dw-reuse 6 builds are byte-identical to their qualified images.",
+  "build": {
+    "code_offset": 33488896,
+    "code_reservation_bytes": 16384,
+    "loader": {
+      "bytes": 3836,
+      "sha256": "88cd86b28f8d67ee875348ab61a4f5e5665c5ddeb173dfa42e89e82db3440939"
+    },
+    "linked": {
+      "bytes": 13420,
+      "sha256": "43791f45ace2c35abd0be61501121f7ab2f1f7a217de2d638927153de8feceb3"
+    },
+    "toolchain": {
+      "clang": "clang version 23.1.4",
+      "linker": "LLD 23.1.4 (compatible with GNU linkers)",
+      "objcopy": "llvm-objcopy, compatible with GNU objcopy"
+    }
+  },
+  "jobs_sha256": {
+    "loader": "88cd86b28f8d67ee875348ab61a4f5e5665c5ddeb173dfa42e89e82db3440939",
+    "linked": "43791f45ace2c35abd0be61501121f7ab2f1f7a217de2d638927153de8feceb3"
+  },
+  "model_sha256": "b7c3d1be232725a5a143e2648858ec5aec9596c7b83c6a3c508479b04057e00c",
+  "tolerances_sha256": "381a033d6f4c10047998dfe42abb8cd6b18a756741c8a21690a3e6d6dc951f7b",
+  "manifest_sha256": "576a357658e5a22a5177f40138500111aa5e78934a47736be2e2069a3bd0b060",
+  "source_sha256": {
+    "src/framenpu/resident_landmark.py": "69c416756001468599976d0dacdab9edb30dfe7d898246e930e2c833fe25cc59",
+    "src/framenpu/convolution.py": "3c9bdc996064257021c377e9203f55a40eb762dba61fa9a7ecb8a7c9d5559dd7",
+    "src/framenpu/landmark.py": "d412dd46346ac8c848564587b645960614c9990bf0cf57b960ba89c3ff2e88f0",
+    "tests/hardware_resident_landmark.py": "575f46e50f0f427c85020f21242ab442910299cd0e077c2824dcc1a232752ba1",
+    "tools/landmark_reference.py": "13d929c35e0a30754a95062816a4dd877acce3b603f2beaed63d61406e33ce01",
+    "src/framenpu/sdk/entry.S": "fce39ec1dfb601ab37be23addc3570af9b662c09dfb2a59b3cb41ef62a614dd8",
+    "tools/build_resident_landmark.py": "2bf2bed104a460f34e8e7c8f9e41f6bfaebd93206bee56ab8c05a443e714bddd",
+    "tests/resident_graph_entry.S": "bb0b48aaf26908b7feccb7eacac98a93bfa1e483cb3cc84a25c060c60f5f1c14",
+    "tests/resident_graph.h": "e3944eed19ab70ed74585b4fe0f8bb1b42e1bf8453f60cf80eeb4558b8ab0fba",
+    "tests/resident_graph_gather.h": "859f0c8e0029c062ea90587cea83440af9350c707951220523411ee64206b172",
+    "tests/resident_dw_masks.h": "7c948e688c0688315702e14728cf721348e10fff81f7e15224fc3246f37b2bfd",
+    "tests/resident_dw_tile.h": "5a53cbaea9b3e0cd0a858a95e62eec5e48b8397d2be4436f8704543cb6d4e317",
+    "tests/resident_fp16.h": "508852dc7e3d235d52de34152cda1e4a6f097d556a6191c5fa457adcab9a7ec3",
+    "tests/landmark_common.h": "e2e922baaf80e217350ee3926e445449430ccbdb7cf3f55ed8409d73e89909bb",
+    "tests/resident_graph_link.c": "81c64159e49a9ed51c4a2f6dd059c216c6b95548a53b50a93113149ee3f997e2",
+    "tests/resident_link.ld": "711cfd4ad70080e2f53e6f4f20ec5378e03d65d311f4d06fc8dd09cd42892cdc",
+    "tests/resident_graph_admin.c": "b13e716d8ac79f0073fd168d527db4b66230f8773f4cde8e29e6a12357b50c3a",
+    "tests/resident_graph_hmx.c": "f1d3c7d472fb8104395814334e3ffd392699b10bda53fd93293b9cfece8af5fa",
+    "tests/resident_graph_dw.c": "8c3147c13008bef45cbc1f22f451d9af4f689d7cc30b0c8444a661efdad6cabe",
+    "tests/resident_graph_add.c": "e5080860760f725aa55447d33b2e3b53d18b9c08c79a162832300518eb28376e",
+    "tests/resident_graph_pool.c": "3f219c751bd655b35191c9f4708598a7a203ca89a49c3df6f702bac8661b549b",
+    "tests/resident_graph_sigmoid.c": "354d453f6bb06460494c6d283e27fd46db926751ba853e5cd69cd97f5bbf7a10",
+    "tests/resident_graph_compact.c": "0441b9ad67e7735edeb8e83ec5e3a582a8b44218deffb19b9d337e3b376575cb",
+    "tests/resident_graph_post.c": "f497a85fce58692f6a45dd3f19f724171ed7d686376a0dc43222805ccde27012",
+    "tests/resident_graph_pack.c": "46580c38e4596a1e44af202569d20345a7a01cfe19c09f98a2a85c187d008f23",
+    "tests/resident_graph_stem.c": "759da76b824291f08074aeebd674aaa4f683a9ce2d49a0bd08cf71a9ee658e5b",
+    "tests/resident_graph_avg.c": "912f7640fe48c5865eb239140e6876e417a053ece94bff18f5b9b2cec8caca0c"
+  },
+  "conditions": "cached code, session-held HMX power, 20 ms request budget; one boot, DSP service PID and restart count identical before and after every run",
+  "main": {
+    "calibration": {
+      "all_checks_passed": true,
+      "qualification_complete": true,
+      "audits": {
+        "restored_jobs": 13379,
+        "restored_hmx_jobs": 13377
+      },
+      "arena_restored": true,
+      "service_unchanged": true,
+      "power_restored_after_close": true,
+      "frames": [
+        {
+          "qualified_readback": true,
+          "complete": true,
+          "body_ms": 3502.782,
+          "requests": 87,
+          "batch_requests": 85,
+          "work_units": 240786,
+          "native_wrapper_ms": 818.137,
+          "max_wrapper_ms": 20.1148,
+          "max_publication_ms": 21.9563
+        },
+        {
+          "qualified_readback": true,
+          "complete": true,
+          "body_ms": 3166.195,
+          "requests": 87,
+          "batch_requests": 85,
+          "work_units": 240786,
+          "native_wrapper_ms": 817.409,
+          "max_wrapper_ms": 20.1186,
+          "max_publication_ms": 21.8175
+        },
+        {
+          "qualified_readback": false,
+          "complete": true,
+          "body_ms": 1094.253,
+          "requests": 43,
+          "batch_requests": 41,
+          "work_units": 240786,
+          "native_wrapper_ms": 814.903,
+          "max_wrapper_ms": 20.1473,
+          "max_publication_ms": 21.187
+        },
+        {
+          "qualified_readback": false,
+          "complete": true,
+          "body_ms": 1187.297,
+          "requests": 43,
+          "batch_requests": 41,
+          "work_units": 240786,
+          "native_wrapper_ms": 814.328,
+          "max_wrapper_ms": 20.149,
+          "max_publication_ms": 21.1658
+        }
+      ],
+      "depthwise_wrapper_ms_qualified_frame": 290.995,
+      "small_map_depthwise_wrapper_ms_qualified_frame": 159.687,
+      "crops": [
+        {
+          "name": "calibration_controller",
+          "outputs": {
+            "out0": {
+              "values": 63,
+              "sha256": "1dd95907b1234a17264ca39191174714bc840cd0ef9d2513b1c78e97e1af73d2"
+            },
+            "out1": {
+              "values": 1,
+              "sha256": "16c144e50bb96195325c5b72c6da277f61c91eb7cca4a71d0eca6b59ba4e7655"
+            },
+            "out2": {
+              "values": 1,
+              "sha256": "c6d1607ba8a8eca2cde964ff4e2cc89d49662d7b14467fa988c762c1eb8b2ce7"
+            },
+            "out3": {
+              "values": 63,
+              "sha256": "70339eb65c6e5a8bfc649f58d16349dd5018b491fd13db6d673267cad95fe1cd"
+            }
+          },
+          "layer_checks": 77,
+          "values": 5087840,
+          "max_local_ratio": 0.8085458917972395
+        },
+        {
+          "name": "calibration_open",
+          "outputs": {
+            "out0": {
+              "values": 63,
+              "sha256": "e06d351b08514f48edccd60f1a99539e4cbfd14bc864d2f430de9a214f983f8d"
+            },
+            "out1": {
+              "values": 1,
+              "sha256": "e26e09ce4c4c8ebd5d732dab96a9222edbdc4b4c3eb2019acbdf3d0560e04643"
+            },
+            "out2": {
+              "values": 1,
+              "sha256": "64a2d78a7b677f483da064181ebd38b96735613fa007213b45558f1c14094406"
+            },
+            "out3": {
+              "values": 63,
+              "sha256": "85feb31654215e990b919360e60bdf1eaa1fece40a74726ca00f4daa870ae790"
+            }
+          },
+          "layer_checks": 77,
+          "values": 5087840,
+          "max_local_ratio": 0.5490365540252173
+        }
+      ],
+      "interrupted_pass_frame": {
+        "short_requests": 12590,
+        "heads_bit_identical": true
+      },
+      "controls": [
+        {
+          "name": "stale_sequence",
+          "unchanged": true
+        },
+        {
+          "name": "nonce",
+          "unchanged": true
+        },
+        {
+          "name": "identity",
+          "unchanged": true
+        },
+        {
+          "name": "reserved",
+          "unchanged": true
+        },
+        {
+          "name": "wrong_module",
+          "unchanged": true
+        },
+        {
+          "name": "wrong_version",
+          "unchanged": true
+        },
+        {
+          "name": "batch_outside_frame",
+          "unchanged": true
+        },
+        {
+          "name": "batch_zero_budget",
+          "unchanged": true
+        },
+        {
+          "name": "batch_excess_budget",
+          "unchanged": true
+        },
+        {
+          "name": "batch_stop_layer",
+          "unchanged": true
+        },
+        {
+          "name": "batch_stop_phase",
+          "unchanged": true
+        },
+        {
+          "name": "batch_zero_units",
+          "unchanged": true
+        },
+        {
+          "name": "batch_reserved",
+          "unchanged": true
+        },
+        {
+          "name": "exclusive_arena_lease",
+          "refused": true
+        }
+      ],
+      "heads_bit_identical_to_held_power_baseline": [
+        true,
+        true
+      ]
+    },
+    "heldout": {
+      "all_checks_passed": true,
+      "qualification_complete": true,
+      "audits": {
+        "restored_jobs": 13366,
+        "restored_hmx_jobs": 13364
+      },
+      "arena_restored": true,
+      "service_unchanged": true,
+      "power_restored_after_close": true,
+      "frames": [
+        {
+          "qualified_readback": true,
+          "complete": true,
+          "body_ms": 3460.202,
+          "requests": 87,
+          "batch_requests": 85,
+          "work_units": 240786,
+          "native_wrapper_ms": 817.089,
+          "max_wrapper_ms": 20.1372,
+          "max_publication_ms": 21.7972
+        },
+        {
+          "qualified_readback": true,
+          "complete": true,
+          "body_ms": 3206.617,
+          "requests": 87,
+          "batch_requests": 85,
+          "work_units": 240786,
+          "native_wrapper_ms": 818.504,
+          "max_wrapper_ms": 20.1235,
+          "max_publication_ms": 21.627
+        },
+        {
+          "qualified_readback": false,
+          "complete": true,
+          "body_ms": 1082.777,
+          "requests": 43,
+          "batch_requests": 41,
+          "work_units": 240786,
+          "native_wrapper_ms": 814.613,
+          "max_wrapper_ms": 20.1759,
+          "max_publication_ms": 21.1675
+        },
+        {
+          "qualified_readback": false,
+          "complete": true,
+          "body_ms": 1179.108,
+          "requests": 43,
+          "batch_requests": 41,
+          "work_units": 240786,
+          "native_wrapper_ms": 813.424,
+          "max_wrapper_ms": 20.2339,
+          "max_publication_ms": 21.2454
+        }
+      ],
+      "depthwise_wrapper_ms_qualified_frame": 291.108,
+      "small_map_depthwise_wrapper_ms_qualified_frame": 159.769,
+      "crops": [
+        {
+          "name": "heldout_left_controller",
+          "outputs": {
+            "out0": {
+              "values": 63,
+              "sha256": "48f17ab142ea55bb8fd265e5d69c5f6f4d3c4988da95807050f2d57b62bd5d45"
+            },
+            "out1": {
+              "values": 1,
+              "sha256": "0cfdf0a1b0547b671c0c24f544ef516e1887c814e9cf465907acea612c80d2ee"
+            },
+            "out2": {
+              "values": 1,
+              "sha256": "1a247e0d479ab3e6b6076881d207739b8782f549ec64eabce9f8f99f178c382f"
+            },
+            "out3": {
+              "values": 63,
+              "sha256": "b3ae3f35b46c453778e1bde5a621c32a1bef4b9d248ed2a080d355cebfe0bb98"
+            }
+          },
+          "layer_checks": 77,
+          "values": 5087840,
+          "max_local_ratio": 0.6702840187521132
+        },
+        {
+          "name": "heldout_right_controller",
+          "outputs": {
+            "out0": {
+              "values": 63,
+              "sha256": "40d69eba495c15a80a13408a6f6abc78cc379b2998d5291a63bff57a6424ecea"
+            },
+            "out1": {
+              "values": 1,
+              "sha256": "5eb5007f0c45877a9744f5b3fa43d49fe9083cb19ea7028862f9a9177f1fe7cb"
+            },
+            "out2": {
+              "values": 1,
+              "sha256": "35c41834d7a84f49213adb9675e9e27440300a50fc59a9710e3033bd1a0a03fa"
+            },
+            "out3": {
+              "values": 63,
+              "sha256": "fc40c72838a60504689b6712c122f076c32366d6d07e7d797cd13beba8231373"
+            }
+          },
+          "layer_checks": 77,
+          "values": 5087840,
+          "max_local_ratio": 0.7986715391474106
+        }
+      ],
+      "interrupted_pass_frame": {
+        "short_requests": 12590,
+        "heads_bit_identical": true
+      },
+      "heads_bit_identical_to_held_power_baseline": [
+        true,
+        true
+      ]
+    }
+  },
+  "supplemental": {
+    "fault_after_one_hmx_transaction": {
+      "all_checks_passed": true,
+      "qualification_complete": false,
+      "audits": {
+        "restored_jobs": 449,
+        "restored_hmx_jobs": 447
+      },
+      "arena_restored": true,
+      "service_unchanged": true,
+      "power_restored_after_close": true,
+      "frames": [],
+      "depthwise_wrapper_ms_qualified_frame": 0,
+      "small_map_depthwise_wrapper_ms_qualified_frame": 0,
+      "crops": [],
+      "confirmed_fault": {
+        "at": [
+          "convclip_0",
+          1
+        ],
+        "invalidated": true,
+        "reuse_refused": true,
+        "native_state": 4
+      }
+    },
+    "fault_after_one_inplace_depthwise_unit": {
+      "all_checks_passed": true,
+      "qualification_complete": false,
+      "audits": {
+        "restored_jobs": 462,
+        "restored_hmx_jobs": 460
+      },
+      "arena_restored": true,
+      "service_unchanged": true,
+      "power_restored_after_close": true,
+      "frames": [],
+      "depthwise_wrapper_ms_qualified_frame": 31.38,
+      "small_map_depthwise_wrapper_ms_qualified_frame": 0,
+      "crops": [],
+      "confirmed_fault": {
+        "at": [
+          "convdwclip_1",
+          3
+        ],
+        "invalidated": true,
+        "reuse_refused": true,
+        "native_state": 4
+      }
+    },
+    "fault_after_one_tiled_unit_14_wide": {
+      "all_checks_passed": true,
+      "qualification_complete": false,
+      "audits": {
+        "restored_jobs": 497,
+        "restored_hmx_jobs": 495
+      },
+      "arena_restored": true,
+      "service_unchanged": true,
+      "power_restored_after_close": true,
+      "frames": [],
+      "depthwise_wrapper_ms_qualified_frame": 164.699,
+      "small_map_depthwise_wrapper_ms_qualified_frame": 33.458,
+      "crops": [],
+      "confirmed_fault": {
+        "at": [
+          "convdwclip_8",
+          3
+        ],
+        "invalidated": true,
+        "reuse_refused": true,
+        "native_state": 4
+      }
+    },
+    "fault_after_one_tiled_unit_7_wide": {
+      "all_checks_passed": true,
+      "qualification_complete": false,
+      "audits": {
+        "restored_jobs": 513,
+        "restored_hmx_jobs": 511
+      },
+      "arena_restored": true,
+      "service_unchanged": true,
+      "power_restored_after_close": true,
+      "frames": [],
+      "depthwise_wrapper_ms_qualified_frame": 233.716,
+      "small_map_depthwise_wrapper_ms_qualified_frame": 102.409,
+      "crops": [],
+      "confirmed_fault": {
+        "at": [
+          "convdwclip_12",
+          3
+        ],
+        "invalidated": true,
+        "reuse_refused": true,
+        "native_state": 4
+      }
+    },
+    "reuse_build_control": {
+      "all_checks_passed": true,
+      "qualification_complete": false,
+      "audits": {
+        "restored_jobs": 687,
+        "restored_hmx_jobs": 685
+      },
+      "arena_restored": true,
+      "service_unchanged": true,
+      "power_restored_after_close": true,
+      "frames": [
+        {
+          "qualified_readback": true,
+          "complete": true,
+          "body_ms": 3266.596,
+          "requests": 92,
+          "batch_requests": 90,
+          "work_units": 240786,
+          "native_wrapper_ms": 960.059,
+          "max_wrapper_ms": 20.1299,
+          "max_publication_ms": 21.8887
+        },
+        {
+          "qualified_readback": false,
+          "complete": true,
+          "body_ms": 1381.38,
+          "requests": 50,
+          "batch_requests": 48,
+          "work_units": 240786,
+          "native_wrapper_ms": 955.595,
+          "max_wrapper_ms": 20.1905,
+          "max_publication_ms": 21.6538
+        },
+        {
+          "qualified_readback": false,
+          "complete": true,
+          "body_ms": 1275.115,
+          "requests": 50,
+          "batch_requests": 48,
+          "work_units": 240786,
+          "native_wrapper_ms": 957.387,
+          "max_wrapper_ms": 20.1199,
+          "max_publication_ms": 20.9778
+        },
+        {
+          "qualified_readback": false,
+          "complete": true,
+          "body_ms": 1302.677,
+          "requests": 50,
+          "batch_requests": 48,
+          "work_units": 240786,
+          "native_wrapper_ms": 957.512,
+          "max_wrapper_ms": 20.1436,
+          "max_publication_ms": 21.1481
+        }
+      ],
+      "depthwise_wrapper_ms_qualified_frame": 421.048,
+      "small_map_depthwise_wrapper_ms_qualified_frame": 289.993,
+      "crops": [
+        {
+          "name": "calibration_controller",
+          "outputs": {
+            "out0": {
+              "values": 63,
+              "sha256": "1dd95907b1234a17264ca39191174714bc840cd0ef9d2513b1c78e97e1af73d2"
+            },
+            "out1": {
+              "values": 1,
+              "sha256": "16c144e50bb96195325c5b72c6da277f61c91eb7cca4a71d0eca6b59ba4e7655"
+            },
+            "out2": {
+              "values": 1,
+              "sha256": "c6d1607ba8a8eca2cde964ff4e2cc89d49662d7b14467fa988c762c1eb8b2ce7"
+            },
+            "out3": {
+              "values": 63,
+              "sha256": "70339eb65c6e5a8bfc649f58d16349dd5018b491fd13db6d673267cad95fe1cd"
+            }
+          },
+          "layer_checks": 77,
+          "values": 5087840,
+          "max_local_ratio": 0.8085458917972395
+        }
+      ]
+    },
+    "tiled_timing": {
+      "all_checks_passed": true,
+      "qualification_complete": false,
+      "audits": {
+        "restored_jobs": 661,
+        "restored_hmx_jobs": 659
+      },
+      "arena_restored": true,
+      "service_unchanged": true,
+      "power_restored_after_close": true,
+      "frames": [
+        {
+          "qualified_readback": true,
+          "complete": true,
+          "body_ms": 3197.632,
+          "requests": 87,
+          "batch_requests": 85,
+          "work_units": 240786,
+          "native_wrapper_ms": 817.359,
+          "max_wrapper_ms": 20.1209,
+          "max_publication_ms": 22.099
+        },
+        {
+          "qualified_readback": false,
+          "complete": true,
+          "body_ms": 1138.031,
+          "requests": 43,
+          "batch_requests": 41,
+          "work_units": 240786,
+          "native_wrapper_ms": 814.418,
+          "max_wrapper_ms": 20.1474,
+          "max_publication_ms": 21.1025
+        },
+        {
+          "qualified_readback": false,
+          "complete": true,
+          "body_ms": 1092.395,
+          "requests": 43,
+          "batch_requests": 41,
+          "work_units": 240786,
+          "native_wrapper_ms": 814.475,
+          "max_wrapper_ms": 20.1924,
+          "max_publication_ms": 21.1164
+        },
+        {
+          "qualified_readback": false,
+          "complete": true,
+          "body_ms": 1108.143,
+          "requests": 43,
+          "batch_requests": 41,
+          "work_units": 240786,
+          "native_wrapper_ms": 815.043,
+          "max_wrapper_ms": 20.1592,
+          "max_publication_ms": 20.901
+        }
+      ],
+      "depthwise_wrapper_ms_qualified_frame": 290.983,
+      "small_map_depthwise_wrapper_ms_qualified_frame": 159.73,
+      "crops": [
+        {
+          "name": "calibration_controller",
+          "outputs": {
+            "out0": {
+              "values": 63,
+              "sha256": "1dd95907b1234a17264ca39191174714bc840cd0ef9d2513b1c78e97e1af73d2"
+            },
+            "out1": {
+              "values": 1,
+              "sha256": "16c144e50bb96195325c5b72c6da277f61c91eb7cca4a71d0eca6b59ba4e7655"
+            },
+            "out2": {
+              "values": 1,
+              "sha256": "c6d1607ba8a8eca2cde964ff4e2cc89d49662d7b14467fa988c762c1eb8b2ce7"
+            },
+            "out3": {
+              "values": 63,
+              "sha256": "70339eb65c6e5a8bfc649f58d16349dd5018b491fd13db6d673267cad95fe1cd"
+            }
+          },
+          "layer_checks": 77,
+          "values": 5087840,
+          "max_local_ratio": 0.8085458917972395
+        }
+      ]
+    },
+    "ordinary_sdk_regression": {
+      "audits": {
+        "restored_jobs": 72,
+        "restored_hmx_jobs": 38
+      },
+      "all_checks_passed": true
+    },
+    "non_poisoning_busy_stop": {
+      "what": "One earlier interrupted-pass run stopped with DeviceBusy when a gate claim saw the stock firmware change its control word between two very short requests. The session closed normally: arena, callback, control and power restored; no recovery or reboot. The identical run then passed.",
+      "audits_before_stop": 640
+    }
+  },
+  "main_audits": 26745,
+  "main_layer_checks": 308,
+  "main_values": 20351360,
+  "max_local_ratio": 0.8085458917972395
+}

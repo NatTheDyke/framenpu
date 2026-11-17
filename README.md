@@ -253,6 +253,12 @@ a tick budget. With operator state and staged rows read from saved VTCM, a
 frame needs 52 requests instead of about 10,960 and takes 1.66–1.69 seconds
 at a 20 ms budget, with identical heads. Opt-in session-held HMX power removes
 the per-request power cycling and brings a frame to 1.36–1.39 seconds.
+An opt-in [depthwise reuse build](docs/DEPTHWISE_REUSE.md) caches broadcast
+coefficients and shares product masks. A sequential pilot reduces depthwise
+time 7.9% and frame time 6.1%, with 50 requests and bit-identical heads.
+On top of it, opt-in [row tiling](docs/DEPTHWISE_TILE.md) of the 7- and 14-wide
+depthwise layers brings depthwise time from 421 to 291 ms and a frame to
+1.08–1.19 seconds in 43 requests.
 The [accumulator isolation tests](docs/HMX_ACCUMULATOR.md) show shared HMX state
 across workers with the recovered primitives. Keep each complete clear/load/store
 transaction under one HMX owner; use HVX workers for other work.

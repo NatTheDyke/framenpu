@@ -38,6 +38,12 @@ SPAN = ARENA_END - ARENA_START
 # the activation high-water mark and the packed-input page.
 CODE = 0x1FF0000
 CODE_BYTES = 12288
+# The wide layout adds the one page left below SCRATCH; a loader accepts
+# exactly its own reservation, so the loader name selects it.
+CODE_LAYOUTS = {
+    "resident_graph_loader_link_v1": CODE_BYTES,
+    "resident_graph_loader_link_wide_v1": 16384,
+}
 SEAL = 0x434F4445
 BATCH = 12
 UNIT_LIMIT = 1 << 20
@@ -418,7 +424,7 @@ def load_linked(folder):
         record.get("format") != "framenpu-resident-link-build"
         or record.get("version") != 1
         or record.get("code_offset") != CODE
-        or record.get("code_reservation_bytes") != CODE_BYTES
+        or record.get("code_reservation_bytes") != CODE_LAYOUTS.get(loader.name)
         or record["loader"] != {"bytes": len(loader.code), "sha256": _sha(loader.code)}
         or record["linked"] != {"bytes": len(image), "sha256": _sha(image)}
     ):
@@ -516,6 +522,7 @@ class ResidentLandmark:
         self.plan = resident_landmark_plan(graph)
         self.linked = isinstance(jobs, LinkedJobs)
         self.image = b""
+        self.code_bytes = 0
         self.budget_ticks = 96000
         if self.linked:
             loader, image = jobs
@@ -523,9 +530,9 @@ class ResidentLandmark:
                 not isinstance(loader, Job)
                 or not loader.requires_hmx
                 or not loader.supports_direct
-                or loader.name != "resident_graph_loader_link_v1"
+                or loader.name not in CODE_LAYOUTS
                 or not isinstance(image, bytes)
-                or not 0 < len(image) <= CODE_BYTES
+                or not 0 < len(image) <= CODE_LAYOUTS[loader.name]
                 or len(image) % 4
             ):
                 raise InvalidModel("linked execution requires the link-v1 loader and image")
@@ -535,10 +542,11 @@ class ResidentLandmark:
                 or not 1 <= round(budget_ms * TICKS_PER_MS) <= BUDGET_TICKS_MAX
             ):
                 raise InvalidModel("linked request budget must be within (0, 25] ms")
-            if self.plan["high_water_offset"] > CODE or CODE + CODE_BYTES > SCRATCH:
+            self.code_bytes = CODE_LAYOUTS[loader.name]
+            if self.plan["high_water_offset"] > CODE or CODE + self.code_bytes > SCRATCH:
                 raise InvalidModel("resident tensors overlap the linked image reservation")
             self.budget_ticks = round(budget_ms * TICKS_PER_MS)
-            self.image = image.ljust(CODE_BYTES, b"\0")
+            self.image = image.ljust(self.code_bytes, b"\0")
             self.image_bytes = len(image)
             jobs = {"loader": loader}
         elif budget_ms != 5.0:
@@ -658,7 +666,7 @@ class ResidentLandmark:
                 if op == 2
                 else ACTIVATIONS + INPUT_BYTES
                 if op == 4
-                else CODE + CODE_BYTES
+                else CODE + self.code_bytes
             )
             chunk = INPUT_BYTES if op == 4 and self.linked else 32768
             if offset != expected or not 0 < len(data) <= chunk or offset + len(data) > limit:
@@ -719,7 +727,7 @@ class ResidentLandmark:
                 raise RecoveryRequired("resident program changed")
             if self.guard_ready and bytes(t.memory[GUARD:ARENA_END]) != expected_guard:
                 raise RecoveryRequired("resident end guard changed")
-            if code_live and bytes(t.memory[CODE : CODE + CODE_BYTES]) != self.image:
+            if code_live and bytes(t.memory[CODE : CODE + self.code_bytes]) != self.image:
                 raise RecoveryRequired("resident linked image changed")
             if data is not None:
                 stamp = time.monotonic_ns()
@@ -795,7 +803,7 @@ class ResidentLandmark:
                 ):
                     raise ValueError("resident immutable program changed")
                 if (code_live or op == 7 and not reject) and (
-                    bytes(t.memory[CODE : CODE + CODE_BYTES]) != self.image
+                    bytes(t.memory[CODE : CODE + self.code_bytes]) != self.image
                 ):
                     raise ValueError("resident linked image changed")
                 if (
@@ -935,7 +943,7 @@ class ResidentLandmark:
                 if self.device is not None and self.owned and not self.device._transport.poisoned:
                     if self.native[31] == SEAL:
                         # Retire cached instructions before any byte is restored.
-                        self._command(8, offset=CODE, length=CODE_BYTES)
+                        self._command(8, offset=CODE, length=self.code_bytes)
                     self._tearing_down = True
                     cursor = ARENA_START + self.saved_bytes
                     while cursor > PROGRAM:

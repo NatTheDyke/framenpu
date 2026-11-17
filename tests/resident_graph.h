@@ -22,7 +22,13 @@ typedef unsigned long long rg_u64;
  * the slot-resident admin module that seals/retires it; RG_LINKED builds the
  * image itself. Without either macro every module compiles exactly as before. */
 #define RG_CODE 0x1ff0000u
+/* RG_CODE_WIDE (loader and image together) also takes the next page, the
+ * last one below the packed-input scratch; the image address is unchanged. */
+#ifdef RG_CODE_WIDE
+#define RG_CODE_BYTES 0x4000u
+#else
 #define RG_CODE_BYTES 0x3000u
+#endif
 #define RG_SEAL 0x434f4445u
 #if defined(RG_LINKED)||defined(RG_LOADER)
 #define RG_LIMIT RG_CODE
@@ -71,6 +77,9 @@ static void rg_open(void) {
     *(volatile HVX_Vector *)RG_STATE=*RG_STATE_DDR;
     __asm__ volatile("" ::: "memory");
     RG_RECORD_TAG=~0u;RG_WINDOW_TAG=~0u;
+#if RG_DW_REUSE & 5
+    *(volatile fnpu_u32 *)0x31001f30u=0;
+#endif
 }
 /* An unaligned vector load from uncached DDR can cost a microsecond; an
  * aligned one costs a tenth of that and VTCM far less. Read the two aligned
