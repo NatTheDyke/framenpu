@@ -314,7 +314,28 @@ resident_cache_fault_return:
  { memw(r16+#8) = r0 }
  { jump recover }
 
-#ifdef RG_LINK_ENTRY
+#if defined(RG_LINK_ENTRY) && defined(TL_LINK_ENTRY)
+/* Teacher linked loader (tests/teacher_link_admin.c): opcodes 110 and 111
+ * enter the teacher operator image only while the seal word in the last
+ * vector of its reservation (0x1ff3f80) holds the seal; the admin seal and
+ * retire commands set and clear it. Everything else reaches frame_job. */
+resident_dispatch:
+ { r1 = memw(r19+#36) }
+ { r1 = add(r1,#-110) }
+ { p0 = cmp.gtu(r1,#1) }
+ { if (p0) jump frame_job }
+ { r1 = ##0xf1ff3f80 }
+ { r1 = memw(r1+#0) }
+ { r2 = ##0x544c4e4b }
+ { p0 = cmp.eq(r1,r2) }
+ { if (!p0) jump frame_job }
+ { r1 = ##0xf1ff0000 }
+ { r2 = ##0x88ff0000 }
+ { r3 = memw(r19+#40) }
+ { p0 = cmp.eq(r3,#1) }
+ { r1 = mux(p0,r2,r1) }
+ { jumpr r1 }
+#elif defined(RG_LINK_ENTRY)
 /* Resident state word 31 holds the seal only between the loader's seal and
  * retire commands, so an unsealed or retired image is never entered. The
  * uncached return address in r31 is preserved for the image's return. */

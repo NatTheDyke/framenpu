@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Teacher tail through a linked operator image ([TEACHER_LINK.md](docs/TEACHER_LINK.md)).
+  The resident and stride-2 kernels are linked unchanged into one image,
+  sealed in the owned 16 KiB reservation at 0x1ff0000. A 1,960-byte slot
+  loader enters it without per-request publication. Per frame, in-DSP time
+  drops from 30.0 ms to 18.8 ms, and per-job overhead from 1.6 ms to
+  0.03-0.06 ms. Linked frames are bit-identical to qualification on all four
+  corpus crops. Existing loader and kernel builds are byte-identical.
 - Resident teacher tail ([TEACHER_RESIDENT.md](docs/TEACHER_RESIDENT.md)).
   One opcode-111 kernel runs whole sequences of 1x1 (HMX) and stride-1
   depthwise (HVX) layers, with tensors kept in VTCM, from a natively validated
