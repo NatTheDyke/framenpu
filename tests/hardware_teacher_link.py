@@ -202,7 +202,17 @@ class LinkRunner(HR.Runner):
             raise RecoveryRequired("linked image readback differs")
         return self.admin(7)
 
-    def submit(self, plan, job, *, fault=False, reject=False, linked=False, refused=False):
+    def submit(
+        self,
+        plan,
+        job,
+        *,
+        fault=False,
+        reject=False,
+        linked=False,
+        refused=False,
+        descriptor_fault=False,
+    ):
         if not linked:
             return super().submit(plan, job, fault=fault, reject=reject)
         for off, data in job.staged.items():
@@ -211,7 +221,7 @@ class LinkRunner(HR.Runner):
             data, opcode, params = (
                 RL.payload(plan),
                 RL.RS_OPCODE,
-                (1, job.first, job.end, 0, 0, int(fault)),
+                (1, job.first, job.end, 0, 0, int(fault and not descriptor_fault)),
             )
         else:
             data, opcode, params = job.desc, T.DW_OPCODE, (1, 0, 0, 0, 0, int(fault))
@@ -505,6 +515,7 @@ def main():
         p.add_argument("--" + name, required=True, type=Path)
     p.add_argument("--rounds", type=int, default=5)
     p.add_argument("--stride2", action="store_true")
+    p.add_argument("--heads", action="store_true")
     p.add_argument("--dw-blocks", type=int, choices=(2, 4), default=2)
     p.add_argument("--split-after", help="split merged execution after this layer (two requests)")
     args = p.parse_args()
@@ -516,6 +527,12 @@ def main():
         p.error("--stride2 must agree with the linked build")
     if args.dw_blocks != link_record.get("dw_blocks", 2):
         p.error("--dw-blocks must agree with the linked build")
+    if args.heads != link_record.get("heads", False):
+        p.error("--heads must agree with the linked build")
+    if args.heads and (not args.stride2 or args.split_after):
+        p.error("heads currently require one merged stride-2 request")
+    if args.heads:
+        import hardware_teacher_heads as HH
     if args.split_after and not args.stride2:
         p.error("--split-after requires --stride2")
     graph = load_landmark_graph(args.model / "hand.ncnn.param", args.model / "hand.ncnn.bin")
@@ -527,7 +544,8 @@ def main():
     ):
         p.error("corpus/model mismatch")
     report = {
-        "format": "framenpu-teacher-link-run",
+        "format": "framenpu-teacher-heads-run" if args.heads else "framenpu-teacher-link-run",
+        "heads": args.heads,
         "stride2": args.stride2,
         "dw_blocks": args.dw_blocks,
         "split_after": args.split_after,
@@ -549,6 +567,11 @@ def main():
         "service_before": service(),
     }
     failed = False
+    if args.heads:
+        report["source_sha256"] |= {
+            n: digest(ROOT / n)
+            for n in ("tests/hardware_teacher_heads.py", "tests/teacher_heads_layout.py")
+        }
     lease = _lease()
     try:
         with PowerSnapshot() as power:
@@ -564,9 +587,10 @@ def main():
                 window = before[T.WIN_LO - ARENA_START : T.WIN_HI - ARENA_START]
                 reservation = before[CODE - ARENA_START : CODE + CODE_BYTES - ARENA_START]
                 retired = True
+                unsafe = False
                 try:
                     with audited_device(power, report["audits"])(dispatch="direct") as dev:
-                        runner = LinkRunner(
+                        runner = (HH.HeadsRunner if args.heads else LinkRunner)(
                             dev,
                             dev._transport.memory,
                             jobs,
@@ -579,32 +603,44 @@ def main():
                             dw_blocks=args.dw_blocks,
                         )
                         try:
-                            report["crops"], report["seal_wrapper_ms"] = run(
-                                runner, args.corpus, manifest, args.rounds
-                            )
+                            report["crops"], report["seal_wrapper_ms"] = (
+                                HH.run if args.heads else run
+                            )(runner, args.corpus, manifest, args.rounds)
+                        except RecoveryRequired:
+                            unsafe = True
+                            raise
                         finally:
                             if runner.sealed:
                                 retired = False
-                                if not dev._transport.poisoned:
+                                if not unsafe and not dev._transport.poisoned:
                                     report["retire_wrapper_ms"] = runner.admin(8)
                                     retired = True
-                        plan = runner.plans["merged" if args.stride2 else "resident"]
+                        plan = runner.plans[
+                            "heads" if args.heads else "merged" if args.stride2 else "resident"
+                        ]
                         runner.submit(
                             plan, plan.jobs[0], linked=True, refused=True
                         )  # unsealed: loader refuses
                         report["unsealed_request_refused"] = True
-                        report["summary"] = summarize(
-                            report["crops"], runner.plans["resident"], plan
+                        report["summary"] = (
+                            HH.summarize(report["crops"])
+                            if args.heads
+                            else summarize(report["crops"], runner.plans["resident"], plan)
                         )
+                except RecoveryRequired:
+                    unsafe = True
+                    raise
                 finally:
-                    with Device() as observer:
-                        mem = observer._transport.memory
-                        mem[T.WIN_LO : T.WIN_HI] = window
-                        if retired:
+                    report["window_restored"] = False
+                    if not unsafe and retired:
+                        with Device() as observer:
+                            mem = observer._transport.memory
+                            mem[T.WIN_LO : T.WIN_HI] = window
                             mem[CODE : CODE + CODE_BYTES] = reservation
-                        after = bytes(mem[ARENA_START:ARENA_END])
-                    report["arena_after_sha256"] = hashlib.sha256(after).hexdigest()
-                    report["reservation_restored"] = retired
+                            after = bytes(mem[ARENA_START:ARENA_END])
+                        report["window_restored"] = True
+                        report["arena_after_sha256"] = hashlib.sha256(after).hexdigest()
+                    report["reservation_restored"] = not unsafe and retired
                 if after != before:
                     raise ValueError("arena differs after window/reservation restoration")
                 report["final_health"] = settled_health(power, baseline)

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Added optional resident global-average pooling and four FP32 heads
+  ([TEACHER_HEADS.md](docs/TEACHER_HEADS.md)). The qualified tail stays in one
+  request and returns 512 bytes; DSP time is 16.74 ms. Host wall through all
+  outputs is 29.26 ms versus 37.91 ms for the current Python host-head path.
+  All frozen accuracy ceilings and 238 restoration audits pass. The 112x112
+  prefix remains outside this implementation.
 - Fixed CI's NumPy dependency handling: numerical tests run with NumPy in the
   Python matrix, and the layer-chain check skips when it is absent locally.
   Applied the repository's formatting rules and fixed two lint failures.

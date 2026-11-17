@@ -452,6 +452,15 @@ def simulate(plan, window):
             continue
         vt = np.full((SPAN, 32, 2), np.nan, np.float16)
         for row in tab[job.first : job.end]:
+            if row[0] == 6:
+                import teacher_heads_layout as H
+
+                if not H.native_ok(row):
+                    raise ValueError("invalid heads descriptor")
+                dpar, npar, vpar = (int(row[i]) for i in (9, 10, 14))
+                vt[vpar : vpar + npar] = vecs(dpar, npar)
+                H.simulate_op(row, vt)
+                continue
             if not native_ok(row):
                 raise ValueError("invalid resident descriptor")
             kind, cpi, cpo, k, clip, nb, blk0, nj, ws, dpar, npar, vin, vout, vres, vpar = (

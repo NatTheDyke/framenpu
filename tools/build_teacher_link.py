@@ -45,6 +45,9 @@ SOURCES = (
     TESTS / "teacher_link.ld",
     TESTS / "teacher_resident_probe.c",
     TESTS / "teacher_dw_probe.c",
+    TESTS / "teacher_heads.c",
+    TESTS / "teacher_heads_check.h",
+    TESTS / "teacher_heads_layout.py",
     TESTS / "landmark_common.h",
     TESTS / "teacher_tail_layout.py",
     TESTS / "teacher_resident_layout.py",
@@ -75,7 +78,9 @@ def verify_loader(text, symbols):
         raise ValueError("loader must not publish or clean the code slot")
 
 
-def build(output, *, stride2=False, dw_blocks=2):
+def build(output, *, stride2=False, dw_blocks=2, heads=False):
+    if heads and not stride2:
+        raise ValueError("resident heads require the stride-2 linked build")
     if dw_blocks not in (2, 4) or (dw_blocks == 4 and not stride2):
         raise ValueError("four-block depthwise requires the stride-2 linked build")
     tools = Toolchain.discover()
@@ -147,10 +152,13 @@ def build(output, *, stride2=False, dw_blocks=2):
             "-Dframe_job=tl_rs",
             *(["-DRS_STRIDE2"] if stride2 else []),
             *(["-DRS_DW_BLOCKS=4"] if dw_blocks == 4 else []),
+            *(["-DRS_HEADS"] if heads else []),
         ),
         compile_(folder, 2, TESTS / "teacher_dw_probe.c", "-Dframe_job=tl_dw"),
         compile_(folder, 3, SDK / "hmx.S"),
     ]
+    if heads:
+        objects.append(compile_(folder, 4, TESTS / "teacher_heads.c"))
 
     def check_image(text, symbols):
         if symbols.get("tl_entry") != UNCACHED + CODE:
@@ -162,6 +170,7 @@ def build(output, *, stride2=False, dw_blocks=2):
     record |= {
         "stride2": stride2,
         "dw_blocks": dw_blocks,
+        "heads": heads,
         "loader": {"bytes": len(loader.code), "sha256": _sha(loader.code), "name": LOADER_NAME},
         "linked": {"bytes": len(image), "sha256": _sha(image)},
         "reservation": {"code": f"{CODE:#x}", "bytes": CODE_BYTES, "seal_vector": f"{SEAL_AT:#x}"},
@@ -183,8 +192,9 @@ def main():
         "--stride2", action="store_true", help="enable merged resident stride-2 sequences"
     )
     p.add_argument("--dw-blocks", type=int, choices=(2, 4), default=2)
+    p.add_argument("--heads", action="store_true")
     args = p.parse_args()
-    r = build(args.output, stride2=args.stride2, dw_blocks=args.dw_blocks)
+    r = build(args.output, stride2=args.stride2, dw_blocks=args.dw_blocks, heads=args.heads)
     print(
         json.dumps(
             {k: r[k] for k in ("loader", "linked")}

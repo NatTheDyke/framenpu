@@ -30,6 +30,10 @@
  * words 15..20 are output nbin, blk0, ws, h, w and temporary vector offset.
  * The ordinary 4 KiB reference build does not include this extension. */
 #include "landmark_common.h"
+#ifdef RS_HEADS
+#include "teacher_heads_check.h"
+void th_run(const fnpu_u32 *, const fnpu_context *);
+#endif
 void fnpu_hmx_clear(void);
 void fnpu_hmx_load(const fnpu_u16 *, const fnpu_u16 *);
 void fnpu_hmx_store(fnpu_u16 *, const void *);
@@ -92,6 +96,14 @@ static __attribute__((noinline)) void rs_zero(volatile HVX_Vector *to, fnpu_u32 
 /* Fetch descriptor i into d; nonzero if any index it implies leaves bounds. */
 static __attribute__((noinline)) fnpu_u32 rs_get(fnpu_u32 tab, fnpu_u32 i, rs_op *d) {
     rs_copy(RS_DESC, (const volatile HVX_Vector *)(RS_DDR + tab) + i, 1);
+#ifdef RS_HEADS
+    if (((const volatile fnpu_u32 *)RS_DESC)[0] == TH_KIND) {
+        fnpu_u32 *row = (fnpu_u32 *)d;
+        /* Kind 6 uses the raw descriptor, never the compute-op pointer form. */
+        for (fnpu_u32 w = 0; w < 16; w++) row[w] = ((const volatile fnpu_u32 *)RS_DESC)[w];
+        return th_bad((const fnpu_u32 *)RS_DESC);
+    }
+#endif
     fnpu_u32 *t = (fnpu_u32 *)d, big = 0;
 #pragma clang loop unroll(disable)
     for (fnpu_u32 w = 0; w < 15; w++) big |= (t[w] = ((const volatile fnpu_u32 *)RS_DESC)[w]) & -(w != 9);
@@ -268,6 +280,9 @@ fnpu_u32 frame_job(const fnpu_context *c) {
         if (d->kind == 2) rs_dw(d);
 #ifdef RS_STRIDE2
         if (d->kind == 5) rs_s2(d);
+#endif
+#ifdef RS_HEADS
+        if (d->kind == TH_KIND) th_run((const fnpu_u32 *)RS_DESC, c);
 #endif
         fnpu_u32 t = rs_ticks() - t0;
         meta[96 + i - a] = t;

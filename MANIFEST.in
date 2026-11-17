@@ -57,4 +57,5 @@ include evidence/teacher-resident-fp16.json
 include evidence/teacher-link-fp16.json
 include evidence/teacher-stride2-fp16.json
 include evidence/teacher-dw4-fp16.json
+include evidence/teacher-heads-fp32.json
 include evidence/ncnn-cpu-baseline.json

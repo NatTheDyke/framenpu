@@ -1,5 +1,9 @@
 # Teacher stride-2 layers inside the resident sequence
 
+The optional [DSP pooling and FP32 heads](TEACHER_HEADS.md) now completes this
+tail in one request and returns 512 bytes. The measurements below retain the
+earlier tail-only scope.
+
 Status: hardware qualification passed on all four corpus crops. The tail now
 runs in **one request, 15.80 ms median in-DSP**, versus 18.80 ms for the
 previous seven-request linked run in [TEACHER_LINK.md](TEACHER_LINK.md).
