@@ -5,6 +5,12 @@
 - Fixed CI's NumPy dependency handling: numerical tests run with NumPy in the
   Python matrix, and the layer-chain check skips when it is absent locally.
   Applied the repository's formatting rules and fixed two lint failures.
+- Restored selectable four-block coefficient sharing in the linked teacher
+  depthwise loop ([TEACHER_DW4.md](docs/TEACHER_DW4.md)). Hardware outputs remain
+  bit-identical, but the median tail is 15.85 ms versus 15.77 ms for two blocks
+  on the same boot, so two blocks remains the default. Both variants pass all
+  controls and 719 restoration audits in total. Added the static operation
+  count and addressing assessment for sampled-only stride-2 row tiles.
 - Added an optional resident stride-2 teacher-tail path
   ([TEACHER_STRIDE2.md](docs/TEACHER_STRIDE2.md)), qualified on hardware. It keeps
   all 42 compute ops in one 45-descriptor linked request, with an explicit

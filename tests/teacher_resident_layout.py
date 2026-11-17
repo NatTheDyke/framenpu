@@ -534,8 +534,10 @@ def simulate(plan, window):
 # ---------------------------------------------------------------- native check mirror
 
 
-def native_ok(row):
+def native_ok(row, *, dw_blocks=2):
     """Mirror of rs_get in tests/teacher_resident_probe.c (True = accepted)."""
+    if dw_blocks not in (2, 4):
+        raise ValueError("dw_blocks must be 2 or 4")
     m = 0xFFFFFFFF
     w = [int(x) for x in row[:15]]
     kind, cpi, cpo, k, clip, nb, blk0, nj, ws, dpar, npar, vin, vout, vres, vpar = w
@@ -596,7 +598,7 @@ def native_ok(row):
             bad
             or cpi != cpo
             or k not in (3, 5)
-            or nj & 1
+            or nj & (dw_blocks - 1)
             or 32 * blk0 < reach
             or 32 * (blk0 + nj) + reach > 32 * nb
         )

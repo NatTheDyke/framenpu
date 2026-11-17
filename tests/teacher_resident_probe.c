@@ -40,6 +40,12 @@ void fnpu_hmx_store(fnpu_u16 *, const void *);
 #define RS_WIN_LO 0x1a40000u
 #define RS_WIN_HI 0x1f00000u
 #define RS_META 1024u
+#ifndef RS_DW_BLOCKS
+#define RS_DW_BLOCKS 2
+#endif
+#if RS_DW_BLOCKS != 2 && RS_DW_BLOCKS != 4
+#error "RS_DW_BLOCKS must be 2 or 4"
+#endif
 #ifdef RS_STRIDE2
 #define RS_MAX_KIND 5u
 #else
@@ -125,7 +131,7 @@ static __attribute__((noinline)) fnpu_u32 rs_get(fnpu_u32 tab, fnpu_u32 i, rs_op
            (d->blk0 + nj > nb) | (d->vin + cpi * nb > SPAN) | (d->vout + cpo * out_nb > SPAN) |
            (d->vres + cpo * nb > SPAN) | (d->bias + cpo + nj > d->scr) | (d->scr + (pw ? k * 16 : cpi * kk) > SPAN);
     bad |= pw ? (k != (cpi + 15) >> 4)
-              : (cpi != cpo) | ((k != 3) & (k != 5)) | (nj & 1) | (32 * d->blk0 < reach) |
+              : (cpi != cpo) | ((k != 3) & (k != 5)) | (nj & (RS_DW_BLOCKS - 1)) | (32 * d->blk0 < reach) |
                     (32 * (d->blk0 + nj) + reach > 32 * nb);
     /* compute ops: offsets -> VTCM addresses, except vpar (kept as an offset) */
 #pragma clang loop unroll(disable)
@@ -180,8 +186,11 @@ static __attribute__((noinline)) void rs_dw(const rs_op *d) {
     for (fnpu_u32 c = 0; c < d->cpi; c++) {
         const char *s = (const char *)d->vin + 128 * d->nbin * c + base;
 #pragma clang loop unroll(disable)
-        for (fnpu_u32 j = 0; j < d->nj; j += 2) {
+        for (fnpu_u32 j = 0; j < d->nj; j += RS_DW_BLOCKS) {
             HVX_Vector a0 = RS_ACC(4)[0], a1 = a0; /* qf16 zero */
+#if RS_DW_BLOCKS == 4
+            HVX_Vector a2 = a0, a3 = a0;
+#endif
             const char *p = s + 128 * j;
             const HVX_Vector *w = (const HVX_Vector *)d->scr + c * kk;
 #pragma clang loop unroll(disable)
@@ -191,11 +200,18 @@ static __attribute__((noinline)) void rs_dw(const rs_op *d) {
                     HVX_Vector cw = *w;
                     a0 = Q6_Vqf16_vadd_Vqf16Vqf16(a0, Q6_Vqf16_vmpy_VhfVhf(*(const rs_uv *)p, cw));
                     a1 = Q6_Vqf16_vadd_Vqf16Vqf16(a1, Q6_Vqf16_vmpy_VhfVhf(*(const rs_uv *)(p + 128), cw));
+#if RS_DW_BLOCKS == 4
+                    a2 = Q6_Vqf16_vadd_Vqf16Vqf16(a2, Q6_Vqf16_vmpy_VhfVhf(*(const rs_uv *)(p + 256), cw));
+                    a3 = Q6_Vqf16_vadd_Vqf16Vqf16(a3, Q6_Vqf16_vmpy_VhfVhf(*(const rs_uv *)(p + 384), cw));
+#endif
                 }
             }
             RS_ACC(0)[0] = a0; RS_ACC(1)[0] = a1;
+#if RS_DW_BLOCKS == 4
+            RS_ACC(2)[0] = a2; RS_ACC(3)[0] = a3;
+#endif
 #pragma clang loop unroll(disable)
-            for (fnpu_u32 q = 0; q < 2; q++) rs_post(d, Q6_Vhf_equals_Vqf16(RS_ACC(q)[0]), c, j + q);
+            for (fnpu_u32 q = 0; q < RS_DW_BLOCKS; q++) rs_post(d, Q6_Vhf_equals_Vqf16(RS_ACC(q)[0]), c, j + q);
         }
     }
 }

@@ -31,6 +31,7 @@ class TeacherLinkBuild(unittest.TestCase):
         cls.out = Path(cls.tmp.name)
         cls.record = BL.build(cls.out / "link")
         cls.stride2 = BL.build(cls.out / "stride2", stride2=True)
+        cls.dw4 = BL.build(cls.out / "dw4", stride2=True, dw_blocks=4)
         cls.reference = BR.build(cls.out / "ref")
 
     @classmethod
@@ -47,12 +48,21 @@ class TeacherLinkBuild(unittest.TestCase):
         for k in ("rs", "dw"):
             self.assertEqual(self.record["reference"][k]["sha256"], self.reference[k]["sha256"])
             self.assertEqual(self.stride2["reference"][k]["sha256"], self.reference[k]["sha256"])
+            self.assertEqual(self.dw4["reference"][k]["sha256"], self.reference[k]["sha256"])
 
     def test_stride2_build_preserves_qualified_images(self):
         self.assertLessEqual(self.stride2["linked"]["bytes"], 0x3F80)
         self.assertTrue(self.stride2["stride2"])
         self.assertFalse(self.record["stride2"])
         self.assertEqual(self.record["loader"], self.stride2["loader"])
+        self.assertEqual(self.record["loader"], self.dw4["loader"])
+        self.assertEqual(self.dw4["dw_blocks"], 4)
+        self.assertLessEqual(self.dw4["linked"]["bytes"], 0x3F80)
+        self.assertEqual(self.stride2["dw_blocks"], 2)
+        self.assertEqual(
+            self.stride2["linked"]["sha256"],
+            "ef5721f82e2f6fe20934032b0b9692ec422cae24aec863fe9c66c37aeae5a244",
+        )
         # Frozen hashes from teacher-link-fp16.json: the per-layer oracle and
         # seven-request control must remain the qualified machine code.
         self.assertEqual(

@@ -7,7 +7,8 @@ TL_LINK_ENTRY, plus tests/teacher_link_admin.c). <output>/linked is the
 operator image for the reservation at 0x1ff0000: tests/teacher_link.c at
 offset zero, then tests/teacher_resident_probe.c and tests/teacher_dw_probe.c
 compiled as tl_rs and tl_dw. --stride2 enables the resident stride-2 extension
-in tl_rs only; the two 4 KiB qualification kernels remain unchanged.
+in tl_rs only; --dw-blocks 4 restores four-block coefficient sharing there.
+The two 4 KiB qualification kernels remain unchanged.
 
 Checks: PC-relative C relocations only, no vector stack accesses, the loader's
 vector table and forwarding stubs (as the cache entry), its dispatch constants
@@ -74,7 +75,9 @@ def verify_loader(text, symbols):
         raise ValueError("loader must not publish or clean the code slot")
 
 
-def build(output, *, stride2=False):
+def build(output, *, stride2=False, dw_blocks=2):
+    if dw_blocks not in (2, 4) or (dw_blocks == 4 and not stride2):
+        raise ValueError("four-block depthwise requires the stride-2 linked build")
     tools = Toolchain.discover()
     record = {"format": "framenpu-teacher-link-build", "reference": BR.build(output)}
 
@@ -143,6 +146,7 @@ def build(output, *, stride2=False):
             TESTS / "teacher_resident_probe.c",
             "-Dframe_job=tl_rs",
             *(["-DRS_STRIDE2"] if stride2 else []),
+            *(["-DRS_DW_BLOCKS=4"] if dw_blocks == 4 else []),
         ),
         compile_(folder, 2, TESTS / "teacher_dw_probe.c", "-Dframe_job=tl_dw"),
         compile_(folder, 3, SDK / "hmx.S"),
@@ -157,6 +161,7 @@ def build(output, *, stride2=False):
     (output / "teacher_link.bin").write_bytes(image)
     record |= {
         "stride2": stride2,
+        "dw_blocks": dw_blocks,
         "loader": {"bytes": len(loader.code), "sha256": _sha(loader.code), "name": LOADER_NAME},
         "linked": {"bytes": len(image), "sha256": _sha(image)},
         "reservation": {"code": f"{CODE:#x}", "bytes": CODE_BYTES, "seal_vector": f"{SEAL_AT:#x}"},
@@ -177,8 +182,9 @@ def main():
     p.add_argument(
         "--stride2", action="store_true", help="enable merged resident stride-2 sequences"
     )
+    p.add_argument("--dw-blocks", type=int, choices=(2, 4), default=2)
     args = p.parse_args()
-    r = build(args.output, stride2=args.stride2)
+    r = build(args.output, stride2=args.stride2, dw_blocks=args.dw_blocks)
     print(
         json.dumps(
             {k: r[k] for k in ("loader", "linked")}

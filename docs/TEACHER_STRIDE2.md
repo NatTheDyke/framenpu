@@ -9,6 +9,9 @@ tensor is bit-identical to the unchanged per-layer qualification.
 Evidence: [teacher-stride2-fp16.json](../evidence/teacher-stride2-fp16.json)
 (statistics only).
 
+The later [four-block sharing comparison](TEACHER_DW4.md) passed hardware
+qualification but showed no speed gain. Two-block sharing remains the default.
+
 ## Hardware result
 
 Four crops, five alternating rounds each: 20 seven-request cached-entry
@@ -71,8 +74,8 @@ uses the resident depthwise routine, with the same tap accumulation order,
 FP16 rounding, bias and clip6, writing to a full-resolution temporary grid.
 The scalar decimator then copies words at `(2*y+1, 2*x+1)` into a zeroed
 half-resolution grid. This preserves the qualified teacher's TF-SAME
-sampling for both 3x3 and 5x5 kernels. Four-block coefficient sharing and
-computing only the sampled positions are separate optimizations.
+sampling for both 3x3 and 5x5 kernels. Four-block coefficient sharing is now
+selectable with `--dw-blocks 4`; a sampled-only kernel remains future work.
 
 ## Plans and placement
 

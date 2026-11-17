@@ -118,10 +118,22 @@ def linked_completion(result, image_len, *, fault=False, reject=False, output_by
 
 class LinkRunner(HR.Runner):
     def __init__(
-        self, dev, mem, jobs, graph, specs, loader, image, *, stride2=False, split_after=None
+        self,
+        dev,
+        mem,
+        jobs,
+        graph,
+        specs,
+        loader,
+        image,
+        *,
+        stride2=False,
+        split_after=None,
+        dw_blocks=2,
     ):
         super().__init__(dev, mem, jobs, graph, specs)
         self.stride2, self.split_after = stride2, split_after
+        self.dw_blocks = dw_blocks
         if stride2:
             self.plans |= {
                 m: RL.build_plan(graph, specs, m, split_after=split_after)
@@ -417,6 +429,18 @@ def run(runner, corpus, manifest, rounds):
                         runner.submit(plan, job, reject=True, linked=True)
                         count += 1
                 runner.install(plan)
+            if runner.dw_blocks == 4:
+                table = bytearray(plan.table)
+                n = next(
+                    n
+                    for n in range(rs.first, rs.end)
+                    if struct.unpack_from("<I", table, 128 * n)[0] == 2
+                )
+                nj = struct.unpack_from("<I", table, 128 * n + 28)[0]
+                struct.pack_into("<I", table, 128 * n + 28, nj - 2)
+                runner.put(plan.table_at, bytes(table))
+                runner.submit(plan, rs, reject=True, linked=True)
+                runner.install(plan)
             runner.admin(7, reject=True)  # already sealed
             rows, _, final, _ = runner.frame(blob, observe=False, linked=True)
             if final != ref_raw[name][RL.FINAL]:
@@ -429,6 +453,8 @@ def run(runner, corpus, manifest, rounds):
             }
             if runner.stride2:
                 entry["controls"]["stride2_descriptor_rejections"] = count
+            if runner.dw_blocks == 4:
+                entry["controls"]["four_block_remainder_rejection"] = 1
         crops[name]["frames"] = entry
     return crops, seal_ms
 
@@ -479,6 +505,7 @@ def main():
         p.add_argument("--" + name, required=True, type=Path)
     p.add_argument("--rounds", type=int, default=5)
     p.add_argument("--stride2", action="store_true")
+    p.add_argument("--dw-blocks", type=int, choices=(2, 4), default=2)
     p.add_argument("--split-after", help="split merged execution after this layer (two requests)")
     args = p.parse_args()
     if not args.run_on_device or os.geteuid() != 0 or not 2 <= args.rounds <= 20:
@@ -487,6 +514,8 @@ def main():
     loader_job, image, link_record = load_link(args.jobs)
     if args.stride2 != link_record.get("stride2", False):
         p.error("--stride2 must agree with the linked build")
+    if args.dw_blocks != link_record.get("dw_blocks", 2):
+        p.error("--dw-blocks must agree with the linked build")
     if args.split_after and not args.stride2:
         p.error("--split-after requires --stride2")
     graph = load_landmark_graph(args.model / "hand.ncnn.param", args.model / "hand.ncnn.bin")
@@ -500,6 +529,7 @@ def main():
     report = {
         "format": "framenpu-teacher-link-run",
         "stride2": args.stride2,
+        "dw_blocks": args.dw_blocks,
         "split_after": args.split_after,
         "builds": {k: v[1]["sha256"] for k, v in jobs.items()}
         | {"loader": link_record["loader"], "linked": link_record["linked"]},
@@ -546,6 +576,7 @@ def main():
                             image,
                             stride2=args.stride2,
                             split_after=args.split_after,
+                            dw_blocks=args.dw_blocks,
                         )
                         try:
                             report["crops"], report["seal_wrapper_ms"] = run(

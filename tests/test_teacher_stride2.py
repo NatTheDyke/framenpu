@@ -79,37 +79,45 @@ int accepted(const uint32_t *row) {
         cls.tmp = tempfile.TemporaryDirectory()
         folder = Path(cls.tmp.name)
         (folder / "check.c").write_text(prefix + struct + check + suffix)
-        subprocess.run(
-            [
-                shutil.which("cc"),
-                "-shared",
-                "-fPIC",
-                "-O2",
-                str(folder / "check.c"),
-                "-o",
-                str(folder / "check.so"),
-            ],
-            check=True,
-            capture_output=True,
-        )
-        cls.lib = ctypes.CDLL(str(folder / "check.so"))
-        cls.lib.accepted.argtypes = [ctypes.POINTER(ctypes.c_uint32)]
-        cls.lib.accepted.restype = ctypes.c_int
+        cls.libs = {}
+        for blocks in (2, 4):
+            libpath = folder / f"check{blocks}.so"
+            subprocess.run(
+                [
+                    shutil.which("cc"),
+                    "-shared",
+                    "-fPIC",
+                    "-O2",
+                    f"-DRS_DW_BLOCKS={blocks}",
+                    str(folder / "check.c"),
+                    "-o",
+                    str(libpath),
+                ],
+                check=True,
+                capture_output=True,
+            )
+            lib = ctypes.CDLL(str(libpath))
+            lib.accepted.argtypes = [ctypes.POINTER(ctypes.c_uint32)]
+            lib.accepted.restype = ctypes.c_int
+            cls.libs[blocks] = lib
 
     @classmethod
     def tearDownClass(cls):
         cls.tmp.cleanup()
 
-    def accepted(self, row):
+    def accepted(self, row, *, dw_blocks=2):
         import numpy as np
 
         row = np.asarray(row, dtype="<u4")
-        return bool(self.lib.accepted(row.ctypes.data_as(ctypes.POINTER(ctypes.c_uint32))))
+        return bool(
+            self.libs[dw_blocks].accepted(row.ctypes.data_as(ctypes.POINTER(ctypes.c_uint32)))
+        )
 
     def test_all_plan_descriptors_pass_actual_native_checker(self):
         for i, row in enumerate(self.rows):
             with self.subTest(row=i):
                 self.assertTrue(self.accepted(row))
+                self.assertTrue(self.accepted(row, dw_blocks=4))
 
     def test_mutations_match_python_mirror(self):
         import numpy as np
@@ -131,6 +139,17 @@ int accepted(const uint32_t *row) {
             row[field] = values[int(rng.integers(len(values)))]
             with self.subTest(case=i, field=field):
                 self.assertEqual(self.accepted(row), bool(self.R.native_ok(row)))
+                self.assertEqual(
+                    self.accepted(row, dw_blocks=4), bool(self.R.native_ok(row, dw_blocks=4))
+                )
+
+    def test_four_block_loop_rejects_a_two_block_remainder(self):
+        row = next(r for r in self.rows if r[0] == 2).copy()
+        row[7] -= 2
+        self.assertTrue(self.accepted(row))
+        self.assertTrue(self.R.native_ok(row))
+        self.assertFalse(self.accepted(row, dw_blocks=4))
+        self.assertFalse(self.R.native_ok(row, dw_blocks=4))
 
     def test_stride2_rejects_invalid_geometry_and_buffer_bounds(self):
         s2 = [r for r in self.rows if r[0] == 5]
