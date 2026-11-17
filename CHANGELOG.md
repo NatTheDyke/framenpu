@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Added the VTCM-resident v2 HMX spatial block. It stages weights, the source
+  band and mid tiles in the proven 1,912 KiB FeatureNN scratch span. Steady
+  per-block time falls 9-30x versus v1, and the half-width convolution
+  forecast drops from about 99 ms to about 8 ms, inside the 12-20 ms gate.
+  Not yet modeled: layer-level job splitting, inter-layer traffic, and the
+  stride-2 and stem layers. HMX operands need more than 128 B alignment, so
+  v2 aligns them to 4 KiB.
 - Mapped VTCM ownership from the firmware and a read-only all-VTCM survey
   ([VTCM_MAP.md](docs/VTCM_MAP.md)). FeatureNN worker-0/1 scratch
   `0x31002000`-`0x311e0000` (1,912 KiB) is per-request scratch, serialized

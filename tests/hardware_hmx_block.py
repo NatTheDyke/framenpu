@@ -196,11 +196,19 @@ def main():
                             | mac["FB_TIMING"] << 8
                             | mac["FB_REUSE"] << 16
                             | mac.get("FB_NOHMX", 0) << 24
+                            | mac.get("FR_PAIR", 0) << 28
+                            | mac.get("FR_RESIDENT", 0) << 30
                             or any(m[11:32])
                             or (variant != "nohmx" and any(m[64:96]))  # raw nonfinite flag vector
                             or not 0 <= body <= res.kernel_reference_ticks
                         ):
-                            raise ValueError("block metadata/finite/budget differs after restore")
+                            raise ValueError(
+                                "block metadata/finite/budget differs after restore: "
+                                f"{variant} meta={[hex(w) for w in m[:12]]} "
+                                f"nonzero11_32={[i for i in range(11, 32) if m[i]]} "
+                                f"flags={sum(1 for w in m[64:96] if w)} body={body} "
+                                f"ref={res.kernel_reference_ticks}"
+                            )
                         return res, {
                             "body_ticks": body,
                             "phase_ticks": dict(zip(PHASES, m[32:40])),
@@ -259,11 +267,14 @@ def main():
                         if label == "public_y48":
                             continue
                         data = payload(g, *fixture, y0=y0)
-                        run(g, "main", data, 1, fault=True)  # trap after first load
-                        run(g, "main", data, 1, reject=True)
-                        res, _ = run(g, "main", data, 1)  # clean result after the fault
-                        check_values(g, res.output, fixture)
-                        controls += 1
+                        for v in ("main", "res2"):  # v1 and VTCM-resident v2
+                            if (g.name, v) not in builds:
+                                continue
+                            run(g, v, data, 1, fault=True)  # trap after first load
+                            run(g, v, data, 1, reject=True)
+                            res, _ = run(g, v, data, 1)  # clean result after the fault
+                            check_values(g, res.output, fixture)
+                            controls += 1
                     report["guarded_faults"] = controls
                     report["wrong_geometry_rejections"] = controls
                     report["post_fault_valid_results"] = controls

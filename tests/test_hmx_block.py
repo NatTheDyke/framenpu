@@ -65,6 +65,41 @@ class LayoutTests(unittest.TestCase):
                         got = unpack(tile.tobytes())
                         np.testing.assert_array_equal(got, ref[32 * t : 32 * t + 32])
 
+    def test_resident_table_pack_equals_im2col_for_every_tile(self):
+        """Model of hmx_resident_block_probe.c fr_table/fr_pack (VTCM band)."""
+        import numpy as np
+
+        for g in GEOMETRIES:
+            with self.subTest(g.name):
+                x = synthetic_fixture(g)[0]
+                flat = planar(x.reshape(g.cin, -1), g.nbin, 1).view("<u4").reshape(-1)
+                table = []
+                for r in range(g.nk1 * 16):
+                    tap, ch = divmod(2 * r, g.cin)
+                    if tap >= TAPS:
+                        table.append(3 << 24)
+                        continue
+                    s = (tap // 3) * g.width + tap % 3 + 31
+                    table.append((ch // 2) * g.nbin + s // 32 | (s % 32) * 4 << 16 | tap % 3 << 24)
+                for j in range(g.nj):
+                    xs = (32 * j + np.arange(32)) % g.width
+                    bt = np.zeros((g.nk1 * 16, 32), "<u4")
+                    for r, word in enumerate(table):
+                        kind, off, shift = word >> 24, word & 0xFFFF, (word >> 16) & 0xFF
+                        if kind == 3:
+                            continue
+                        self.assertLess(off + j + 1, flat.size // 32)
+                        v = flat[(off + j) * 32 + shift // 4 :][:32].copy()
+                        if kind == 0:
+                            v[xs == 0] = 0
+                        elif kind == 2:
+                            v[xs == g.width - 1] = 0
+                        bt[r] = v
+                    ref = im2col(g, x.astype(np.float64), j)
+                    for t in range(g.nk1):
+                        got = unpack(bt[16 * t : 16 * t + 16].tobytes())
+                        np.testing.assert_array_equal(got, ref[32 * t : 32 * t + 32])
+
     def test_top_band_reads_zero_padding_rows(self):
         import numpy as np
 
@@ -223,7 +258,7 @@ class BuildTests(unittest.TestCase):
                 cwd=ROOT,
             )
             records = [json.loads(p.read_text()) for p in Path(folder).glob("*/*/build.json")]
-            self.assertEqual(len(records), 4 * len(GEOMETRIES) + 2)
+            self.assertEqual(len(records), 7 * len(GEOMETRIES) + 2)
             for r in records:
                 self.assertLessEqual(r["bytes"], 4096)
                 self.assertEqual(r["vector_stack_accesses"], 0)

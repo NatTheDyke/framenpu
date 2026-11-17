@@ -46,3 +46,4 @@ include evidence/native-arithmetic-validation.json
 include evidence/hmx-model-feasibility.json
 include evidence/hmx-spatial-block.json
 include evidence/vtcm-ownership.json
+include evidence/hmx-resident-block.json

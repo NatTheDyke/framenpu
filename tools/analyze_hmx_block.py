@@ -114,8 +114,114 @@ def summarize(report):
             item["stage2_weight_residency_saving_us_per_block"] = (
                 variants["noreuse"]["block_us_median"] - main["block_us_median"]
             )
+        item["resident"] = resident_summary(case, g)
         out[key] = item
     return out
+
+
+RESIDENT = ("res1", "res2", "res2_notime")
+
+
+def _phase_slope(case, g, variant, phase):
+    lo, hi = case["repeat_counts"]
+    vals = []
+    for round_ in sorted({s["round"] for s in case["samples"]}):
+        by = {
+            s["reps"]: s
+            for s in case["samples"]
+            if s["variant"] == variant and s["round"] == round_
+        }
+        if lo in by and hi in by:
+            a, b = by[lo], by[hi]
+            x = (
+                (lambda s: s["body_ticks"])
+                if phase is None
+                else (lambda s: s["phase_ticks"][phase])
+            )
+            vals.append((x(b) - x(a)) / ((hi - lo) * g.nj) / TICKS_PER_US)
+    return statistics.median(vals)
+
+
+def resident_summary(case, g):
+    """VTCM-resident v2: steady per-block cost (repeat slope, prologue cancels)
+    and the once-per-job prologue (weights and source band copied into VTCM)."""
+    lo, hi = case["repeat_counts"]
+    if hi <= lo or not any(s["variant"] == "res2" for s in case["samples"]):
+        return None
+    out = {"block_us_slope": {v: _phase_slope(case, g, v, None) for v in RESIDENT}}
+    out["block_phase_us"] = {p: _phase_slope(case, g, "res2", p) for p in PHASES}
+    lo_rows = [s for s in case["samples"] if s["variant"] == "res2" and s["reps"] == lo]
+    prologue = {
+        p: statistics.median(s["phase_ticks"][p] for s in lo_rows) / TICKS_PER_US
+        for p in ("weights", "stage")
+    }
+    out["prologue_us"] = prologue
+    out["prologue_us_notime_estimate"] = statistics.median(
+        s["body_ticks"] / TICKS_PER_US - lo * g.nj * out["block_us_slope"]["res2_notime"]
+        for s in case["samples"]
+        if s["variant"] == "res2_notime" and s["reps"] == lo
+    )
+    timing = out["block_us_slope"]["res2_notime"] / out["block_us_slope"]["res2"]
+    ph = out["block_phase_us"]
+    loads = g.k_tiles_per_block
+    weight_tiles = g.nm * g.nk1 + g.no * g.nm
+    source_vectors = (g.cin // 2) * g.nbin + g.nj
+    out["units_notime"] = {
+        "pack_k_tile_us": ph["pack"] * timing / g.nk1,
+        "hmx_per_load_us": ph["hmx"] * timing / loads,
+        "post_per_tile_us": (ph["post"] + ph["store"]) * timing / (g.nm + g.no),
+        "setup_per_block_us": ph["setup"] * timing,
+        "prologue_weight_tile_us": prologue["weights"] / weight_tiles,
+        "prologue_source_vector_us": prologue["stage"] / source_vectors,
+    }
+    v1 = _phase_slope(case, g, "notime", None)
+    out["speedup_vs_v1_notime"] = v1 / out["block_us_slope"]["res2_notime"]
+    out["pair_vs_single"] = out["block_us_slope"]["res1"] / out["block_us_slope"]["res2"]
+    return out
+
+
+def forecast_resident(summary, graph):
+    """fused3_w050 convolution ms with v2 unit costs: every layer's weights
+    copied into VTCM once, B tiles packed once per position block from a
+    VTCM-resident source, mid/output tiles kept in VTCM."""
+    from analyze_hmx_model import variants
+
+    _, costs = variants(graph)
+    rows = costs["fused3_w050"]["layers"]
+    units = [
+        v["resident"]["units_notime"]
+        for k, v in summary.items()
+        if k.startswith("w050_") and v.get("resident")
+    ]
+    med = {k: statistics.median(u[k] for u in units) for k in units[0]}
+    parts = dict.fromkeys(("weights_in", "source_in", "pack", "hmx", "post"), 0.0)
+    for r in rows:
+        spatial = "+" in r["name"] or r["name"] in ("convclip_0", "convdwclip_0")
+        outputs = r["bias_parameters"]
+        positions = r["nominal_output_half_bytes"] // (2 * outputs)
+        blocks = -(-positions // 32)
+        parts["weights_in"] += -(-outputs // 32) * r["depth"] * med["prologue_weight_tile_us"]
+        parts["hmx"] += r["load_pairs"] * med["hmx_per_load_us"]
+        parts["post"] += r["transactions"] * med["post_per_tile_us"]
+        if spatial:
+            parts["pack"] += blocks * r["depth"] * med["pack_k_tile_us"]
+            cin_pairs = -(-(r["depth"] * 32 // 9) // 2)
+            parts["source_in"] += cin_pairs * (blocks + 4) * med["prologue_source_vector_us"]
+    return {
+        "variant": "fused3_w050",
+        "unit_costs_us": med,
+        "parts_ms": {k: v / 1000 for k, v in parts.items()},
+        "convolution_ms": sum(parts.values()) / 1000,
+        "decision_gate_ms": [12, 20],
+        "assumptions": [
+            "Unit costs are timer-free (scaled by res2_notime/res2 slope) medians of the w050 geometries.",
+            "1x1 layers read their B operand as resident activation tiles (no repacking).",
+            "Source band: 9-tap 3x3 assumed for the channel count of spatial layers; stride-2 "
+            "and RGB-stem layers reuse stride-1 costs (not measured).",
+            "One prologue per layer; job splitting, the 128 KiB arena and DDR inter-layer traffic "
+            "of a real executor are not modelled. Residual adds, pooling, heads and host work excluded.",
+        ],
+    }
 
 
 def forecast(summary, graph):
@@ -176,8 +282,9 @@ def main():
         if graph.weights_sha256 != report["model_sha256"]:
             p.error("measurement model differs")
         result["forecast"] = forecast(result["geometries"], graph)
+        result["forecast_resident"] = forecast_resident(result["geometries"], graph)
     args.output.write_text(json.dumps(result, indent=2) + "\n")
-    print(json.dumps(result.get("forecast", result["geometries"]), indent=2))
+    print(json.dumps(result.get("forecast_resident", result["geometries"]), indent=2))
 
 
 if __name__ == "__main__":

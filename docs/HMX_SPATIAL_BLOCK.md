@@ -6,7 +6,9 @@ device-gathered, packed-FP16 spatial→projection block, rather than another
 prepacked operand stream. It times each part of the work separately so the
 next decision rests on measured component costs.
 
-**Status:** measured on the device on 2026-11-17 in two full runs.
+**Status:** v1 (8 KiB VTCM) was measured on the device on 2026-11-17 in two
+full runs, and the v2 VTCM-resident block followed it; see
+[v2](#v2-vtcm-resident-block).
 [Evidence](../evidence/hmx-spatial-block.json). Every numerical, fault,
 rejection and restoration check passed. **The decision gate is not met:**
 the forecast for the half-width student is about 99 ms of convolution
@@ -76,6 +78,83 @@ for the 7x7 layer. The next step therefore requires a decision: obtain
 independent ownership evidence for a larger VTCM region, or go back to
 architecture/traffic reduction. A training run is not justified on these
 numbers.
+
+## v2: VTCM-resident block
+
+**Status:** measured 2026-11-17
+([evidence](../evidence/hmx-resident-block.json)). The forecast is about
+**8 ms of convolution, inside the 12–20 ms gate.** v2 uses the 1,912 KiB
+FeatureNN worker-0/1 scratch span proven in [VTCM_MAP.md](VTCM_MAP.md).
+[hmx_resident_block_probe.c](../tests/hmx_resident_block_probe.c) computes
+the same block, with the same payload, output, oracle and harness as v1, but
+keeps every operand in VTCM:
+
+- **Prologue, once per job:** contiguous copies of every W1/W2 tile, the
+  whole planar source band and the x|position table. It also builds a gather
+  table (source vector offset, `valign` shift and mask kind for each B row
+  pair), which does not depend on the position block.
+- **Per position block:** the kernel packs all K tiles once from VTCM (two
+  aligned VTCM loads, `valign` and a mask per row pair) and issues one
+  barrier. Each mid block then runs back-to-back HMX loads straight from the
+  resident weight tiles. The mid tile is stored to VTCM and biased/clipped in
+  place, with one barrier for the stage. The projection then reads the
+  resident W2 and mid tiles. Nothing is spilled, and the last block's mid
+  tiles are copied out after the timed body only so they can be checked.
+- `res1` uses single loads and `res2` the qualified paired load (range 4095,
+  [HMX_BATCHING.md](HMX_BATCHING.md)). `res2_notime` has no timers.
+
+Steady per-block cost (repeat slope, so the prologue cancels; median of five
+alternated rounds, µs):
+
+| Geometry | v1 `notime` | v2 `res2_notime` | Speedup | v2 prologue per job |
+|---|---:|---:|---:|---:|
+| `w050_112` | 57.7 | 6.39 | 9.0x | 71 |
+| `w050_14` | 426.9 | 14.29 | 29.9x | 110 |
+| `w050_7` | 422.3 | 17.51 | 24.1x | 105 |
+| `teacher_112` (rows 0 / 48) | 76.5 / 76.6 | 7.48 / 7.50 | 10.2x | 92 |
+
+v2 unit costs (timer-free medians of the w050 geometries):
+
+| Unit | µs |
+|---|---:|
+| Pack per K tile (from the VTCM band) | 0.49 |
+| HMX per load (clear/load/store included) | 0.21 |
+| Post/store per output tile | 0.42 |
+| Prologue weight tile copy | 1.97 |
+| Prologue source vector copy | 0.16 |
+
+Forecast for fused3_w050 (`forecast_resident` in the analyzer), in ms:
+
+| Weights into VTCM | Source into VTCM | Pack | HMX | Post | **Total** |
+|---:|---:|---:|---:|---:|---:|
+| 2.4 | 1.2 | 1.7 | 1.7 | 1.0 | **8.0** |
+
+Previously the per-block cost was DDR-bound; HMX itself now takes about a
+quarter of it. Paired loads change the block time by less than 2% once the
+operands are resident.
+
+**Not yet modeled:** the forecast assumes one prologue per layer and
+resident activations between layers (1x1 B operands are not repacked). It
+does not model job splitting under the 128 KiB arena, inter-layer DDR traffic
+of a real executor, stride-2 and stem layers (they reuse stride-1 costs),
+residual adds, pooling, heads or host work. The next step is a layer-level
+executor that reads inputs from the persistent DDR arena and measures those
+costs.
+
+**Hardware lesson:** HMX operands must be aligned more strictly than 128 B. A
+first v2 build placed B and mid tiles on 128-byte boundaries (`w050_14`) and
+produced non-finite output. Tiles that were 512 B or more aligned
+(`w050_112`) were correct. v2 now places every operand region, and each
+mid/output block's weight run, on a 4 KiB boundary. The harness stopped
+cleanly on the bad build with no recovery needed. The exact minimum alignment
+was not bisected.
+
+**Checks:** one session ran 444 audited restorations and every check
+passed. Output errors are within the oracle bounds, and v2 spilled-mid tiles
+were checked directly. Guarded faults, wrong-geometry rejections and clean
+post-fault results passed for both v1 and v2 on four fixtures (8 each). The
+resident arena hash, DSP service PID and restart count were unchanged, and
+the longest job took 9.7 ms.
 
 ## What one block computes
 

@@ -27,12 +27,17 @@ SOURCES = (
     SDK / "hmx.S",
     ROOT / "tests/hmx_block_probe.c",
 )
-PINNED = SOURCES + (
-    ROOT / "tests/landmark_common.h",
-    ROOT / "tests/hmx_block_layout.py",
-    SDK / "include/framenpu.h",
-    SDK / "include/fnpu_readback.h",
-    SDK / "link.ld",
+RESIDENT_SOURCES = SOURCES[:2] + (ROOT / "tests/hmx_resident_block_probe.c",)
+PINNED = (
+    SOURCES
+    + RESIDENT_SOURCES[2:]
+    + (
+        ROOT / "tests/landmark_common.h",
+        ROOT / "tests/hmx_block_layout.py",
+        SDK / "include/framenpu.h",
+        SDK / "include/fnpu_readback.h",
+        SDK / "link.ld",
+    )
 )
 VARIANTS = {
     "main": {"FB_BATCH": 8, "FB_TIMING": 1, "FB_REUSE": 1, "FB_NOHMX": 0},
@@ -40,6 +45,31 @@ VARIANTS = {
     "notime": {"FB_BATCH": 8, "FB_TIMING": 0, "FB_REUSE": 1, "FB_NOHMX": 0},
     "noreuse": {"FB_BATCH": 8, "FB_TIMING": 1, "FB_REUSE": 0, "FB_NOHMX": 0},
     "nohmx": {"FB_BATCH": 8, "FB_TIMING": 1, "FB_REUSE": 1, "FB_NOHMX": 1},
+    # v2: borrows the FeatureNN worker-0/1 VTCM scratch span (docs/VTCM_MAP.md)
+    "res1": {
+        "FB_BATCH": 8,
+        "FB_TIMING": 1,
+        "FB_REUSE": 1,
+        "FB_NOHMX": 0,
+        "FR_PAIR": 0,
+        "FR_RESIDENT": 1,
+    },
+    "res2": {
+        "FB_BATCH": 8,
+        "FB_TIMING": 1,
+        "FB_REUSE": 1,
+        "FB_NOHMX": 0,
+        "FR_PAIR": 1,
+        "FR_RESIDENT": 1,
+    },
+    "res2_notime": {
+        "FB_BATCH": 8,
+        "FB_TIMING": 0,
+        "FB_REUSE": 1,
+        "FB_NOHMX": 0,
+        "FR_PAIR": 1,
+        "FR_RESIDENT": 1,
+    },
 }
 
 
@@ -57,7 +87,7 @@ def build(output, g, variant, flags):
     macros = {**g.macros(), **flags}
     defines = [f"-D{k}={v}" for k, v in macros.items()]
     objects = []
-    for i, p in enumerate(SOURCES):
+    for i, p in enumerate(RESIDENT_SOURCES if flags.get("FR_RESIDENT") else SOURCES):
         obj = output / f"{i:02d}-{p.name}.o"
         _run(
             [
