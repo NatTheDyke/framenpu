@@ -259,6 +259,9 @@ time 7.9% and frame time 6.1%, with 50 requests and bit-identical heads.
 On top of it, opt-in [row tiling](docs/DEPTHWISE_TILE.md) of the 7- and 14-wide
 depthwise layers brings depthwise time from 421 to 291 ms and a frame to
 1.08–1.19 seconds in 43 requests.
+An opt-in [fused 1x1 convolution path](docs/CONV_FAST.md) then adds bias and
+clips inside the HMX unit and brings a frame to 0.67–0.77 seconds in 27
+requests, with bit-identical heads.
 The [accumulator isolation tests](docs/HMX_ACCUMULATOR.md) show shared HMX state
 across workers with the recovered primitives. Keep each complete clear/load/store
 transaction under one HMX owner; use HVX workers for other work.

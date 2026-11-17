@@ -208,7 +208,10 @@ def phase_profile(owner, chw):
         layer = owner.native[19]
         kind = rl._kind(owner.native, owner.records[layer])
         owner._command(
-            5, rl.BATCH, units=rl.UNIT_LIMIT, stop=rl._phase_end(owner.native, owner.records)
+            5,
+            rl.BATCH,
+            units=rl.UNIT_LIMIT,
+            stop=rl._phase_end(owner.native, owner.records, owner.fused),
         )
         done = owner.metrics["commands"][-1]
         row = rows.setdefault((layer, kind), [0, 0, 0.0])

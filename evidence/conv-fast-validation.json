@@ -1,0 +1,839 @@
+{
+  "format": "framenpu-conv-fast-validation",
+  "version": 1,
+  "date": "2026-11-16",
+  "status": "qualified_with_unchanged_four_crop_policy",
+  "baseline_evidence": [
+    "depthwise-row-tile-validation.json",
+    "resident-power-validation.json"
+  ],
+  "scope": "Opt-in build (--linked --dw-reuse 6 --dw-row-tile --conv-fast): the HMX operator adds the channel bias, flags a non-finite sum and clips while it stores each result row, so the separate bias/clip work unit and its uncached reload are gone; packing and HMX row handling run in functions that keep no vector on the job stack. Per-value arithmetic and its order, tensor layout, budget, 40 ms timeout and frozen policy unchanged. The host replays the shorter unit sequence from a flag in the build record. Default, --dw-reuse 6 and tiled builds are byte-identical to their qualified images.",
+  "build": {
+    "code_offset": 33488896,
+    "code_reservation_bytes": 16384,
+    "conv_fast": true,
+    "loader": {
+      "bytes": 3836,
+      "sha256": "88cd86b28f8d67ee875348ab61a4f5e5665c5ddeb173dfa42e89e82db3440939"
+    },
+    "linked": {
+      "bytes": 13752,
+      "sha256": "058bd8e3ec8d9aed1075fabc34f5a4edb2ec476b6daaf99e5143c9a2eee5895d"
+    },
+    "toolchain": {
+      "clang": "clang version 23.1.4",
+      "linker": "LLD 23.1.4 (compatible with GNU linkers)",
+      "objcopy": "llvm-objcopy, compatible with GNU objcopy"
+    }
+  },
+  "jobs_sha256": {
+    "loader": "88cd86b28f8d67ee875348ab61a4f5e5665c5ddeb173dfa42e89e82db3440939",
+    "linked": "058bd8e3ec8d9aed1075fabc34f5a4edb2ec476b6daaf99e5143c9a2eee5895d"
+  },
+  "model_sha256": "b7c3d1be232725a5a143e2648858ec5aec9596c7b83c6a3c508479b04057e00c",
+  "tolerances_sha256": "381a033d6f4c10047998dfe42abb8cd6b18a756741c8a21690a3e6d6dc951f7b",
+  "manifest_sha256": "576a357658e5a22a5177f40138500111aa5e78934a47736be2e2069a3bd0b060",
+  "source_sha256": {
+    "src/framenpu/resident_landmark.py": "1158a772c80d92d045b0cd9f8e4c8364324aabab7df3c528bf46216dca15443e",
+    "src/framenpu/convolution.py": "3c9bdc996064257021c377e9203f55a40eb762dba61fa9a7ecb8a7c9d5559dd7",
+    "src/framenpu/landmark.py": "d412dd46346ac8c848564587b645960614c9990bf0cf57b960ba89c3ff2e88f0",
+    "tests/hardware_resident_landmark.py": "d7325d8d618ca6a21d346b61ee488d65ae290ca28c6e8ddd7512bf9353e132dc",
+    "tools/landmark_reference.py": "13d929c35e0a30754a95062816a4dd877acce3b603f2beaed63d61406e33ce01",
+    "src/framenpu/sdk/entry.S": "fce39ec1dfb601ab37be23addc3570af9b662c09dfb2a59b3cb41ef62a614dd8",
+    "tools/build_resident_landmark.py": "1f1f8bb9d9508545f6a6c549d1e023713f5ac3fcd9cf93530611478dae041193",
+    "tests/resident_graph_entry.S": "bb0b48aaf26908b7feccb7eacac98a93bfa1e483cb3cc84a25c060c60f5f1c14",
+    "tests/resident_graph.h": "cb325a31ae0aeda097db8629c828b556b478ee5c2e691125221eded5b6e3234b",
+    "tests/resident_graph_gather.h": "859f0c8e0029c062ea90587cea83440af9350c707951220523411ee64206b172",
+    "tests/resident_dw_masks.h": "7c948e688c0688315702e14728cf721348e10fff81f7e15224fc3246f37b2bfd",
+    "tests/resident_dw_tile.h": "5a53cbaea9b3e0cd0a858a95e62eec5e48b8397d2be4436f8704543cb6d4e317",
+    "tests/resident_fp16.h": "508852dc7e3d235d52de34152cda1e4a6f097d556a6191c5fa457adcab9a7ec3",
+    "tests/landmark_common.h": "e2e922baaf80e217350ee3926e445449430ccbdb7cf3f55ed8409d73e89909bb",
+    "tests/resident_graph_link.c": "77bee6bbcf658a0cf3ff9fb9a04d575197a18d447e008959d822737a52832825",
+    "tests/resident_link.ld": "711cfd4ad70080e2f53e6f4f20ec5378e03d65d311f4d06fc8dd09cd42892cdc",
+    "tests/resident_graph_admin.c": "b13e716d8ac79f0073fd168d527db4b66230f8773f4cde8e29e6a12357b50c3a",
+    "tests/resident_graph_hmx.c": "1575795d70b0035b707e97d555fa72f4caf40573f4dde0a2273e609cad8cb468",
+    "tests/resident_graph_dw.c": "8c3147c13008bef45cbc1f22f451d9af4f689d7cc30b0c8444a661efdad6cabe",
+    "tests/resident_graph_add.c": "e5080860760f725aa55447d33b2e3b53d18b9c08c79a162832300518eb28376e",
+    "tests/resident_graph_pool.c": "3f219c751bd655b35191c9f4708598a7a203ca89a49c3df6f702bac8661b549b",
+    "tests/resident_graph_sigmoid.c": "354d453f6bb06460494c6d283e27fd46db926751ba853e5cd69cd97f5bbf7a10",
+    "tests/resident_graph_compact.c": "0441b9ad67e7735edeb8e83ec5e3a582a8b44218deffb19b9d337e3b376575cb",
+    "tests/resident_graph_post.c": "f497a85fce58692f6a45dd3f19f724171ed7d686376a0dc43222805ccde27012",
+    "tests/resident_graph_pack.c": "b2221bae66315aed886b1243f03974b301f5128788e22b21e3c14956badc59a7",
+    "tests/resident_graph_stem.c": "759da76b824291f08074aeebd674aaa4f683a9ce2d49a0bd08cf71a9ee658e5b",
+    "tests/resident_graph_avg.c": "912f7640fe48c5865eb239140e6876e417a053ece94bff18f5b9b2cec8caca0c"
+  },
+  "conditions": "cached code, session-held HMX power, 20 ms request budget unless stated; one boot, DSP service PID and restart count identical before and after every run",
+  "main": {
+    "calibration": {
+      "all_checks_passed": true,
+      "qualification_complete": true,
+      "audits": {
+        "restored_jobs": 13314,
+        "restored_hmx_jobs": 13312
+      },
+      "arena_restored": true,
+      "service_unchanged": true,
+      "power_restored_after_close": true,
+      "frames": [
+        {
+          "qualified_readback": true,
+          "complete": true,
+          "body_ms": 2785.964,
+          "requests": 76,
+          "batch_requests": 74,
+          "work_units": 145458,
+          "native_wrapper_ms": 502.347,
+          "max_wrapper_ms": 20.1169,
+          "max_publication_ms": 21.9991
+        },
+        {
+          "qualified_readback": true,
+          "complete": true,
+          "body_ms": 2840.667,
+          "requests": 76,
+          "batch_requests": 74,
+          "work_units": 145458,
+          "native_wrapper_ms": 501.797,
+          "max_wrapper_ms": 20.1151,
+          "max_publication_ms": 21.5584
+        },
+        {
+          "qualified_readback": false,
+          "complete": true,
+          "body_ms": 671.747,
+          "requests": 27,
+          "batch_requests": 25,
+          "work_units": 145458,
+          "native_wrapper_ms": 497.44,
+          "max_wrapper_ms": 20.1329,
+          "max_publication_ms": 20.9015
+        },
+        {
+          "qualified_readback": false,
+          "complete": true,
+          "body_ms": 675.114,
+          "requests": 27,
+          "batch_requests": 25,
+          "work_units": 145458,
+          "native_wrapper_ms": 497.494,
+          "max_wrapper_ms": 20.1248,
+          "max_publication_ms": 21.346
+        }
+      ],
+      "convolution_wrapper_ms_qualified_frame": 182.11,
+      "crops": [
+        {
+          "name": "calibration_controller",
+          "outputs": {
+            "out0": {
+              "values": 63,
+              "sha256": "1dd95907b1234a17264ca39191174714bc840cd0ef9d2513b1c78e97e1af73d2"
+            },
+            "out1": {
+              "values": 1,
+              "sha256": "16c144e50bb96195325c5b72c6da277f61c91eb7cca4a71d0eca6b59ba4e7655"
+            },
+            "out2": {
+              "values": 1,
+              "sha256": "c6d1607ba8a8eca2cde964ff4e2cc89d49662d7b14467fa988c762c1eb8b2ce7"
+            },
+            "out3": {
+              "values": 63,
+              "sha256": "70339eb65c6e5a8bfc649f58d16349dd5018b491fd13db6d673267cad95fe1cd"
+            }
+          },
+          "layer_checks": 77,
+          "values": 5087840,
+          "max_local_ratio": 0.8085458917972395
+        },
+        {
+          "name": "calibration_open",
+          "outputs": {
+            "out0": {
+              "values": 63,
+              "sha256": "e06d351b08514f48edccd60f1a99539e4cbfd14bc864d2f430de9a214f983f8d"
+            },
+            "out1": {
+              "values": 1,
+              "sha256": "e26e09ce4c4c8ebd5d732dab96a9222edbdc4b4c3eb2019acbdf3d0560e04643"
+            },
+            "out2": {
+              "values": 1,
+              "sha256": "64a2d78a7b677f483da064181ebd38b96735613fa007213b45558f1c14094406"
+            },
+            "out3": {
+              "values": 63,
+              "sha256": "85feb31654215e990b919360e60bdf1eaa1fece40a74726ca00f4daa870ae790"
+            }
+          },
+          "layer_checks": 77,
+          "values": 5087840,
+          "max_local_ratio": 0.5490365540252173
+        }
+      ],
+      "interrupted_pass_frame": {
+        "short_requests": 12590,
+        "heads_bit_identical": true
+      },
+      "controls": [
+        {
+          "name": "stale_sequence",
+          "unchanged": true
+        },
+        {
+          "name": "nonce",
+          "unchanged": true
+        },
+        {
+          "name": "identity",
+          "unchanged": true
+        },
+        {
+          "name": "reserved",
+          "unchanged": true
+        },
+        {
+          "name": "wrong_module",
+          "unchanged": true
+        },
+        {
+          "name": "wrong_version",
+          "unchanged": true
+        },
+        {
+          "name": "batch_outside_frame",
+          "unchanged": true
+        },
+        {
+          "name": "batch_zero_budget",
+          "unchanged": true
+        },
+        {
+          "name": "batch_excess_budget",
+          "unchanged": true
+        },
+        {
+          "name": "batch_stop_layer",
+          "unchanged": true
+        },
+        {
+          "name": "batch_stop_phase",
+          "unchanged": true
+        },
+        {
+          "name": "batch_zero_units",
+          "unchanged": true
+        },
+        {
+          "name": "batch_reserved",
+          "unchanged": true
+        },
+        {
+          "name": "exclusive_arena_lease",
+          "refused": true
+        }
+      ],
+      "heads_bit_identical_to_tiled_baseline": [
+        true,
+        true
+      ],
+      "layer_ratios_identical_to_tiled_baseline": [
+        true,
+        true
+      ]
+    },
+    "heldout": {
+      "all_checks_passed": true,
+      "qualification_complete": true,
+      "audits": {
+        "restored_jobs": 13301,
+        "restored_hmx_jobs": 13299
+      },
+      "arena_restored": true,
+      "service_unchanged": true,
+      "power_restored_after_close": true,
+      "frames": [
+        {
+          "qualified_readback": true,
+          "complete": true,
+          "body_ms": 2687.21,
+          "requests": 76,
+          "batch_requests": 74,
+          "work_units": 145458,
+          "native_wrapper_ms": 502.156,
+          "max_wrapper_ms": 20.1196,
+          "max_publication_ms": 21.3609
+        },
+        {
+          "qualified_readback": true,
+          "complete": true,
+          "body_ms": 3109.323,
+          "requests": 76,
+          "batch_requests": 74,
+          "work_units": 145458,
+          "native_wrapper_ms": 502.241,
+          "max_wrapper_ms": 20.1161,
+          "max_publication_ms": 21.8193
+        },
+        {
+          "qualified_readback": false,
+          "complete": true,
+          "body_ms": 664.543,
+          "requests": 27,
+          "batch_requests": 25,
+          "work_units": 145458,
+          "native_wrapper_ms": 497.916,
+          "max_wrapper_ms": 20.1298,
+          "max_publication_ms": 21.0885
+        },
+        {
+          "qualified_readback": false,
+          "complete": true,
+          "body_ms": 709.564,
+          "requests": 27,
+          "batch_requests": 25,
+          "work_units": 145458,
+          "native_wrapper_ms": 497.446,
+          "max_wrapper_ms": 20.1256,
+          "max_publication_ms": 21.1458
+        }
+      ],
+      "convolution_wrapper_ms_qualified_frame": 181.995,
+      "crops": [
+        {
+          "name": "heldout_left_controller",
+          "outputs": {
+            "out0": {
+              "values": 63,
+              "sha256": "48f17ab142ea55bb8fd265e5d69c5f6f4d3c4988da95807050f2d57b62bd5d45"
+            },
+            "out1": {
+              "values": 1,
+              "sha256": "0cfdf0a1b0547b671c0c24f544ef516e1887c814e9cf465907acea612c80d2ee"
+            },
+            "out2": {
+              "values": 1,
+              "sha256": "1a247e0d479ab3e6b6076881d207739b8782f549ec64eabce9f8f99f178c382f"
+            },
+            "out3": {
+              "values": 63,
+              "sha256": "b3ae3f35b46c453778e1bde5a621c32a1bef4b9d248ed2a080d355cebfe0bb98"
+            }
+          },
+          "layer_checks": 77,
+          "values": 5087840,
+          "max_local_ratio": 0.6702840187521132
+        },
+        {
+          "name": "heldout_right_controller",
+          "outputs": {
+            "out0": {
+              "values": 63,
+              "sha256": "40d69eba495c15a80a13408a6f6abc78cc379b2998d5291a63bff57a6424ecea"
+            },
+            "out1": {
+              "values": 1,
+              "sha256": "5eb5007f0c45877a9744f5b3fa43d49fe9083cb19ea7028862f9a9177f1fe7cb"
+            },
+            "out2": {
+              "values": 1,
+              "sha256": "35c41834d7a84f49213adb9675e9e27440300a50fc59a9710e3033bd1a0a03fa"
+            },
+            "out3": {
+              "values": 63,
+              "sha256": "fc40c72838a60504689b6712c122f076c32366d6d07e7d797cd13beba8231373"
+            }
+          },
+          "layer_checks": 77,
+          "values": 5087840,
+          "max_local_ratio": 0.7986715391474106
+        }
+      ],
+      "interrupted_pass_frame": {
+        "short_requests": 12590,
+        "heads_bit_identical": true
+      },
+      "heads_bit_identical_to_tiled_baseline": [
+        true,
+        true
+      ],
+      "layer_ratios_identical_to_tiled_baseline": [
+        true,
+        true
+      ]
+    }
+  },
+  "supplemental": {
+    "fault_after_one_stem_packing_unit": {
+      "all_checks_passed": true,
+      "qualification_complete": false,
+      "audits": {
+        "restored_jobs": 448,
+        "restored_hmx_jobs": 446
+      },
+      "arena_restored": true,
+      "service_unchanged": true,
+      "power_restored_after_close": true,
+      "frames": [],
+      "convolution_wrapper_ms_qualified_frame": 0.155,
+      "crops": [],
+      "confirmed_fault": {
+        "at": [
+          "convclip_0",
+          10
+        ],
+        "invalidated": true,
+        "reuse_refused": true,
+        "native_state": 4
+      }
+    },
+    "fault_after_one_stem_hmx_unit": {
+      "all_checks_passed": true,
+      "qualification_complete": false,
+      "audits": {
+        "restored_jobs": 449,
+        "restored_hmx_jobs": 447
+      },
+      "arena_restored": true,
+      "service_unchanged": true,
+      "power_restored_after_close": true,
+      "frames": [],
+      "convolution_wrapper_ms_qualified_frame": 0.347,
+      "crops": [],
+      "confirmed_fault": {
+        "at": [
+          "convclip_0",
+          1
+        ],
+        "invalidated": true,
+        "reuse_refused": true,
+        "native_state": 4
+      }
+    },
+    "fault_after_one_packing_unit": {
+      "all_checks_passed": true,
+      "qualification_complete": false,
+      "audits": {
+        "restored_jobs": 452,
+        "restored_hmx_jobs": 450
+      },
+      "arena_restored": true,
+      "service_unchanged": true,
+      "power_restored_after_close": true,
+      "frames": [],
+      "convolution_wrapper_ms_qualified_frame": 35.64,
+      "crops": [],
+      "confirmed_fault": {
+        "at": [
+          "conv_10",
+          9
+        ],
+        "invalidated": true,
+        "reuse_refused": true,
+        "native_state": 4
+      }
+    },
+    "fault_after_one_unclipped_hmx_unit": {
+      "all_checks_passed": true,
+      "qualification_complete": false,
+      "audits": {
+        "restored_jobs": 459,
+        "restored_hmx_jobs": 457
+      },
+      "arena_restored": true,
+      "service_unchanged": true,
+      "power_restored_after_close": true,
+      "frames": [],
+      "convolution_wrapper_ms_qualified_frame": 73.13,
+      "crops": [],
+      "confirmed_fault": {
+        "at": [
+          "conv_12",
+          1
+        ],
+        "invalidated": true,
+        "reuse_refused": true,
+        "native_state": 4
+      }
+    },
+    "fault_after_one_clipped_hmx_unit": {
+      "all_checks_passed": true,
+      "qualification_complete": false,
+      "audits": {
+        "restored_jobs": 454,
+        "restored_hmx_jobs": 452
+      },
+      "arena_restored": true,
+      "service_unchanged": true,
+      "power_restored_after_close": true,
+      "frames": [],
+      "convolution_wrapper_ms_qualified_frame": 50.439,
+      "crops": [],
+      "confirmed_fault": {
+        "at": [
+          "convclip_1",
+          1
+        ],
+        "invalidated": true,
+        "reuse_refused": true,
+        "native_state": 4
+      }
+    },
+    "fault_after_one_head_hmx_unit": {
+      "all_checks_passed": true,
+      "qualification_complete": false,
+      "audits": {
+        "restored_jobs": 519,
+        "restored_hmx_jobs": 517
+      },
+      "arena_restored": true,
+      "service_unchanged": true,
+      "power_restored_after_close": true,
+      "frames": [],
+      "convolution_wrapper_ms_qualified_frame": 180.638,
+      "crops": [],
+      "confirmed_fault": {
+        "at": [
+          "fcsigmoid_0",
+          1
+        ],
+        "invalidated": true,
+        "reuse_refused": true,
+        "native_state": 4
+      }
+    },
+    "fault_after_one_inplace_depthwise_unit": {
+      "all_checks_passed": true,
+      "qualification_complete": false,
+      "audits": {
+        "restored_jobs": 455,
+        "restored_hmx_jobs": 453
+      },
+      "arena_restored": true,
+      "service_unchanged": true,
+      "power_restored_after_close": true,
+      "frames": [],
+      "convolution_wrapper_ms_qualified_frame": 72.895,
+      "crops": [],
+      "confirmed_fault": {
+        "at": [
+          "convdwclip_1",
+          3
+        ],
+        "invalidated": true,
+        "reuse_refused": true,
+        "native_state": 4
+      }
+    },
+    "fault_after_one_tiled_unit_14_wide": {
+      "all_checks_passed": true,
+      "qualification_complete": false,
+      "audits": {
+        "restored_jobs": 486,
+        "restored_hmx_jobs": 484
+      },
+      "arena_restored": true,
+      "service_unchanged": true,
+      "power_restored_after_close": true,
+      "frames": [],
+      "convolution_wrapper_ms_qualified_frame": 134.626,
+      "crops": [],
+      "confirmed_fault": {
+        "at": [
+          "convdwclip_8",
+          3
+        ],
+        "invalidated": true,
+        "reuse_refused": true,
+        "native_state": 4
+      }
+    },
+    "fault_after_one_tiled_unit_7_wide": {
+      "all_checks_passed": true,
+      "qualification_complete": false,
+      "audits": {
+        "restored_jobs": 502,
+        "restored_hmx_jobs": 500
+      },
+      "arena_restored": true,
+      "service_unchanged": true,
+      "power_restored_after_close": true,
+      "frames": [],
+      "convolution_wrapper_ms_qualified_frame": 159.441,
+      "crops": [],
+      "confirmed_fault": {
+        "at": [
+          "convdwclip_12",
+          3
+        ],
+        "invalidated": true,
+        "reuse_refused": true,
+        "native_state": 4
+      }
+    },
+    "budget_5_ms": {
+      "all_checks_passed": true,
+      "qualification_complete": false,
+      "audits": {
+        "restored_jobs": 885,
+        "restored_hmx_jobs": 883
+      },
+      "arena_restored": true,
+      "service_unchanged": true,
+      "power_restored_after_close": true,
+      "frames": [
+        {
+          "qualified_readback": true,
+          "complete": true,
+          "body_ms": 3030.941,
+          "requests": 137,
+          "batch_requests": 135,
+          "work_units": 145458,
+          "native_wrapper_ms": 509.323,
+          "max_wrapper_ms": 5.1235,
+          "max_publication_ms": 6.9033
+        },
+        {
+          "qualified_readback": false,
+          "complete": true,
+          "body_ms": 908.49,
+          "requests": 101,
+          "batch_requests": 99,
+          "work_units": 145458,
+          "native_wrapper_ms": 505.157,
+          "max_wrapper_ms": 5.2068,
+          "max_publication_ms": 6.2224
+        },
+        {
+          "qualified_readback": false,
+          "complete": true,
+          "body_ms": 842.233,
+          "requests": 101,
+          "batch_requests": 99,
+          "work_units": 145458,
+          "native_wrapper_ms": 505.03,
+          "max_wrapper_ms": 5.2355,
+          "max_publication_ms": 6.0864
+        },
+        {
+          "qualified_readback": false,
+          "complete": true,
+          "body_ms": 803.045,
+          "requests": 101,
+          "batch_requests": 99,
+          "work_units": 145458,
+          "native_wrapper_ms": 506.159,
+          "max_wrapper_ms": 5.2307,
+          "max_publication_ms": 5.9142
+        }
+      ],
+      "convolution_wrapper_ms_qualified_frame": 183.792,
+      "crops": [
+        {
+          "name": "calibration_controller",
+          "outputs": {
+            "out0": {
+              "values": 63,
+              "sha256": "1dd95907b1234a17264ca39191174714bc840cd0ef9d2513b1c78e97e1af73d2"
+            },
+            "out1": {
+              "values": 1,
+              "sha256": "16c144e50bb96195325c5b72c6da277f61c91eb7cca4a71d0eca6b59ba4e7655"
+            },
+            "out2": {
+              "values": 1,
+              "sha256": "c6d1607ba8a8eca2cde964ff4e2cc89d49662d7b14467fa988c762c1eb8b2ce7"
+            },
+            "out3": {
+              "values": 63,
+              "sha256": "70339eb65c6e5a8bfc649f58d16349dd5018b491fd13db6d673267cad95fe1cd"
+            }
+          },
+          "layer_checks": 77,
+          "values": 5087840,
+          "max_local_ratio": 0.8085458917972395
+        }
+      ],
+      "budget_ms": 5
+    },
+    "tiled_build_control": {
+      "all_checks_passed": true,
+      "qualification_complete": false,
+      "audits": {
+        "restored_jobs": 661,
+        "restored_hmx_jobs": 659
+      },
+      "arena_restored": true,
+      "service_unchanged": true,
+      "power_restored_after_close": true,
+      "frames": [
+        {
+          "qualified_readback": true,
+          "complete": true,
+          "body_ms": 3541.361,
+          "requests": 87,
+          "batch_requests": 85,
+          "work_units": 240786,
+          "native_wrapper_ms": 816.976,
+          "max_wrapper_ms": 20.1176,
+          "max_publication_ms": 21.362
+        },
+        {
+          "qualified_readback": false,
+          "complete": true,
+          "body_ms": 1139.898,
+          "requests": 43,
+          "batch_requests": 41,
+          "work_units": 240786,
+          "native_wrapper_ms": 814.383,
+          "max_wrapper_ms": 20.1758,
+          "max_publication_ms": 21.2104
+        },
+        {
+          "qualified_readback": false,
+          "complete": true,
+          "body_ms": 1210.398,
+          "requests": 43,
+          "batch_requests": 41,
+          "work_units": 240786,
+          "native_wrapper_ms": 814.476,
+          "max_wrapper_ms": 20.1256,
+          "max_publication_ms": 21.1703
+        },
+        {
+          "qualified_readback": false,
+          "complete": true,
+          "body_ms": 1121.983,
+          "requests": 43,
+          "batch_requests": 41,
+          "work_units": 240786,
+          "native_wrapper_ms": 814.64,
+          "max_wrapper_ms": 20.1517,
+          "max_publication_ms": 21.2323
+        }
+      ],
+      "convolution_wrapper_ms_qualified_frame": 496.505,
+      "crops": [
+        {
+          "name": "calibration_controller",
+          "outputs": {
+            "out0": {
+              "values": 63,
+              "sha256": "1dd95907b1234a17264ca39191174714bc840cd0ef9d2513b1c78e97e1af73d2"
+            },
+            "out1": {
+              "values": 1,
+              "sha256": "16c144e50bb96195325c5b72c6da277f61c91eb7cca4a71d0eca6b59ba4e7655"
+            },
+            "out2": {
+              "values": 1,
+              "sha256": "c6d1607ba8a8eca2cde964ff4e2cc89d49662d7b14467fa988c762c1eb8b2ce7"
+            },
+            "out3": {
+              "values": 63,
+              "sha256": "70339eb65c6e5a8bfc649f58d16349dd5018b491fd13db6d673267cad95fe1cd"
+            }
+          },
+          "layer_checks": 77,
+          "values": 5087840,
+          "max_local_ratio": 0.8085458917972395
+        }
+      ]
+    },
+    "fused_timing": {
+      "all_checks_passed": true,
+      "qualification_complete": false,
+      "audits": {
+        "restored_jobs": 602,
+        "restored_hmx_jobs": 600
+      },
+      "arena_restored": true,
+      "service_unchanged": true,
+      "power_restored_after_close": true,
+      "frames": [
+        {
+          "qualified_readback": true,
+          "complete": true,
+          "body_ms": 3093.463,
+          "requests": 76,
+          "batch_requests": 74,
+          "work_units": 145458,
+          "native_wrapper_ms": 502.253,
+          "max_wrapper_ms": 20.1204,
+          "max_publication_ms": 21.483
+        },
+        {
+          "qualified_readback": false,
+          "complete": true,
+          "body_ms": 722.19,
+          "requests": 27,
+          "batch_requests": 25,
+          "work_units": 145458,
+          "native_wrapper_ms": 497.666,
+          "max_wrapper_ms": 20.1229,
+          "max_publication_ms": 20.8233
+        },
+        {
+          "qualified_readback": false,
+          "complete": true,
+          "body_ms": 744.464,
+          "requests": 27,
+          "batch_requests": 25,
+          "work_units": 145458,
+          "native_wrapper_ms": 497.791,
+          "max_wrapper_ms": 20.1372,
+          "max_publication_ms": 21.2181
+        },
+        {
+          "qualified_readback": false,
+          "complete": true,
+          "body_ms": 764.888,
+          "requests": 27,
+          "batch_requests": 25,
+          "work_units": 145458,
+          "native_wrapper_ms": 497.314,
+          "max_wrapper_ms": 20.1243,
+          "max_publication_ms": 21.2454
+        }
+      ],
+      "convolution_wrapper_ms_qualified_frame": 182.203,
+      "crops": [
+        {
+          "name": "calibration_controller",
+          "outputs": {
+            "out0": {
+              "values": 63,
+              "sha256": "1dd95907b1234a17264ca39191174714bc840cd0ef9d2513b1c78e97e1af73d2"
+            },
+            "out1": {
+              "values": 1,
+              "sha256": "16c144e50bb96195325c5b72c6da277f61c91eb7cca4a71d0eca6b59ba4e7655"
+            },
+            "out2": {
+              "values": 1,
+              "sha256": "c6d1607ba8a8eca2cde964ff4e2cc89d49662d7b14467fa988c762c1eb8b2ce7"
+            },
+            "out3": {
+              "values": 63,
+              "sha256": "70339eb65c6e5a8bfc649f58d16349dd5018b491fd13db6d673267cad95fe1cd"
+            }
+          },
+          "layer_checks": 77,
+          "values": 5087840,
+          "max_local_ratio": 0.8085458917972395
+        }
+      ]
+    },
+    "ordinary_sdk_regression": {
+      "audits": {
+        "restored_jobs": 72,
+        "restored_hmx_jobs": 38
+      },
+      "all_checks_passed": true
+    }
+  },
+  "main_audits": 26615,
+  "main_layer_checks": 308,
+  "main_values": 20351360,
+  "max_local_ratio": 0.8085458917972395
+}

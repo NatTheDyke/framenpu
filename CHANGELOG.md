@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Added an opt-in fused 1x1 convolution path
+  (`--dw-reuse 6 --dw-row-tile --conv-fast`): the HMX operator adds bias and
+  clips while storing each row, removing the separate bias unit, and packing
+  and HMX row handling keep no vector on the job stack. Convolution time falls
+  from 497 to 182 ms, native time from 0.82 to 0.50 seconds and a frame from
+  1.12–1.21 to 0.67–0.77 seconds (43 to 27 requests). Four crops keep
+  bit-identical heads across 26,615 main audits; nine guarded faults, controls
+  and the SDK regression pass. Default, reuse and tiled builds are
+  byte-identical. Added six offline regressions.
 - Added opt-in row tiling for the 7- and 14-wide depthwise layers
   (`--dw-reuse 6 --dw-row-tile`): four or two output rows per pass, still one
   row per work unit, with a 16 KiB operator reservation and its own loader for

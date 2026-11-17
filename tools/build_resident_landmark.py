@@ -40,10 +40,12 @@ def _pc_relative(tools, obj, folder, label):
     (folder / f"{label}-relocations.txt").write_text(relocations)
 
 
-def build_linked(output, tools=None, profile_dw=0, dw_reuse=0, dw_row_tile=False):
+def build_linked(output, tools=None, profile_dw=0, dw_reuse=0, dw_row_tile=False, conv_fast=False):
     """Build the slot loader and the one linked operator image; opens no device."""
     if dw_row_tile and (dw_reuse != 6 or profile_dw):
         raise ValueError("row tiling requires --dw-reuse 6 and ordinary graph timing")
+    if conv_fast and not dw_row_tile:
+        raise ValueError("the fast 1x1 path requires --dw-row-tile (wide reservation)")
     if dw_reuse & 5 == 5:
         raise ValueError("select scalar or broadcast coefficient caching")
     if dw_reuse and profile_dw:
@@ -90,6 +92,7 @@ def build_linked(output, tools=None, profile_dw=0, dw_reuse=0, dw_row_tile=False
             *([f"-DRG_DW_REUSE={dw_reuse}"] if dw_reuse else []),
             *(["-DRG_DW_TILE"] if dw_row_tile else []),
             *wide,
+            *(["-DRG_CONV_FAST"] if conv_fast else []),
         ),
         compile_(folder, 1, SDK / "hmx.S"),
     ]
@@ -105,6 +108,7 @@ def build_linked(output, tools=None, profile_dw=0, dw_reuse=0, dw_row_tile=False
         "profile_dw": profile_dw,
         "dw_reuse": dw_reuse,
         "dw_row_tile": dw_row_tile,
+        "conv_fast": conv_fast,
         "version": 1,
         "code_offset": CODE,
         "code_reservation_bytes": code_bytes,
@@ -130,6 +134,7 @@ def main():
     parser.add_argument("--profile-dw", type=int, choices=range(1, 13))
     parser.add_argument("--dw-reuse", type=int, choices=(0, 1, 2, 3, 4, 6), default=0)
     parser.add_argument("--dw-row-tile", action="store_true")
+    parser.add_argument("--conv-fast", action="store_true")
     args = parser.parse_args()
     if args.dw_row_tile and not args.linked:
         parser.error("--dw-row-tile requires --linked")
@@ -147,6 +152,7 @@ def main():
                     profile_dw=args.profile_dw or 0,
                     dw_reuse=args.dw_reuse,
                     dw_row_tile=args.dw_row_tile,
+                    conv_fast=args.conv_fast,
                 ),
                 indent=2,
             )

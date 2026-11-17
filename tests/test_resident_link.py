@@ -115,6 +115,70 @@ class BatchReplayTests(unittest.TestCase):
             rg._batch_transition(state, words, block + 1, records)
 
 
+class FusedReplayTests(unittest.TestCase):
+    def frame(self, fused):
+        """Unit count and the state at every layer boundary of one frame."""
+        records, state, units, boundaries = program(), running(), 0, []
+        while state[0] == 3:
+            layer = state[19]
+            kind = rg._kind(state, records[layer])
+            self.assertFalse(fused and kind == 8, "a fused frame has no post unit")
+            rg._unit(state, kind, records[layer], 0, fused)
+            units += 1
+            if state[19] != layer:
+                boundaries.append(state[10:29])
+        return units, boundaries, state
+
+    def test_fused_frame_skips_exactly_the_post_units(self):
+        plain, plain_boundaries, plain_end = self.frame(False)
+        fused, fused_boundaries, fused_end = self.frame(True)
+        self.assertEqual(fused_boundaries, plain_boundaries)
+        self.assertEqual((fused_end[0], fused_end[19]), (2, 63))
+        post = 0
+        for r in program():
+            if r[0] in (1, 2):
+                groups = r[8] if r[0] == 2 else -(-r[8] * r[9] // 32)
+                groups *= -(-r[9] // 32) if r[0] == 2 else 1
+                post += groups * r[7]
+        self.assertEqual(plain - fused, post)
+
+    def test_fused_group_ends_in_the_next_pack_phase_or_the_logit_phase(self):
+        records = program()
+        state = running()
+        state[19], state[24] = 1, 1  # 1x1 layer, HMX phase of its first group
+        words = words_for(state, 100, (1, 0))
+        after = rg._batch_transition(state, words, 2, records, True)
+        self.assertEqual((after[19], after[24], after[22], after[18]), (1, 0, 32, 0))
+        with self.assertRaises(ValueError):
+            rg._batch_transition(state, words, 3, records, True)
+        head = running()
+        head[19], head[24], head[20] = 7, 1, 0
+        self.assertEqual(rg._phase_end(head, records, True), (7, 2))
+
+    def test_fused_frame_runs_and_restores_through_the_host(self):
+        t = LinkTransport(program())
+        t.fused = True
+        original = bytes(t.memory[rg.ARENA_START : rg.ARENA_END])
+        with linked_owner(t, fused=True) as owner:
+            self.assertTrue(owner.fused)
+            begin_frame(owner)
+            while owner.native[0] == 3:
+                owner._command(5, rg.BATCH, units=rg.UNIT_LIMIT)
+            self.assertEqual(owner.native[0], 2)
+        self.assertEqual(bytes(t.memory[rg.ARENA_START : rg.ARENA_END]), original)
+        self.assertFalse(t.poisoned)
+
+    def test_wrong_fusion_flag_is_refused_as_a_replay_mismatch(self):
+        t = LinkTransport(program())
+        t.fused = True
+        owner = linked_owner(t, fused=False).__enter__()
+        begin_frame(owner)
+        with self.assertRaises(RecoveryRequired):
+            owner._drive((2, 0))
+        owner.close()
+        self.assertTrue(t.poisoned)
+
+
 class LinkTransport(AdminTransport):
     """Native model: loader commands in the slot, batches in the sealed image."""
 
@@ -123,6 +187,7 @@ class LinkTransport(AdminTransport):
         self.records = records
         self.chooser = random.Random(3)
         self.wrong_pc = self.skip_retire = False
+        self.fused = False
         self.batches = []
 
     def wait_complete(self, seq, timeout):
@@ -157,12 +222,12 @@ class LinkTransport(AdminTransport):
             while allowed < words[19]:
                 layer = self.records[probe[19]]
                 allowed += 1
-                end = rg._unit(probe, rg._kind(probe, layer), layer, words[30])
+                end = rg._unit(probe, rg._kind(probe, layer), layer, words[30], self.fused)
                 if probe[0] != 3 or end and probe[19:25:5] == words[24:26]:
                     break
             count = self.chooser.randint(1, allowed)
             self.batches.append(count)
-            state = rg._batch_transition(state, words, count, self.records)
+            state = rg._batch_transition(state, words, count, self.records, self.fused)
             cached = bool(self.get(PROFILE.header + 40)) != self.wrong_pc
             pc = (0x87000000 if cached else 0xF0000000) + rg.CODE + 16
             error = 2 if words[30] else 0
@@ -191,6 +256,7 @@ def linked_owner(
     budget_ms=5.0,
     loader="resident_graph_loader_link_v1",
     hold_power=False,
+    fused=False,
 ):
     def power():
         made = FakePower(transport.events)
@@ -222,7 +288,7 @@ def linked_owner(
     ):
         return rg.ResidentLandmark(
             SimpleNamespace(),
-            rg.LinkedJobs(Job(bytes(2048), loader, True, True), image),
+            rg.LinkedJobs(Job(bytes(2048), loader, True, True), image, fused),
             cached_code=cached,
             budget_ms=budget_ms,
             hold_power=hold_power,
@@ -420,7 +486,8 @@ class LinkedBuildTests(unittest.TestCase):
                 subprocess.run(
                     [sys.executable, *arguments], cwd=ROOT, check=True, capture_output=True
                 )
-            loader, image = rg.load_linked(folder)
+            loader, image, fused = rg.load_linked(folder)
+            self.assertFalse(fused)
             self.assertLessEqual(len(loader.code), 4096)
             self.assertLessEqual(len(image), rg.CODE_BYTES)
             (Path(folder) / "resident_graph_linked.bin").write_bytes(image[:-4])

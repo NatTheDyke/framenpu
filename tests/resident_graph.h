@@ -267,6 +267,17 @@ static void rg_bad(HVX_Vector v) {
     RG_STATE[29]|=bits;
 }
 #endif
+#ifdef RG_CONV_FAST
+/* rg_bad for a vector that already is a flag mask (each word zero or all
+ * ones): the classification would return it unchanged, and skipping it keeps
+ * its zero constant from living across a caller's earlier calls. */
+static RG_INLINE void rg_flags(HVX_Vector v) {
+    volatile HVX_Vector *scratch=(volatile HVX_Vector *)0x31001c00u;
+    for(fnpu_u32 bytes=64;bytes>=4;bytes>>=1) v=Q6_V_vor_VV(v,Q6_V_vror_VR(v,bytes));
+    *scratch=v;
+    RG_STATE[29]|=*(const volatile fnpu_u32 *)scratch;
+}
+#endif
 #ifdef RG_LINKED
 static __attribute__((noinline)) fnpu_u32 rg_trap(const fnpu_context *c) {
     rg_record *r=rg_layer();

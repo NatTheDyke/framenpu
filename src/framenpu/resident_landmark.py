@@ -309,8 +309,28 @@ def _next_row(state, record):
             state[21] += 1
 
 
-def _unit(s, kind, record, fault):
-    """Apply one completed native work unit in place; True ends its phase."""
+def _post_end(s, record):
+    """State after the last bias/clip step of one group of positions."""
+    s[18] = 0
+    if s[20] == record[24]:
+        if record[18] == 2:
+            s[24] = 2
+            s[20] = s[22] = s[23] = 0
+        else:
+            _done(s, record)
+    else:
+        s[22] += 32
+        if record[0] == 2 and s[22] >= record[9]:
+            s[22] = 0
+            s[23] += 1
+        s[24] = 0
+
+
+def _unit(s, kind, record, fault, fused=False):
+    """Apply one completed native work unit in place; True ends its phase.
+
+    A fused image adds bias and clips while storing HMX rows, so its last HMX
+    unit of a group does what the last separate post unit otherwise does."""
     terminal = False
     s[30] += 1
     if kind in (9, 10):
@@ -324,24 +344,15 @@ def _unit(s, kind, record, fault):
             s[21] += 32
             if s[21] >= record[7]:
                 s[21] = s[18] = 0
-                s[24] = 3
+                if fused:
+                    _post_end(s, record)
+                else:
+                    s[24] = 3
                 terminal = True
     elif kind == 8:
         s[18] += 1
         if not fault and s[18] == record[7]:
-            s[18] = 0
-            if s[20] == record[24]:
-                if record[18] == 2:
-                    s[24] = 2
-                    s[20] = s[22] = s[23] = 0
-                else:
-                    _done(s, record)
-            else:
-                s[22] += 32
-                if record[0] == 2 and s[22] >= record[9]:
-                    s[22] = 0
-                    s[23] += 1
-                s[24] = 0
+            _post_end(s, record)
             terminal = True
     elif kind in (3, 5):
         s[20] += 1
@@ -375,7 +386,7 @@ def _unit(s, kind, record, fault):
     return terminal
 
 
-def _batch_transition(before, words, count, records):
+def _batch_transition(before, words, count, records, fused=False):
     """Replay a linked request that may cross phases and layers.
 
     Every unit's module follows from resident state alone, so the reported
@@ -394,20 +405,20 @@ def _batch_transition(before, words, count, records):
         if s[0] != 3 or s[19] >= len(records):
             raise ValueError("resident batch ran beyond the frame")
         record = records[s[19]]
-        terminal = _unit(s, _kind(s, record), record, words[30])
+        terminal = _unit(s, _kind(s, record), record, words[30], fused)
         stopped = s[0] != 3 or (terminal and s[19] == words[24] and s[24] == words[25])
         if stopped and i + 1 != count:
             raise ValueError("resident batch ran past its stop point")
     return s
 
 
-def _phase_end(state, records):
+def _phase_end(state, records, fused=False):
     """(layer, phase) reached when the current phase finishes; the first such
     state after any unit of this phase, so it is a valid one-phase stop point."""
     s = list(state)
     while True:
         record = records[s[19]]
-        if _unit(s, _kind(s, record), record, 0):
+        if _unit(s, _kind(s, record), record, 0, fused):
             return s[19], s[24]
 
 
@@ -429,7 +440,7 @@ def load_linked(folder):
         or record["linked"] != {"bytes": len(image), "sha256": _sha(image)}
     ):
         raise InvalidModel("linked resident build record differs")
-    return LinkedJobs(loader, image)
+    return LinkedJobs(loader, image, record.get("conv_fast", False) is True)
 
 
 def _sha(data):
@@ -437,15 +448,17 @@ def _sha(data):
 
 
 class LinkedJobs(tuple):
-    """(slot loader Job, operator image bytes) for linked resident execution."""
+    """(slot loader Job, operator image bytes, fused 1x1 path) for linked execution."""
 
     __slots__ = ()
 
-    def __new__(cls, loader, image):
-        return super().__new__(cls, (loader, image))
+    def __new__(cls, loader, image, fused=False):
+        return super().__new__(cls, (loader, image, bool(fused)))
 
     loader = property(lambda self: self[0])
     image = property(lambda self: self[1])
+    # True when the image adds bias and clips inside its HMX units.
+    fused = property(lambda self: self[2])
 
 
 def _transition(before, words, count, record=None):
@@ -523,9 +536,10 @@ class ResidentLandmark:
         self.linked = isinstance(jobs, LinkedJobs)
         self.image = b""
         self.code_bytes = 0
+        self.fused = False
         self.budget_ticks = 96000
         if self.linked:
-            loader, image = jobs
+            loader, image, self.fused = jobs
             if (
                 not isinstance(loader, Job)
                 or not loader.requires_hmx
@@ -780,7 +794,7 @@ class ResidentLandmark:
                 expected = (
                     before
                     if reject
-                    else _batch_transition(before, words, actual[30], self.records)
+                    else _batch_transition(before, words, actual[30], self.records, self.fused)
                     if op == 5 and kind == BATCH
                     else _transition(before, words, actual[30] if op == 5 else 0, record)
                 )
@@ -1042,7 +1056,7 @@ class ResidentLandmark:
         while True:
             record = self.records[s[19]]
             remaining += 1
-            terminal = _unit(s, _kind(s, record), record, 0)
+            terminal = _unit(s, _kind(s, record), record, 0, self.fused)
             if s[0] != 3 or terminal and (s[19], s[24]) == tuple(stop):
                 break
         while remaining:
@@ -1050,7 +1064,7 @@ class ResidentLandmark:
             if fault_kind is not None:
                 # Step one phase at a time so the trap lands in the named module.
                 fault = _kind(self.native, self.records[self.native[19]]) == fault_kind
-                target = _phase_end(self.native, self.records)
+                target = _phase_end(self.native, self.records, self.fused)
             self._command(5, BATCH, units=remaining, stop=target, fault=fault)
             if fault:
                 raise JobFailed("confirmed resident graph trap; close session")

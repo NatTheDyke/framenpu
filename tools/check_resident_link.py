@@ -72,7 +72,7 @@ def main():
     parser.add_argument("--jobs", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     args = parser.parse_args()
-    loader, image = load_linked(args.jobs)
+    loader, image, _ = load_linked(args.jobs)
     proof = {}
     for name, code, check in (
         ("loader", loader.code, verify_loader),

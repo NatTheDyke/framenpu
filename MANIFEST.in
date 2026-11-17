@@ -39,3 +39,4 @@ include evidence/depthwise-profile.json
 include evidence/depthwise-arithmetic-profile.json
 include evidence/depthwise-reuse-validation.json
 include evidence/depthwise-row-tile-validation.json
+include evidence/conv-fast-validation.json

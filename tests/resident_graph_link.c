@@ -39,13 +39,16 @@ fnpu_u32 rg_batch(const fnpu_context *c) __attribute__((section(".text.rg_entry"
 #undef frame_job
 #define frame_job rg_op_pack
 #define gather rg_pack_gather
+#define pack_unit rg_pack_unit
 #include "resident_graph_pack.c"
 #undef frame_job
 #undef gather
 #undef RG_STEM
 #define RG_STEM 1
+#undef pack_unit
 #define frame_job rg_op_stem
 #define gather rg_stem_gather
+#define pack_unit rg_stem_unit
 #include "resident_graph_pack.c"
 #undef frame_job
 #undef gather
