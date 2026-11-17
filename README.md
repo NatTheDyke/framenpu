@@ -262,6 +262,12 @@ depthwise layers brings depthwise time from 421 to 291 ms and a frame to
 An opt-in [fused 1x1 convolution path](docs/CONV_FAST.md) then adds bias and
 clips inside the HMX unit and brings a frame to 0.67–0.77 seconds in 27
 requests, with bit-identical heads.
+The later [HMX model feasibility study](docs/HMX_MODEL_FEASIBILITY.md) uses
+public weights and distinct synthetic operands to evaluate a smaller fused
+architecture. Packed streaming dominates the measured pipeline; a half-width
+candidate forecasts 47 ms of convolution work before gathering and other
+operators. Reuse, a complete new backend and training/accuracy validation
+remain necessary for the 17–25 ms native target.
 The [accumulator isolation tests](docs/HMX_ACCUMULATOR.md) show shared HMX state
 across workers with the recovered primitives. Keep each complete clear/load/store
 transaction under one HMX owner; use HVX workers for other work.

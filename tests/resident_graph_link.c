@@ -31,9 +31,13 @@ fnpu_u32 rg_batch(const fnpu_context *c) __attribute__((section(".text.rg_entry"
 #define frame_job rg_op_compact
 #include "resident_graph_compact.c"
 #undef frame_job
+#ifndef RG_CONV_FAST
+/* A fused image finishes bias and clip inside rg_op_hmx and never enters
+ * phase 3, so it carries no post operator; kind 8 is refused below. */
 #define frame_job rg_op_post
 #include "resident_graph_post.c"
 #undef frame_job
+#endif
 #define frame_job rg_op_avg
 #include "resident_graph_avg.c"
 #undef frame_job
@@ -101,7 +105,9 @@ fnpu_u32 rg_batch(const fnpu_context *c) {
         else if(kind==5) result=rg_op_pool(c);
         else if(kind==6) result=rg_op_sigmoid(c);
         else if(kind==7) result=rg_op_compact(c);
+#ifndef RG_CONV_FAST
         else if(kind==8) result=rg_op_post(c);
+#endif
         else if(kind==9) result=rg_op_pack(c);
         else if(kind==10) result=rg_op_stem(c);
         else if(kind==11) result=rg_op_avg(c);

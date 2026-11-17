@@ -1,0 +1,538 @@
+{
+  "format": "framenpu-conv-fast-deadcode-validation",
+  "version": 1,
+  "date": "2026-11-16",
+  "status": "qualified_with_unchanged_four_crop_policy",
+  "baseline_evidence": "conv-fast-validation.json",
+  "scope": "Omit rg_op_post and its kind-8 dispatch branch under RG_CONV_FAST. Valid fused execution finishes bias/clip in HMX and never enters phase 3. Non-fused builds retain the operator. No arithmetic, scheduling, numeric format, policy, ownership, reservation, budget or timeout changes.",
+  "build": {
+    "code_offset": 33488896,
+    "code_reservation_bytes": 16384,
+    "conv_fast": true,
+    "loader": {
+      "bytes": 3836,
+      "sha256": "88cd86b28f8d67ee875348ab61a4f5e5665c5ddeb173dfa42e89e82db3440939"
+    },
+    "linked": {
+      "bytes": 12888,
+      "sha256": "dfe8ac730371260b2a8ea85b07d7c3e29035ef9885c4505a769fef0a75ec45f2"
+    },
+    "toolchain": {
+      "clang": "clang version 23.1.4",
+      "linker": "LLD 23.1.4 (compatible with GNU linkers)",
+      "objcopy": "llvm-objcopy, compatible with GNU objcopy"
+    },
+    "sources": {
+      "src/framenpu/sdk/hmx.S": "ca725000e846c220cdf709a82ce61d223dd0862d66687fa968e41be18f262fb6",
+      "src/framenpu/sdk/link.ld": "c0b7dd53a7e254de549280ead79f303db3ab657e13e8565e5be3852c29a08e82",
+      "src/framenpu/sdk/include/framenpu.h": "4e65f4b8fb82586428a810714d91540685cc4895810ad5bb753b178e1db62754",
+      "src/framenpu/sdk/include/fnpu_readback.h": "4c5fd740bcc9269a64d7923d51cedd11bda2a1b4ed5430dcd796332e20a8f820",
+      "tests/resident_graph_entry.S": "bb0b48aaf26908b7feccb7eacac98a93bfa1e483cb3cc84a25c060c60f5f1c14",
+      "tests/resident_link.ld": "711cfd4ad70080e2f53e6f4f20ec5378e03d65d311f4d06fc8dd09cd42892cdc",
+      "tests/resident_graph_link.c": "ebbe2ed652eb00afbac529ff3c2ce7da510ee77e36b6cc1d472a6a8dc0578602",
+      "tests/resident_graph.h": "cb325a31ae0aeda097db8629c828b556b478ee5c2e691125221eded5b6e3234b",
+      "tests/resident_graph_gather.h": "859f0c8e0029c062ea90587cea83440af9350c707951220523411ee64206b172",
+      "tests/resident_dw_masks.h": "7c948e688c0688315702e14728cf721348e10fff81f7e15224fc3246f37b2bfd",
+      "tests/resident_dw_tile.h": "5a53cbaea9b3e0cd0a858a95e62eec5e48b8397d2be4436f8704543cb6d4e317",
+      "tests/resident_fp16.h": "508852dc7e3d235d52de34152cda1e4a6f097d556a6191c5fa457adcab9a7ec3",
+      "tests/landmark_common.h": "e2e922baaf80e217350ee3926e445449430ccbdb7cf3f55ed8409d73e89909bb",
+      "tests/resident_graph_admin.c": "b13e716d8ac79f0073fd168d527db4b66230f8773f4cde8e29e6a12357b50c3a",
+      "tests/resident_graph_hmx.c": "1575795d70b0035b707e97d555fa72f4caf40573f4dde0a2273e609cad8cb468",
+      "tests/resident_graph_dw.c": "8c3147c13008bef45cbc1f22f451d9af4f689d7cc30b0c8444a661efdad6cabe",
+      "tests/resident_graph_add.c": "e5080860760f725aa55447d33b2e3b53d18b9c08c79a162832300518eb28376e",
+      "tests/resident_graph_pool.c": "3f219c751bd655b35191c9f4708598a7a203ca89a49c3df6f702bac8661b549b",
+      "tests/resident_graph_sigmoid.c": "354d453f6bb06460494c6d283e27fd46db926751ba853e5cd69cd97f5bbf7a10",
+      "tests/resident_graph_compact.c": "0441b9ad67e7735edeb8e83ec5e3a582a8b44218deffb19b9d337e3b376575cb",
+      "tests/resident_graph_post.c": "f497a85fce58692f6a45dd3f19f724171ed7d686376a0dc43222805ccde27012",
+      "tests/resident_graph_pack.c": "b2221bae66315aed886b1243f03974b301f5128788e22b21e3c14956badc59a7",
+      "tests/resident_graph_stem.c": "759da76b824291f08074aeebd674aaa4f683a9ce2d49a0bd08cf71a9ee658e5b",
+      "tests/resident_graph_avg.c": "912f7640fe48c5865eb239140e6876e417a053ece94bff18f5b9b2cec8caca0c"
+    }
+  },
+  "previous_linked": {
+    "bytes": 13752,
+    "sha256": "058bd8e3ec8d9aed1075fabc34f5a4edb2ec476b6daaf99e5143c9a2eee5895d"
+  },
+  "saved_bytes": 864,
+  "free_reservation_bytes": 3496,
+  "direct_call_jump_graph": {
+    "root": "rg_batch",
+    "function_symbols": 28,
+    "reachable_function_symbols": 28,
+    "unreachable_function_symbols": [],
+    "post_operator_absent": true,
+    "vector_stack_accesses": 0
+  },
+  "unchanged_builds": {
+    "default": {
+      "loader": {
+        "bytes": 3836,
+        "sha256": "9e6a875be5fca96349ac561a4b40ebe7bd8e33b899fcf79d2912a0140fd9161d"
+      },
+      "linked": {
+        "bytes": 11476,
+        "sha256": "b2384461e6343944a5466b6f11f23ab47e760e308b14d0686e3a7acfb81f080b"
+      }
+    },
+    "reuse": {
+      "loader": {
+        "bytes": 3836,
+        "sha256": "9e6a875be5fca96349ac561a4b40ebe7bd8e33b899fcf79d2912a0140fd9161d"
+      },
+      "linked": {
+        "bytes": 11572,
+        "sha256": "c3b916ad01f095619e58e2f57aab30671c43b1d98c67f2397cd6abe25a40707a"
+      }
+    },
+    "tiled": {
+      "loader": {
+        "bytes": 3836,
+        "sha256": "88cd86b28f8d67ee875348ab61a4f5e5665c5ddeb173dfa42e89e82db3440939"
+      },
+      "linked": {
+        "bytes": 13420,
+        "sha256": "43791f45ace2c35abd0be61501121f7ab2f1f7a217de2d638927153de8feceb3"
+      }
+    }
+  },
+  "legacy_cached_modules_byte_identical": 11,
+  "clean_export_fused_byte_identical": true,
+  "source_sha256": {
+    "src/framenpu/resident_landmark.py": "1158a772c80d92d045b0cd9f8e4c8364324aabab7df3c528bf46216dca15443e",
+    "src/framenpu/convolution.py": "3c9bdc996064257021c377e9203f55a40eb762dba61fa9a7ecb8a7c9d5559dd7",
+    "src/framenpu/landmark.py": "d412dd46346ac8c848564587b645960614c9990bf0cf57b960ba89c3ff2e88f0",
+    "tests/hardware_resident_landmark.py": "d7325d8d618ca6a21d346b61ee488d65ae290ca28c6e8ddd7512bf9353e132dc",
+    "tools/landmark_reference.py": "13d929c35e0a30754a95062816a4dd877acce3b603f2beaed63d61406e33ce01",
+    "src/framenpu/sdk/entry.S": "fce39ec1dfb601ab37be23addc3570af9b662c09dfb2a59b3cb41ef62a614dd8",
+    "tools/build_resident_landmark.py": "1f1f8bb9d9508545f6a6c549d1e023713f5ac3fcd9cf93530611478dae041193",
+    "tests/resident_graph_entry.S": "bb0b48aaf26908b7feccb7eacac98a93bfa1e483cb3cc84a25c060c60f5f1c14",
+    "tests/resident_graph.h": "cb325a31ae0aeda097db8629c828b556b478ee5c2e691125221eded5b6e3234b",
+    "tests/resident_graph_gather.h": "859f0c8e0029c062ea90587cea83440af9350c707951220523411ee64206b172",
+    "tests/resident_dw_masks.h": "7c948e688c0688315702e14728cf721348e10fff81f7e15224fc3246f37b2bfd",
+    "tests/resident_dw_tile.h": "5a53cbaea9b3e0cd0a858a95e62eec5e48b8397d2be4436f8704543cb6d4e317",
+    "tests/resident_fp16.h": "508852dc7e3d235d52de34152cda1e4a6f097d556a6191c5fa457adcab9a7ec3",
+    "tests/landmark_common.h": "e2e922baaf80e217350ee3926e445449430ccbdb7cf3f55ed8409d73e89909bb",
+    "tests/resident_graph_link.c": "ebbe2ed652eb00afbac529ff3c2ce7da510ee77e36b6cc1d472a6a8dc0578602",
+    "tests/resident_link.ld": "711cfd4ad70080e2f53e6f4f20ec5378e03d65d311f4d06fc8dd09cd42892cdc",
+    "tests/resident_graph_admin.c": "b13e716d8ac79f0073fd168d527db4b66230f8773f4cde8e29e6a12357b50c3a",
+    "tests/resident_graph_hmx.c": "1575795d70b0035b707e97d555fa72f4caf40573f4dde0a2273e609cad8cb468",
+    "tests/resident_graph_dw.c": "8c3147c13008bef45cbc1f22f451d9af4f689d7cc30b0c8444a661efdad6cabe",
+    "tests/resident_graph_add.c": "e5080860760f725aa55447d33b2e3b53d18b9c08c79a162832300518eb28376e",
+    "tests/resident_graph_pool.c": "3f219c751bd655b35191c9f4708598a7a203ca89a49c3df6f702bac8661b549b",
+    "tests/resident_graph_sigmoid.c": "354d453f6bb06460494c6d283e27fd46db926751ba853e5cd69cd97f5bbf7a10",
+    "tests/resident_graph_compact.c": "0441b9ad67e7735edeb8e83ec5e3a582a8b44218deffb19b9d337e3b376575cb",
+    "tests/resident_graph_post.c": "f497a85fce58692f6a45dd3f19f724171ed7d686376a0dc43222805ccde27012",
+    "tests/resident_graph_pack.c": "b2221bae66315aed886b1243f03974b301f5128788e22b21e3c14956badc59a7",
+    "tests/resident_graph_stem.c": "759da76b824291f08074aeebd674aaa4f683a9ce2d49a0bd08cf71a9ee658e5b",
+    "tests/resident_graph_avg.c": "912f7640fe48c5865eb239140e6876e417a053ece94bff18f5b9b2cec8caca0c"
+  },
+  "model_sha256": "b7c3d1be232725a5a143e2648858ec5aec9596c7b83c6a3c508479b04057e00c",
+  "param_sha256": "54e08f284ff6f121ff00f4a9c65afc38c0dbb22a32f4af44fc4e0fde6c4a1bbd",
+  "manifest_sha256": "576a357658e5a22a5177f40138500111aa5e78934a47736be2e2069a3bd0b060",
+  "tolerances_sha256": "381a033d6f4c10047998dfe42abb8cd6b18a756741c8a21690a3e6d6dc951f7b",
+  "conditions": "Cached code, session-held HMX power, one owner, 20 ms request budget unless stated; existing 40 ms timeout. Same boot and DSP service. Completed source/image-pinned calibration reused, including interruption coverage; new heldout run uses ordinary submissions.",
+  "main": {
+    "calibration": {
+      "report_sha256": "b72b3e83192476f9a35ef6e5c6399128c3a1e39588812b01dcdb6763d95cac2b",
+      "all_checks_passed": true,
+      "qualification_complete": true,
+      "audits": {
+        "restored_jobs": 13314,
+        "restored_hmx_jobs": 13312
+      },
+      "arena_restored": true,
+      "service_unchanged": true,
+      "power_and_firmware_restored": true,
+      "crops": [
+        {
+          "name": "calibration_controller",
+          "layer_checks": 77,
+          "blobs": 90,
+          "values": 5087840,
+          "max_local_ratio": 0.8085458917972395,
+          "complete": true
+        },
+        {
+          "name": "calibration_open",
+          "layer_checks": 77,
+          "blobs": 90,
+          "values": 5087840,
+          "max_local_ratio": 0.5490365540252173,
+          "complete": true
+        }
+      ],
+      "timing_frames": [
+        {
+          "name": "calibration_controller",
+          "execution": {
+            "layers": [],
+            "complete": true,
+            "body_ms": 676.241273,
+            "command_count": 27
+          }
+        },
+        {
+          "name": "calibration_open",
+          "execution": {
+            "layers": [],
+            "complete": true,
+            "body_ms": 683.729009,
+            "command_count": 27
+          }
+        }
+      ],
+      "interrupted_tiles": {
+        "short_requests": 12590
+      },
+      "rejection_controls": 14
+    },
+    "heldout": {
+      "report_sha256": "1e23b95dbf2b122f86902989b97e0dc5a3842f2deda39b60eafdbaa2c6bf2f87",
+      "all_checks_passed": true,
+      "qualification_complete": true,
+      "audits": {
+        "restored_jobs": 678,
+        "restored_hmx_jobs": 676
+      },
+      "arena_restored": true,
+      "service_unchanged": true,
+      "power_and_firmware_restored": true,
+      "crops": [
+        {
+          "name": "heldout_left_controller",
+          "layer_checks": 77,
+          "blobs": 90,
+          "values": 5087840,
+          "max_local_ratio": 0.6702840187521132,
+          "complete": true
+        },
+        {
+          "name": "heldout_right_controller",
+          "layer_checks": 77,
+          "blobs": 90,
+          "values": 5087840,
+          "max_local_ratio": 0.7986715391474106,
+          "complete": true
+        }
+      ],
+      "timing_frames": [
+        {
+          "name": "heldout_left_controller",
+          "execution": {
+            "layers": [],
+            "complete": true,
+            "body_ms": 681.157294,
+            "command_count": 27
+          }
+        },
+        {
+          "name": "heldout_right_controller",
+          "execution": {
+            "layers": [],
+            "complete": true,
+            "body_ms": 746.20613,
+            "command_count": 27
+          }
+        },
+        {
+          "name": "heldout_left_controller",
+          "execution": {
+            "layers": [],
+            "complete": true,
+            "body_ms": 717.398092,
+            "command_count": 27
+          }
+        }
+      ],
+      "interrupted_tiles": null,
+      "rejection_controls": 0
+    }
+  },
+  "main_audits": {
+    "restored_jobs": 13992,
+    "restored_hmx_jobs": 13988
+  },
+  "main_layer_checks": 308,
+  "main_values": 20351360,
+  "heads": {
+    "comparison": "Independent byte equality of 16 saved FP32 files against the previous fused build; all 512 values identical. Previous fused baseline independently matched the tiled build.",
+    "sha256": {
+      "calibration_controller": {
+        "out0": {
+          "values": 63,
+          "sha256": "1dd95907b1234a17264ca39191174714bc840cd0ef9d2513b1c78e97e1af73d2"
+        },
+        "out1": {
+          "values": 1,
+          "sha256": "16c144e50bb96195325c5b72c6da277f61c91eb7cca4a71d0eca6b59ba4e7655"
+        },
+        "out2": {
+          "values": 1,
+          "sha256": "c6d1607ba8a8eca2cde964ff4e2cc89d49662d7b14467fa988c762c1eb8b2ce7"
+        },
+        "out3": {
+          "values": 63,
+          "sha256": "70339eb65c6e5a8bfc649f58d16349dd5018b491fd13db6d673267cad95fe1cd"
+        }
+      },
+      "calibration_open": {
+        "out0": {
+          "values": 63,
+          "sha256": "e06d351b08514f48edccd60f1a99539e4cbfd14bc864d2f430de9a214f983f8d"
+        },
+        "out1": {
+          "values": 1,
+          "sha256": "e26e09ce4c4c8ebd5d732dab96a9222edbdc4b4c3eb2019acbdf3d0560e04643"
+        },
+        "out2": {
+          "values": 1,
+          "sha256": "64a2d78a7b677f483da064181ebd38b96735613fa007213b45558f1c14094406"
+        },
+        "out3": {
+          "values": 63,
+          "sha256": "85feb31654215e990b919360e60bdf1eaa1fece40a74726ca00f4daa870ae790"
+        }
+      },
+      "heldout_left_controller": {
+        "out0": {
+          "values": 63,
+          "sha256": "48f17ab142ea55bb8fd265e5d69c5f6f4d3c4988da95807050f2d57b62bd5d45"
+        },
+        "out1": {
+          "values": 1,
+          "sha256": "0cfdf0a1b0547b671c0c24f544ef516e1887c814e9cf465907acea612c80d2ee"
+        },
+        "out2": {
+          "values": 1,
+          "sha256": "1a247e0d479ab3e6b6076881d207739b8782f549ec64eabce9f8f99f178c382f"
+        },
+        "out3": {
+          "values": 63,
+          "sha256": "b3ae3f35b46c453778e1bde5a621c32a1bef4b9d248ed2a080d355cebfe0bb98"
+        }
+      },
+      "heldout_right_controller": {
+        "out0": {
+          "values": 63,
+          "sha256": "40d69eba495c15a80a13408a6f6abc78cc379b2998d5291a63bff57a6424ecea"
+        },
+        "out1": {
+          "values": 1,
+          "sha256": "5eb5007f0c45877a9744f5b3fa43d49fe9083cb19ea7028862f9a9177f1fe7cb"
+        },
+        "out2": {
+          "values": 1,
+          "sha256": "35c41834d7a84f49213adb9675e9e27440300a50fc59a9710e3033bd1a0a03fa"
+        },
+        "out3": {
+          "values": 63,
+          "sha256": "fc40c72838a60504689b6712c122f076c32366d6d07e7d797cd13beba8231373"
+        }
+      }
+    }
+  },
+  "guarded_faults": {
+    "fault-dw": {
+      "report_sha256": "4af9d06257ef840842ec995097b79d9fb1d6b86073ecb9dee6e4f29e8a6e6337",
+      "at": [
+        "convdwclip_1",
+        3
+      ],
+      "invalidated": true,
+      "reuse_refused": true,
+      "arena_restored": true,
+      "health_and_service_restored": true,
+      "audits": {
+        "restored_jobs": 455,
+        "restored_hmx_jobs": 453
+      }
+    },
+    "fault-head": {
+      "report_sha256": "60f1e57646d2a9cdcd3d6758e0e53569e1a30e1a02be943e4d815a935f8bb1c0",
+      "at": [
+        "linear_42",
+        1
+      ],
+      "invalidated": true,
+      "reuse_refused": true,
+      "arena_restored": true,
+      "health_and_service_restored": true,
+      "audits": {
+        "restored_jobs": 517,
+        "restored_hmx_jobs": 515
+      }
+    },
+    "fault-hmx-clip": {
+      "report_sha256": "7203d83ad7c3535b910b3315c5a52fe2eb11d4f6e96f3106e3e441211fe49b83",
+      "at": [
+        "convclip_1",
+        1
+      ],
+      "invalidated": true,
+      "reuse_refused": true,
+      "arena_restored": true,
+      "health_and_service_restored": true,
+      "audits": {
+        "restored_jobs": 454,
+        "restored_hmx_jobs": 452
+      }
+    },
+    "fault-hmx": {
+      "report_sha256": "4e4ab8878eb6da67b50400d1e28407ae64bdd12731080277bc54a714ceca2315",
+      "at": [
+        "conv_10",
+        1
+      ],
+      "invalidated": true,
+      "reuse_refused": true,
+      "arena_restored": true,
+      "health_and_service_restored": true,
+      "audits": {
+        "restored_jobs": 453,
+        "restored_hmx_jobs": 451
+      }
+    },
+    "fault-pack": {
+      "report_sha256": "c643bb3e4d518be6f5385ec85b2bbbce8cc652e4b285f8dd2f90a1c14d79dc7e",
+      "at": [
+        "convclip_1",
+        9
+      ],
+      "invalidated": true,
+      "reuse_refused": true,
+      "arena_restored": true,
+      "health_and_service_restored": true,
+      "audits": {
+        "restored_jobs": 453,
+        "restored_hmx_jobs": 451
+      }
+    },
+    "fault-stem-hmx": {
+      "report_sha256": "5d0582b563909512e82d7ea18722cdb1c4f3c9c7c6854d5aa49704b8eee13e22",
+      "at": [
+        "convclip_0",
+        1
+      ],
+      "invalidated": true,
+      "reuse_refused": true,
+      "arena_restored": true,
+      "health_and_service_restored": true,
+      "audits": {
+        "restored_jobs": 449,
+        "restored_hmx_jobs": 447
+      }
+    },
+    "fault-stem-pack": {
+      "report_sha256": "4c57c16a2eedabce8662762f42f317e25890718497818716f9614d0c1aeb1fb4",
+      "at": [
+        "convclip_0",
+        10
+      ],
+      "invalidated": true,
+      "reuse_refused": true,
+      "arena_restored": true,
+      "health_and_service_restored": true,
+      "audits": {
+        "restored_jobs": 448,
+        "restored_hmx_jobs": 446
+      }
+    },
+    "fault-tile14": {
+      "report_sha256": "0c2f3bdcecec7910199e1c40de9dcc6315d58ef4f9b75d7f6be49e4310ca337e",
+      "at": [
+        "convdwclip_8",
+        3
+      ],
+      "invalidated": true,
+      "reuse_refused": true,
+      "arena_restored": true,
+      "health_and_service_restored": true,
+      "audits": {
+        "restored_jobs": 486,
+        "restored_hmx_jobs": 484
+      }
+    },
+    "fault-tile7": {
+      "report_sha256": "57ae8c28ebb42db6c13f5753de0d768473ef7f27310a6020bd2472f8c51dc438",
+      "at": [
+        "convdwclip_12",
+        3
+      ],
+      "invalidated": true,
+      "reuse_refused": true,
+      "arena_restored": true,
+      "health_and_service_restored": true,
+      "audits": {
+        "restored_jobs": 502,
+        "restored_hmx_jobs": 500
+      }
+    }
+  },
+  "budget_5_ms": {
+    "report_sha256": "e6824c4412c33973f6859ba69cf7249bc083f8058fd8004a63354c5bd09ab3be",
+    "audits": {
+      "restored_jobs": 682,
+      "restored_hmx_jobs": 680
+    },
+    "timing_frames": [
+      {
+        "name": "calibration_controller",
+        "execution": {
+          "layers": [],
+          "complete": true,
+          "body_ms": 822.446329,
+          "command_count": 101
+        }
+      }
+    ],
+    "heads_bit_identical": true,
+    "arena_and_health_restored": true
+  },
+  "sdk_regression": {
+    "report_sha256": "222485d3bff96418b2716cc526ec4a23b61e0e41cbab9b7a30eef663219f067f",
+    "modes": [
+      "direct",
+      "benchmark"
+    ],
+    "audits": {
+      "restored_jobs": 72,
+      "restored_hmx_jobs": 38
+    },
+    "health_and_service_restored": true
+  },
+  "earlier_incomplete_heldout": {
+    "report_sha256": "3588b0bfe8b23562ffd499c2e1c72551e1782ec3cebef354a6fcd393b2a1057b",
+    "error": "DeviceBusy: another callback or command is installed",
+    "during": "interrupted-tile stress frame, after both qualified crops passed",
+    "qualification_complete": false,
+    "normal_close_completed": true,
+    "recovery_or_reboot": false,
+    "before_new_run": "Independent read-only checks: idle gate, no callback or poison, no resident refusal record, full 6152192-byte arena hash matches the failed-run pre-snapshot, firmware prefix and power match baseline. Retry policy unchanged. Completed calibration already covers interrupted tiles; new heldout run omits that stress option.",
+    "arena_sha256": "94674964076f61f96f8eb7e5ba78b1e5defde8c1d2f320ba45fda8c3ac6c3b48"
+  },
+  "final_health": {
+    "state": {
+      "abi": 9,
+      "control": [
+        1,
+        0,
+        1
+      ],
+      "callback": 0,
+      "poisoned": false
+    },
+    "firmware_code_prefix_bytes": 114688,
+    "firmware_code_prefix_sha256": "55679e13486357627ea22e494b25342acd9d24d73450f3f28eb1113b82c71b95",
+    "power_configuration_sha256": "2405bda200a51fd0bd699568e8415e53ba7b631cbaa9d4812c656b7240159bbd",
+    "power_restored": true
+  },
+  "service_unchanged": true,
+  "automatic_recovery": false,
+  "offline": {
+    "tests": 201,
+    "ruff_check": true,
+    "ruff_format_check": true,
+    "sdk_payload_rebuild_check": true
+  },
+  "performance_claim": "Code-size reduction only; no execution-speed claim or real-time qualification."
+}

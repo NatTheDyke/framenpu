@@ -72,6 +72,27 @@ transport model and requires a wrong flag to be refused.
 `tests/test_conv_fast.py` builds the image and requires that it contains no
 vector stack access and that the tiled image is unchanged.
 
+The fused image also omits `rg_op_post` and its dispatch branch, since bias
+and clip finish inside HMX and valid fused execution never enters phase 3.
+Non-fused builds retain the operator. This removes 864 bytes: the image is
+12,888 bytes, leaving 3,496 bytes in the same 16 KiB reservation. No other
+function symbol is unreachable in the rebuilt image's direct call/jump graph
+from `rg_batch`.
+
+The smaller image passes all four crops (308 layer checks over 20,351,360
+values), with all 512 head values bit-identical to the previous fused build.
+The matching calibration run includes interrupted tiles and all fourteen
+rejection controls; nine guarded faults, a 5 ms budget control and the SDK
+regression also pass. An initial heldout run stopped on transient `DeviceBusy`
+during the interrupted-tile frame and closed normally. Independent arena,
+gate, power and firmware checks passed before a new ordinary heldout run
+completed. See [conv-fast-deadcode-validation.json](../evidence/conv-fast-deadcode-validation.json).
+This is a code-size reduction; it makes no new execution-speed claim.
+
+The subsequent [host profile](HOST_PROFILE.md) separates full API wall time
+from the body-only timings above: state replay and input checking/packing
+dominate host overhead, while the other completion checks are much smaller.
+
 ```sh
 python tools/build_resident_landmark.py --linked --dw-reuse 6 --dw-row-tile --conv-fast --output /path/to/fast-jobs
 python tools/check_resident_link.py --jobs /path/to/fast-jobs --output /path/to/fast-jobs/verify.json

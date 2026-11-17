@@ -1,0 +1,1878 @@
+{
+  "format": "framenpu-native-arithmetic-validation",
+  "version": 1,
+  "date": "2026-11-16",
+  "status": "capability_characterized_supported_arithmetic_pilots_complete_not_graph_or_tracking_qualified",
+  "scope": "Step 1 of native redesign: bounded IEEE smoke test, then supported QFloat alternatives on real-weight isolated depthwise layers. No production executor/library/native image or historical numerical policy changed.",
+  "ieee": {
+    "operationally_usable": false,
+    "observed": "IEEE FP32 multiply/add, FP16-input FP32 multiply-accumulate, and FP16 accumulation return all-zero destinations on distinct finite dyadic fixtures. FP32/FP16 input echoes and QFloat arithmetic controls pass.",
+    "interpretation": "Consistent with optional IEEE extension unavailable in the present core/platform configuration. Hardware absence versus platform disablement is not established. Compiler support alone does not prove silicon availability.",
+    "reference": "https://www.mail-archive.com/qemu-devel%40nongnu.org/msg1181724.html",
+    "report_sha256": "0124688be3854ef32761e24bddfd1293ca8016540492c26111236aaff632bd13",
+    "build": {
+      "format": "framenpu-ieee-probe-build",
+      "bytes": 2592,
+      "sha256": "50c6b585abcd8e818fbd7285746da638453a494ebed15f4278506118b164668f",
+      "flags": [
+        "--target=hexagon",
+        "-mcpu=hexagonv75",
+        "-mhvx",
+        "-mhvx-length=128b",
+        "-Os",
+        "-ffreestanding",
+        "-fno-builtin",
+        "-fno-stack-protector",
+        "-fno-unwind-tables",
+        "-fno-asynchronous-unwind-tables",
+        "-ffp-contract=off",
+        "-mllvm",
+        "-spill-func-threshold=100",
+        "-mllvm",
+        "-spill-func-threshold-Os=100",
+        "-G0",
+        "-mhvx-ieee-fp",
+        "-fno-jump-tables"
+      ],
+      "toolchain": {
+        "clang": "clang version 23.1.4",
+        "linker": "LLD 23.1.4 (compatible with GNU linkers)",
+        "objcopy": "llvm-objcopy, compatible with GNU objcopy"
+      },
+      "sources": {
+        "tests/ieee_arithmetic_probe.c": "45fdb2cacfdffef71706e531018d6f40deff89d7de6b054df72fe806d71d621d",
+        "tests/resident_graph_entry.S": "bb0b48aaf26908b7feccb7eacac98a93bfa1e483cb3cc84a25c060c60f5f1c14",
+        "tests/landmark_common.h": "e2e922baaf80e217350ee3926e445449430ccbdb7cf3f55ed8409d73e89909bb",
+        "src/framenpu/sdk/include/framenpu.h": "4e65f4b8fb82586428a810714d91540685cc4895810ad5bb753b178e1db62754",
+        "src/framenpu/sdk/include/fnpu_readback.h": "4c5fd740bcc9269a64d7923d51cedd11bda2a1b4ed5430dcd796332e20a8f820",
+        "src/framenpu/sdk/link.ld": "c0b7dd53a7e254de549280ead79f303db3ab657e13e8565e5be3852c29a08e82"
+      }
+    },
+    "source_sha256": {
+      "tests/hardware_ieee_probe.py": "b87a2944e7d31fa43663c50b7a0846246bd2389fca53627b42e2b383aa492d40",
+      "src/framenpu/device.py": "9697e76083ab389f2fdc1e43f7010d9e408c7762bfc08d34b583fc54e2a54267",
+      "src/framenpu/transport.py": "4009d07ef528292b427c4805e726008bfc55572b26f1c4ceb0b5168cbdf5399b"
+    },
+    "echo_controls_passed": true,
+    "mixed_qfloat_lane_layout": "even_odd",
+    "guarded_faults": 3,
+    "rejections": 3,
+    "audits": {
+      "restored_jobs": 55,
+      "restored_hmx_jobs": 53
+    },
+    "range_observations": [
+      {
+        "kind": "qfloat",
+        "error": {
+          "max_abs": 0.0078125,
+          "rms": 0.002663259794852412,
+          "nonfinite_actual": 0,
+          "matching_values": 15,
+          "values": 64
+        },
+        "raw_result_hex": "00000000000000800100003401c0ff37010000390100003f010000c001e0ff4601e0ffc700000000000000800100003301c0ff380100003801000040010000bf01e0ff4701e0ffc600000000000000800100003401c0ff37010000390100003f010000c001e0ff4601e0ffc700000000000000800100003301c0ff380100003801000040010000bf01e0ff4701e0ffc600000000000000800100003401c0ff37010000390100003f010000c001e0ff4601e0ffc700000000000000800100003301c0ff380100003801000040010000bf01e0ff4701e0ffc600000000000000800100003401c0ff37010000390100003f010000c001e0ff4601e0ffc700000000"
+      },
+      {
+        "kind": "qfloat_accumulate",
+        "error": {
+          "max_abs": 0.0078125,
+          "rms": 0.002663259794852412,
+          "nonfinite_actual": 0,
+          "matching_values": 7,
+          "values": 64
+        },
+        "raw_result_hex": "01000000000000000100003401c0ff37010000390100003f010000c001e0ff4601e0ffc701000000000000000100003301c0ff380100003801000040010000bf01e0ff4701e0ffc601000000000000000100003401c0ff37010000390100003f010000c001e0ff4601e0ffc701000000000000000100003301c0ff380100003801000040010000bf01e0ff4701e0ffc601000000000000000100003401c0ff37010000390100003f010000c001e0ff4601e0ffc701000000000000000100003301c0ff380100003801000040010000bf01e0ff4701e0ffc601000000000000000100003401c0ff37010000390100003f010000c001e0ff4601e0ffc701000000"
+      },
+      {
+        "kind": "fp16_qfloat_accumulate",
+        "error": {
+          "max_abs": 0.0078125,
+          "rms": 0.002663259794852412,
+          "nonfinite_actual": 0,
+          "matching_values": 7,
+          "values": 64
+        },
+        "raw_result_hex": "010000000104003401000039010000c001e0ffc70000000002c0ff380100004001e0ff47010000000104003401000039010000c001e0ffc70000000002c0ff380100004001e0ff47010000000104003401000039010000c001e0ffc70000000002c0ff380100004001e0ff47010000000104003401000039010000c001e0ffc70000000002c0ff370100003f01e0ff46010000000104003301000038010000bf01e0ffc60000000002c0ff370100003f01e0ff46010000000104003301000038010000bf01e0ffc60000000002c0ff370100003f01e0ff46010000000104003301000038010000bf01e0ffc60000000002c0ff370100003f01e0ff4601000000"
+      },
+      {
+        "kind": "qfloat_full_range",
+        "error": {
+          "max_abs": 2.384185791015625e-07,
+          "rms": 8.6122406540766e-08,
+          "nonfinite_actual": 7,
+          "matching_values": 25,
+          "values": 64
+        },
+        "raw_result_hex": "01000000000000000200000000004000010000010100003f010000c0ffffff7effffffff010000000000000001000000feffff000100400001000040010000bfffffff7ffffffffe01000000000000000200000000004000010000010100003f010000c0ffffff7effffffff010000000000000001000000feffff000100400001000040010000bfffffff7ffffffffe01000000000000000200000000004000010000010100003f010000c0ffffff7effffffff010000000000000001000000feffff000100400001000040010000bfffffff7ffffffffe01000000000000000200000000004000010000010100003f010000c0ffffff7effffffff01000000"
+      }
+    ]
+  },
+  "supported_arithmetic_slope": [
+    {
+      "mode": 0,
+      "name": "qfloat",
+      "us_per_64_lane_iteration_slope": 0.013061523437500002,
+      "repeats": [
+        256,
+        4096
+      ],
+      "samples_each": 3,
+      "max_abs_error": 0.0001220703125
+    },
+    {
+      "mode": 4,
+      "name": "qfloat_accumulate",
+      "us_per_64_lane_iteration_slope": 0.00815158420138889,
+      "repeats": [
+        256,
+        4096
+      ],
+      "samples_each": 3,
+      "max_abs_error": 0.0001220703125
+    },
+    {
+      "mode": 5,
+      "name": "fp16_qfloat_accumulate",
+      "us_per_64_lane_iteration_slope": 0.010620117187500002,
+      "repeats": [
+        256,
+        4096
+      ],
+      "samples_each": 3,
+      "max_abs_error": 0.0001220703125
+    }
+  ],
+  "method": {
+    "modes": {
+      "0": "Original QFloat multiply, convert to FP32, checked multiply, add with zero-identity preservation and convert each tap.",
+      "1": "FP32 operands, persistent QFloat32 accumulation; convert once after all taps. Changes rounding schedule and zero handling.",
+      "2": "FP16 operands, QFloat32 pair products/accumulation; convert once after all taps. Actual mixed IEEE FP32 FMA is not used."
+    },
+    "corpus": "Four hash-pinned recorded crops; actual ncnn layer inputs and model weights; all channels of four representative depthwise layers.",
+    "geometry": "112-wide stride one, 112-to-56 stride two, 14-wide and 7-wide stride one. Native images specialize the known geometry and validate it against the descriptor.",
+    "timing": "Native row brackets separately measure staging, gather+arithmetic, store/check and total kernel body. VTCM counters and specialized geometry reduce probe register pressure; no vector job-stack accesses. Full wrapper, audited host submission and host pad/convert preparation remain separately reported. Gather and arithmetic are deliberately a combined scope, not separately inferred.",
+    "data": "Host-created padded panels live in the borrowed 128 KiB job arena. Native staging, coefficient preparation and outputs use only the saved 8 KiB VTCM. No resident graph tensors are accessed. No cached data alias, persistent tensor layout or producer-consumer fusion is implemented.",
+    "accuracy": "Local ordered FP32 reference, precision-matched local reference and pinned ncnn output compared separately. A conservative term-magnitude arithmetic bound rejects gross corruption; it is not a tracking-quality threshold. Finite/normal-coefficient and absolute intermediate range proofs run before submission; native input/preclip finite flags remain enabled.",
+    "checks": "Worker/SSR/EVB, code-PC/fault location, existing 40ms wrapper limit, cache cleanup and per-job restoration before acknowledgment. Numerical comparisons follow completed restoration so an oracle mismatch can stop cleanly. Native row checkpoints enforce the existing 20ms local budget; partial completion is refused without retry."
+  },
+  "model_sha256": "b7c3d1be232725a5a143e2648858ec5aec9596c7b83c6a3c508479b04057e00c",
+  "param_sha256": "54e08f284ff6f121ff00f4a9c65afc38c0dbb22a32f4af44fc4e0fde6c4a1bbd",
+  "manifest_sha256": "576a357658e5a22a5177f40138500111aa5e78934a47736be2e2069a3bd0b060",
+  "historical_tolerances_sha256_unchanged": "381a033d6f4c10047998dfe42abb8cd6b18a756741c8a21690a3e6d6dc951f7b",
+  "source_sha256": {
+    "tests/hardware_native_depthwise.py": "89e994879c650d8453ba52a191f053dcb8d1db4cef249e92496f769e42a26b5a",
+    "tests/hardware_ieee_probe.py": "b87a2944e7d31fa43663c50b7a0846246bd2389fca53627b42e2b383aa492d40",
+    "tools/landmark_reference.py": "13d929c35e0a30754a95062816a4dd877acce3b603f2beaed63d61406e33ce01"
+  },
+  "builds": {
+    "convdwclip_0": [
+      {
+        "format": "framenpu-ieee-probe-build",
+        "bytes": 3112,
+        "sha256": "b639beb0354493f62f2a25559868039d3fbff720b8fdc0fbbc14cb9d76789e34",
+        "flags": [
+          "--target=hexagon",
+          "-mcpu=hexagonv75",
+          "-mhvx",
+          "-mhvx-length=128b",
+          "-Os",
+          "-ffreestanding",
+          "-fno-builtin",
+          "-fno-stack-protector",
+          "-fno-unwind-tables",
+          "-fno-asynchronous-unwind-tables",
+          "-ffp-contract=off",
+          "-mllvm",
+          "-spill-func-threshold=100",
+          "-mllvm",
+          "-spill-func-threshold-Os=100",
+          "-G0",
+          "-mhvx-ieee-fp",
+          "-fno-jump-tables",
+          "-DND_MODE=0",
+          "-DND_CASE=0"
+        ],
+        "toolchain": {
+          "clang": "clang version 23.1.4",
+          "linker": "LLD 23.1.4 (compatible with GNU linkers)",
+          "objcopy": "llvm-objcopy, compatible with GNU objcopy"
+        },
+        "sources": {
+          "tests/native_depthwise_probe.c": "1618e582f5445ad27914b568aebf542a7e6f91f92f2952cced1f7ff5a06433c2",
+          "tests/resident_graph_entry.S": "bb0b48aaf26908b7feccb7eacac98a93bfa1e483cb3cc84a25c060c60f5f1c14",
+          "tests/landmark_common.h": "e2e922baaf80e217350ee3926e445449430ccbdb7cf3f55ed8409d73e89909bb",
+          "src/framenpu/sdk/include/framenpu.h": "4e65f4b8fb82586428a810714d91540685cc4895810ad5bb753b178e1db62754",
+          "src/framenpu/sdk/include/fnpu_readback.h": "4c5fd740bcc9269a64d7923d51cedd11bda2a1b4ed5430dcd796332e20a8f820",
+          "src/framenpu/sdk/link.ld": "c0b7dd53a7e254de549280ead79f303db3ab657e13e8565e5be3852c29a08e82"
+        }
+      },
+      {
+        "format": "framenpu-ieee-probe-build",
+        "bytes": 3088,
+        "sha256": "863f8a8b1c4a7518060b3720a439ceddd79afd27beafb94ba34e55d99dfb3189",
+        "flags": [
+          "--target=hexagon",
+          "-mcpu=hexagonv75",
+          "-mhvx",
+          "-mhvx-length=128b",
+          "-Os",
+          "-ffreestanding",
+          "-fno-builtin",
+          "-fno-stack-protector",
+          "-fno-unwind-tables",
+          "-fno-asynchronous-unwind-tables",
+          "-ffp-contract=off",
+          "-mllvm",
+          "-spill-func-threshold=100",
+          "-mllvm",
+          "-spill-func-threshold-Os=100",
+          "-G0",
+          "-mhvx-ieee-fp",
+          "-fno-jump-tables",
+          "-DND_MODE=1",
+          "-DND_CASE=0"
+        ],
+        "toolchain": {
+          "clang": "clang version 23.1.4",
+          "linker": "LLD 23.1.4 (compatible with GNU linkers)",
+          "objcopy": "llvm-objcopy, compatible with GNU objcopy"
+        },
+        "sources": {
+          "tests/native_depthwise_probe.c": "1618e582f5445ad27914b568aebf542a7e6f91f92f2952cced1f7ff5a06433c2",
+          "tests/resident_graph_entry.S": "bb0b48aaf26908b7feccb7eacac98a93bfa1e483cb3cc84a25c060c60f5f1c14",
+          "tests/landmark_common.h": "e2e922baaf80e217350ee3926e445449430ccbdb7cf3f55ed8409d73e89909bb",
+          "src/framenpu/sdk/include/framenpu.h": "4e65f4b8fb82586428a810714d91540685cc4895810ad5bb753b178e1db62754",
+          "src/framenpu/sdk/include/fnpu_readback.h": "4c5fd740bcc9269a64d7923d51cedd11bda2a1b4ed5430dcd796332e20a8f820",
+          "src/framenpu/sdk/link.ld": "c0b7dd53a7e254de549280ead79f303db3ab657e13e8565e5be3852c29a08e82"
+        }
+      },
+      {
+        "format": "framenpu-ieee-probe-build",
+        "bytes": 3088,
+        "sha256": "66b8e2451a2329d8d91219982aa46c83d88d8dd29b3f7f7d503ff7db41c218f9",
+        "flags": [
+          "--target=hexagon",
+          "-mcpu=hexagonv75",
+          "-mhvx",
+          "-mhvx-length=128b",
+          "-Os",
+          "-ffreestanding",
+          "-fno-builtin",
+          "-fno-stack-protector",
+          "-fno-unwind-tables",
+          "-fno-asynchronous-unwind-tables",
+          "-ffp-contract=off",
+          "-mllvm",
+          "-spill-func-threshold=100",
+          "-mllvm",
+          "-spill-func-threshold-Os=100",
+          "-G0",
+          "-mhvx-ieee-fp",
+          "-fno-jump-tables",
+          "-DND_MODE=2",
+          "-DND_CASE=0"
+        ],
+        "toolchain": {
+          "clang": "clang version 23.1.4",
+          "linker": "LLD 23.1.4 (compatible with GNU linkers)",
+          "objcopy": "llvm-objcopy, compatible with GNU objcopy"
+        },
+        "sources": {
+          "tests/native_depthwise_probe.c": "1618e582f5445ad27914b568aebf542a7e6f91f92f2952cced1f7ff5a06433c2",
+          "tests/resident_graph_entry.S": "bb0b48aaf26908b7feccb7eacac98a93bfa1e483cb3cc84a25c060c60f5f1c14",
+          "tests/landmark_common.h": "e2e922baaf80e217350ee3926e445449430ccbdb7cf3f55ed8409d73e89909bb",
+          "src/framenpu/sdk/include/framenpu.h": "4e65f4b8fb82586428a810714d91540685cc4895810ad5bb753b178e1db62754",
+          "src/framenpu/sdk/include/fnpu_readback.h": "4c5fd740bcc9269a64d7923d51cedd11bda2a1b4ed5430dcd796332e20a8f820",
+          "src/framenpu/sdk/link.ld": "c0b7dd53a7e254de549280ead79f303db3ab657e13e8565e5be3852c29a08e82"
+        }
+      }
+    ],
+    "convdwclip_1": [
+      {
+        "format": "framenpu-ieee-probe-build",
+        "bytes": 3108,
+        "sha256": "aff36fabe943a91086a20a72c7de34586eec7a1d8b37592097947e83e56844bf",
+        "flags": [
+          "--target=hexagon",
+          "-mcpu=hexagonv75",
+          "-mhvx",
+          "-mhvx-length=128b",
+          "-Os",
+          "-ffreestanding",
+          "-fno-builtin",
+          "-fno-stack-protector",
+          "-fno-unwind-tables",
+          "-fno-asynchronous-unwind-tables",
+          "-ffp-contract=off",
+          "-mllvm",
+          "-spill-func-threshold=100",
+          "-mllvm",
+          "-spill-func-threshold-Os=100",
+          "-G0",
+          "-mhvx-ieee-fp",
+          "-fno-jump-tables",
+          "-DND_MODE=0",
+          "-DND_CASE=1"
+        ],
+        "toolchain": {
+          "clang": "clang version 23.1.4",
+          "linker": "LLD 23.1.4 (compatible with GNU linkers)",
+          "objcopy": "llvm-objcopy, compatible with GNU objcopy"
+        },
+        "sources": {
+          "tests/native_depthwise_probe.c": "1618e582f5445ad27914b568aebf542a7e6f91f92f2952cced1f7ff5a06433c2",
+          "tests/resident_graph_entry.S": "bb0b48aaf26908b7feccb7eacac98a93bfa1e483cb3cc84a25c060c60f5f1c14",
+          "tests/landmark_common.h": "e2e922baaf80e217350ee3926e445449430ccbdb7cf3f55ed8409d73e89909bb",
+          "src/framenpu/sdk/include/framenpu.h": "4e65f4b8fb82586428a810714d91540685cc4895810ad5bb753b178e1db62754",
+          "src/framenpu/sdk/include/fnpu_readback.h": "4c5fd740bcc9269a64d7923d51cedd11bda2a1b4ed5430dcd796332e20a8f820",
+          "src/framenpu/sdk/link.ld": "c0b7dd53a7e254de549280ead79f303db3ab657e13e8565e5be3852c29a08e82"
+        }
+      },
+      {
+        "format": "framenpu-ieee-probe-build",
+        "bytes": 3080,
+        "sha256": "37425f502ffcc2cbd89f6f58f7afc07b2556d29c889942bd1befb5aba8e9d95c",
+        "flags": [
+          "--target=hexagon",
+          "-mcpu=hexagonv75",
+          "-mhvx",
+          "-mhvx-length=128b",
+          "-Os",
+          "-ffreestanding",
+          "-fno-builtin",
+          "-fno-stack-protector",
+          "-fno-unwind-tables",
+          "-fno-asynchronous-unwind-tables",
+          "-ffp-contract=off",
+          "-mllvm",
+          "-spill-func-threshold=100",
+          "-mllvm",
+          "-spill-func-threshold-Os=100",
+          "-G0",
+          "-mhvx-ieee-fp",
+          "-fno-jump-tables",
+          "-DND_MODE=1",
+          "-DND_CASE=1"
+        ],
+        "toolchain": {
+          "clang": "clang version 23.1.4",
+          "linker": "LLD 23.1.4 (compatible with GNU linkers)",
+          "objcopy": "llvm-objcopy, compatible with GNU objcopy"
+        },
+        "sources": {
+          "tests/native_depthwise_probe.c": "1618e582f5445ad27914b568aebf542a7e6f91f92f2952cced1f7ff5a06433c2",
+          "tests/resident_graph_entry.S": "bb0b48aaf26908b7feccb7eacac98a93bfa1e483cb3cc84a25c060c60f5f1c14",
+          "tests/landmark_common.h": "e2e922baaf80e217350ee3926e445449430ccbdb7cf3f55ed8409d73e89909bb",
+          "src/framenpu/sdk/include/framenpu.h": "4e65f4b8fb82586428a810714d91540685cc4895810ad5bb753b178e1db62754",
+          "src/framenpu/sdk/include/fnpu_readback.h": "4c5fd740bcc9269a64d7923d51cedd11bda2a1b4ed5430dcd796332e20a8f820",
+          "src/framenpu/sdk/link.ld": "c0b7dd53a7e254de549280ead79f303db3ab657e13e8565e5be3852c29a08e82"
+        }
+      },
+      {
+        "format": "framenpu-ieee-probe-build",
+        "bytes": 2988,
+        "sha256": "2c73ac1ad43df84f48f9f09c8e15cca165a09d30e3ebfaa1967107e02044828e",
+        "flags": [
+          "--target=hexagon",
+          "-mcpu=hexagonv75",
+          "-mhvx",
+          "-mhvx-length=128b",
+          "-Os",
+          "-ffreestanding",
+          "-fno-builtin",
+          "-fno-stack-protector",
+          "-fno-unwind-tables",
+          "-fno-asynchronous-unwind-tables",
+          "-ffp-contract=off",
+          "-mllvm",
+          "-spill-func-threshold=100",
+          "-mllvm",
+          "-spill-func-threshold-Os=100",
+          "-G0",
+          "-mhvx-ieee-fp",
+          "-fno-jump-tables",
+          "-DND_MODE=2",
+          "-DND_CASE=1"
+        ],
+        "toolchain": {
+          "clang": "clang version 23.1.4",
+          "linker": "LLD 23.1.4 (compatible with GNU linkers)",
+          "objcopy": "llvm-objcopy, compatible with GNU objcopy"
+        },
+        "sources": {
+          "tests/native_depthwise_probe.c": "1618e582f5445ad27914b568aebf542a7e6f91f92f2952cced1f7ff5a06433c2",
+          "tests/resident_graph_entry.S": "bb0b48aaf26908b7feccb7eacac98a93bfa1e483cb3cc84a25c060c60f5f1c14",
+          "tests/landmark_common.h": "e2e922baaf80e217350ee3926e445449430ccbdb7cf3f55ed8409d73e89909bb",
+          "src/framenpu/sdk/include/framenpu.h": "4e65f4b8fb82586428a810714d91540685cc4895810ad5bb753b178e1db62754",
+          "src/framenpu/sdk/include/fnpu_readback.h": "4c5fd740bcc9269a64d7923d51cedd11bda2a1b4ed5430dcd796332e20a8f820",
+          "src/framenpu/sdk/link.ld": "c0b7dd53a7e254de549280ead79f303db3ab657e13e8565e5be3852c29a08e82"
+        }
+      }
+    ],
+    "convdwclip_8": [
+      {
+        "format": "framenpu-ieee-probe-build",
+        "bytes": 2948,
+        "sha256": "458e52c505eaf16f02445545321dd5837f8437479231b319ccad8f5164cb0f3d",
+        "flags": [
+          "--target=hexagon",
+          "-mcpu=hexagonv75",
+          "-mhvx",
+          "-mhvx-length=128b",
+          "-Os",
+          "-ffreestanding",
+          "-fno-builtin",
+          "-fno-stack-protector",
+          "-fno-unwind-tables",
+          "-fno-asynchronous-unwind-tables",
+          "-ffp-contract=off",
+          "-mllvm",
+          "-spill-func-threshold=100",
+          "-mllvm",
+          "-spill-func-threshold-Os=100",
+          "-G0",
+          "-mhvx-ieee-fp",
+          "-fno-jump-tables",
+          "-DND_MODE=0",
+          "-DND_CASE=2"
+        ],
+        "toolchain": {
+          "clang": "clang version 23.1.4",
+          "linker": "LLD 23.1.4 (compatible with GNU linkers)",
+          "objcopy": "llvm-objcopy, compatible with GNU objcopy"
+        },
+        "sources": {
+          "tests/native_depthwise_probe.c": "1618e582f5445ad27914b568aebf542a7e6f91f92f2952cced1f7ff5a06433c2",
+          "tests/resident_graph_entry.S": "bb0b48aaf26908b7feccb7eacac98a93bfa1e483cb3cc84a25c060c60f5f1c14",
+          "tests/landmark_common.h": "e2e922baaf80e217350ee3926e445449430ccbdb7cf3f55ed8409d73e89909bb",
+          "src/framenpu/sdk/include/framenpu.h": "4e65f4b8fb82586428a810714d91540685cc4895810ad5bb753b178e1db62754",
+          "src/framenpu/sdk/include/fnpu_readback.h": "4c5fd740bcc9269a64d7923d51cedd11bda2a1b4ed5430dcd796332e20a8f820",
+          "src/framenpu/sdk/link.ld": "c0b7dd53a7e254de549280ead79f303db3ab657e13e8565e5be3852c29a08e82"
+        }
+      },
+      {
+        "format": "framenpu-ieee-probe-build",
+        "bytes": 2940,
+        "sha256": "b089794e3343cb7aec25a8539d9cf9ee2e17ce968031ad54cac350241f5b5148",
+        "flags": [
+          "--target=hexagon",
+          "-mcpu=hexagonv75",
+          "-mhvx",
+          "-mhvx-length=128b",
+          "-Os",
+          "-ffreestanding",
+          "-fno-builtin",
+          "-fno-stack-protector",
+          "-fno-unwind-tables",
+          "-fno-asynchronous-unwind-tables",
+          "-ffp-contract=off",
+          "-mllvm",
+          "-spill-func-threshold=100",
+          "-mllvm",
+          "-spill-func-threshold-Os=100",
+          "-G0",
+          "-mhvx-ieee-fp",
+          "-fno-jump-tables",
+          "-DND_MODE=1",
+          "-DND_CASE=2"
+        ],
+        "toolchain": {
+          "clang": "clang version 23.1.4",
+          "linker": "LLD 23.1.4 (compatible with GNU linkers)",
+          "objcopy": "llvm-objcopy, compatible with GNU objcopy"
+        },
+        "sources": {
+          "tests/native_depthwise_probe.c": "1618e582f5445ad27914b568aebf542a7e6f91f92f2952cced1f7ff5a06433c2",
+          "tests/resident_graph_entry.S": "bb0b48aaf26908b7feccb7eacac98a93bfa1e483cb3cc84a25c060c60f5f1c14",
+          "tests/landmark_common.h": "e2e922baaf80e217350ee3926e445449430ccbdb7cf3f55ed8409d73e89909bb",
+          "src/framenpu/sdk/include/framenpu.h": "4e65f4b8fb82586428a810714d91540685cc4895810ad5bb753b178e1db62754",
+          "src/framenpu/sdk/include/fnpu_readback.h": "4c5fd740bcc9269a64d7923d51cedd11bda2a1b4ed5430dcd796332e20a8f820",
+          "src/framenpu/sdk/link.ld": "c0b7dd53a7e254de549280ead79f303db3ab657e13e8565e5be3852c29a08e82"
+        }
+      },
+      {
+        "format": "framenpu-ieee-probe-build",
+        "bytes": 2948,
+        "sha256": "d1cf40ab8c01b3a609593cd4d694fa7915abf1aab6ff271b641a936e609f918b",
+        "flags": [
+          "--target=hexagon",
+          "-mcpu=hexagonv75",
+          "-mhvx",
+          "-mhvx-length=128b",
+          "-Os",
+          "-ffreestanding",
+          "-fno-builtin",
+          "-fno-stack-protector",
+          "-fno-unwind-tables",
+          "-fno-asynchronous-unwind-tables",
+          "-ffp-contract=off",
+          "-mllvm",
+          "-spill-func-threshold=100",
+          "-mllvm",
+          "-spill-func-threshold-Os=100",
+          "-G0",
+          "-mhvx-ieee-fp",
+          "-fno-jump-tables",
+          "-DND_MODE=2",
+          "-DND_CASE=2"
+        ],
+        "toolchain": {
+          "clang": "clang version 23.1.4",
+          "linker": "LLD 23.1.4 (compatible with GNU linkers)",
+          "objcopy": "llvm-objcopy, compatible with GNU objcopy"
+        },
+        "sources": {
+          "tests/native_depthwise_probe.c": "1618e582f5445ad27914b568aebf542a7e6f91f92f2952cced1f7ff5a06433c2",
+          "tests/resident_graph_entry.S": "bb0b48aaf26908b7feccb7eacac98a93bfa1e483cb3cc84a25c060c60f5f1c14",
+          "tests/landmark_common.h": "e2e922baaf80e217350ee3926e445449430ccbdb7cf3f55ed8409d73e89909bb",
+          "src/framenpu/sdk/include/framenpu.h": "4e65f4b8fb82586428a810714d91540685cc4895810ad5bb753b178e1db62754",
+          "src/framenpu/sdk/include/fnpu_readback.h": "4c5fd740bcc9269a64d7923d51cedd11bda2a1b4ed5430dcd796332e20a8f820",
+          "src/framenpu/sdk/link.ld": "c0b7dd53a7e254de549280ead79f303db3ab657e13e8565e5be3852c29a08e82"
+        }
+      }
+    ],
+    "convdwclip_12": [
+      {
+        "format": "framenpu-ieee-probe-build",
+        "bytes": 2980,
+        "sha256": "6fd19c0b9d58640fdb1196e686b25f599bc4935b90f07d1cfd43fc0aa3f2693e",
+        "flags": [
+          "--target=hexagon",
+          "-mcpu=hexagonv75",
+          "-mhvx",
+          "-mhvx-length=128b",
+          "-Os",
+          "-ffreestanding",
+          "-fno-builtin",
+          "-fno-stack-protector",
+          "-fno-unwind-tables",
+          "-fno-asynchronous-unwind-tables",
+          "-ffp-contract=off",
+          "-mllvm",
+          "-spill-func-threshold=100",
+          "-mllvm",
+          "-spill-func-threshold-Os=100",
+          "-G0",
+          "-mhvx-ieee-fp",
+          "-fno-jump-tables",
+          "-DND_MODE=0",
+          "-DND_CASE=3"
+        ],
+        "toolchain": {
+          "clang": "clang version 23.1.4",
+          "linker": "LLD 23.1.4 (compatible with GNU linkers)",
+          "objcopy": "llvm-objcopy, compatible with GNU objcopy"
+        },
+        "sources": {
+          "tests/native_depthwise_probe.c": "1618e582f5445ad27914b568aebf542a7e6f91f92f2952cced1f7ff5a06433c2",
+          "tests/resident_graph_entry.S": "bb0b48aaf26908b7feccb7eacac98a93bfa1e483cb3cc84a25c060c60f5f1c14",
+          "tests/landmark_common.h": "e2e922baaf80e217350ee3926e445449430ccbdb7cf3f55ed8409d73e89909bb",
+          "src/framenpu/sdk/include/framenpu.h": "4e65f4b8fb82586428a810714d91540685cc4895810ad5bb753b178e1db62754",
+          "src/framenpu/sdk/include/fnpu_readback.h": "4c5fd740bcc9269a64d7923d51cedd11bda2a1b4ed5430dcd796332e20a8f820",
+          "src/framenpu/sdk/link.ld": "c0b7dd53a7e254de549280ead79f303db3ab657e13e8565e5be3852c29a08e82"
+        }
+      },
+      {
+        "format": "framenpu-ieee-probe-build",
+        "bytes": 2944,
+        "sha256": "8494e14b3fc2e9c11fb4a8a6a1819a2735ad7ceec36eac8984cf4e0c8f880944",
+        "flags": [
+          "--target=hexagon",
+          "-mcpu=hexagonv75",
+          "-mhvx",
+          "-mhvx-length=128b",
+          "-Os",
+          "-ffreestanding",
+          "-fno-builtin",
+          "-fno-stack-protector",
+          "-fno-unwind-tables",
+          "-fno-asynchronous-unwind-tables",
+          "-ffp-contract=off",
+          "-mllvm",
+          "-spill-func-threshold=100",
+          "-mllvm",
+          "-spill-func-threshold-Os=100",
+          "-G0",
+          "-mhvx-ieee-fp",
+          "-fno-jump-tables",
+          "-DND_MODE=1",
+          "-DND_CASE=3"
+        ],
+        "toolchain": {
+          "clang": "clang version 23.1.4",
+          "linker": "LLD 23.1.4 (compatible with GNU linkers)",
+          "objcopy": "llvm-objcopy, compatible with GNU objcopy"
+        },
+        "sources": {
+          "tests/native_depthwise_probe.c": "1618e582f5445ad27914b568aebf542a7e6f91f92f2952cced1f7ff5a06433c2",
+          "tests/resident_graph_entry.S": "bb0b48aaf26908b7feccb7eacac98a93bfa1e483cb3cc84a25c060c60f5f1c14",
+          "tests/landmark_common.h": "e2e922baaf80e217350ee3926e445449430ccbdb7cf3f55ed8409d73e89909bb",
+          "src/framenpu/sdk/include/framenpu.h": "4e65f4b8fb82586428a810714d91540685cc4895810ad5bb753b178e1db62754",
+          "src/framenpu/sdk/include/fnpu_readback.h": "4c5fd740bcc9269a64d7923d51cedd11bda2a1b4ed5430dcd796332e20a8f820",
+          "src/framenpu/sdk/link.ld": "c0b7dd53a7e254de549280ead79f303db3ab657e13e8565e5be3852c29a08e82"
+        }
+      },
+      {
+        "format": "framenpu-ieee-probe-build",
+        "bytes": 2948,
+        "sha256": "62b8367eca033865ea6b875834082d7d374f472e51f6d1e347ed58e6ea90174b",
+        "flags": [
+          "--target=hexagon",
+          "-mcpu=hexagonv75",
+          "-mhvx",
+          "-mhvx-length=128b",
+          "-Os",
+          "-ffreestanding",
+          "-fno-builtin",
+          "-fno-stack-protector",
+          "-fno-unwind-tables",
+          "-fno-asynchronous-unwind-tables",
+          "-ffp-contract=off",
+          "-mllvm",
+          "-spill-func-threshold=100",
+          "-mllvm",
+          "-spill-func-threshold-Os=100",
+          "-G0",
+          "-mhvx-ieee-fp",
+          "-fno-jump-tables",
+          "-DND_MODE=2",
+          "-DND_CASE=3"
+        ],
+        "toolchain": {
+          "clang": "clang version 23.1.4",
+          "linker": "LLD 23.1.4 (compatible with GNU linkers)",
+          "objcopy": "llvm-objcopy, compatible with GNU objcopy"
+        },
+        "sources": {
+          "tests/native_depthwise_probe.c": "1618e582f5445ad27914b568aebf542a7e6f91f92f2952cced1f7ff5a06433c2",
+          "tests/resident_graph_entry.S": "bb0b48aaf26908b7feccb7eacac98a93bfa1e483cb3cc84a25c060c60f5f1c14",
+          "tests/landmark_common.h": "e2e922baaf80e217350ee3926e445449430ccbdb7cf3f55ed8409d73e89909bb",
+          "src/framenpu/sdk/include/framenpu.h": "4e65f4b8fb82586428a810714d91540685cc4895810ad5bb753b178e1db62754",
+          "src/framenpu/sdk/include/fnpu_readback.h": "4c5fd740bcc9269a64d7923d51cedd11bda2a1b4ed5430dcd796332e20a8f820",
+          "src/framenpu/sdk/link.ld": "c0b7dd53a7e254de549280ead79f303db3ab657e13e8565e5be3852c29a08e82"
+        }
+      }
+    ]
+  },
+  "crops": [
+    {
+      "crop": "calibration_controller",
+      "report_sha256": "bcd46625b3f07d0508234b62e6089a63d6b38212d08881e81c602e4a9f287156",
+      "audits": {
+        "restored_jobs": 590,
+        "restored_hmx_jobs": 588
+      },
+      "arena_restored": true,
+      "health_service_unchanged": true,
+      "outputs": {
+        "convdwclip_0": {
+          "0": "5c65a4794bbef57b6c80ca21698cf8500f97c3d84122fccbd2e25cd32b7ee4cf",
+          "1": "9c6bc91f586211716f93548e291990752d1a8f1990c9dd85779fc546c6de0094",
+          "2": "fedc86903d89909ce82e63fd13decd960c837376b3faface33660c1f6000a0b0"
+        },
+        "convdwclip_1": {
+          "0": "3b4ba2a2fd0b71d2a22ab7f616a9ff33e7abbb507f11c2540ecb016c5f74a4fb",
+          "1": "8a81b119e0cdd463df1c6dffe67ccd737cb6d120fac6fde5c6fec1d0a37cef98",
+          "2": "c238f8a7ebd8e577b24808851a0de8ea50cb23da269ec057315079ba1ecc54c5"
+        },
+        "convdwclip_8": {
+          "0": "26242e4a988104bfdf24410401f5706d6db4df585ea8e236c844b7c93b626b23",
+          "1": "3b2b8ee0dbea74f6055814ba664d9a4c73972665f25e63788296dd949a0a37a1",
+          "2": "0a08cf257ea0b2e8715f398ff03e0256a2dd9cd92fc1c3f9b4105b71ed36b149"
+        },
+        "convdwclip_12": {
+          "0": "31441d951f8dc2442001065f5b98fd11318066815c98afd94ce607005a62fb65",
+          "1": "88725c448f214039f474470300249a3835da1fd820977e7d5dda42223f258768",
+          "2": "06aafabb1dd41ce30685243e0f42e14b0fafb18b4dab7e9d49b5bc1b572c6c9b"
+        }
+      }
+    },
+    {
+      "crop": "calibration_open",
+      "report_sha256": "4dabababa20c6c404d378a4e051ce21f2424bf6d03de657cbe9d6ceb046eb9ff",
+      "audits": {
+        "restored_jobs": 590,
+        "restored_hmx_jobs": 588
+      },
+      "arena_restored": true,
+      "health_service_unchanged": true,
+      "outputs": {
+        "convdwclip_0": {
+          "0": "ebdb4e98d3c2e2f877e7126dad1b18059571d1ffd6771dc43c173923df96b7a6",
+          "1": "e1898d90a68c17b30a3d463507c33c4272ad4f968c3c65a6e5423cf45eccea15",
+          "2": "ded4d29449e559aafddc33fdc54bbf7e897bb37f8e6937b9e25174e696616626"
+        },
+        "convdwclip_1": {
+          "0": "af8edf9d6659f2222e678e6f0ca111a80d8f2551d39c6c8fa610a4e1cc6427ad",
+          "1": "8366c3784c109cb96a2d5e94e6ca07a4b01638fb19f8a88dfc059a6be3a5cc59",
+          "2": "d35a2df6673d75eb170d40c1f3d7fbf30a909f9ba5cbc943421bc8adb429566c"
+        },
+        "convdwclip_8": {
+          "0": "1b23ae70308077c6647696a6f85419d6309a4de62845fb1f34cc412fc82d8e32",
+          "1": "0ba094301b0328ad7697902330f82c304466eb351b41f63dbafd8a468208c51e",
+          "2": "fc43b6d942578301b3a711198b838254373a7cc3ecce6eddc8c7060cbeb0d8cd"
+        },
+        "convdwclip_12": {
+          "0": "3d168f83f1cd470176e745f15c162c25f13da011cae8a51986344d189dbf850e",
+          "1": "3d8fcbe9cbfc6fa5924b8c6b2a9263fa7c5fb7990f8b35b46d84985627e0120f",
+          "2": "20584e6c266c13590789a0d23107307e11d6675cdead41bc7d846bdd55ea1bfd"
+        }
+      }
+    },
+    {
+      "crop": "heldout_left_controller",
+      "report_sha256": "e376611f6d86bbb8cef1d1a36edcc1a3816b7eba70fea6ec9381732f80a4378c",
+      "audits": {
+        "restored_jobs": 590,
+        "restored_hmx_jobs": 588
+      },
+      "arena_restored": true,
+      "health_service_unchanged": true,
+      "outputs": {
+        "convdwclip_0": {
+          "0": "276e0449c0ca0c8664cf532f06325ae3cddead0cedb76dcb1dda062d186450f0",
+          "1": "b4f5032104e682b058aba8d47620dd5fdb306b8f53f338523be50e81254fdabd",
+          "2": "9bcb9e8a8515eb82d7523a67a8e269827c1d2ea732721ff09a218ce146a86685"
+        },
+        "convdwclip_1": {
+          "0": "98ed1b1f81857fe495e30abdcb199decf6e90c1294cbd2ffc25d1d91a2868b41",
+          "1": "5aedf9c04874b5d84991a0087668a10a1cd99ce822027630fec6a1d72f708d3a",
+          "2": "d7aaf0077b18b64b7fb8c982f53ddfbab1a2edbd99540b5f52e724f47bce6e30"
+        },
+        "convdwclip_8": {
+          "0": "6eef48b8fc009b438f76ff987a1e94ad093cfc9366235bb0201f485902a062f8",
+          "1": "878339109411c8a1c65d7b654e04349822a26cc897f66ff494008875fb2288f8",
+          "2": "671a4a3e949a8e696ad50fb41d7c43a49b1a368ded044cc6c936a30e6acd206d"
+        },
+        "convdwclip_12": {
+          "0": "071ba4ef5d00c2a9873ac36d95c96d349d960a4bc762e6c29eaa3147b0dae2f6",
+          "1": "37ecb5dc6c0983bf83d991af38904dfc45b18667de005c7dd57cb8504dd6104b",
+          "2": "983fe506fd3cab649eb61bab7da02826df089ebfe83b6aa1335182d2000eb86c"
+        }
+      }
+    },
+    {
+      "crop": "heldout_right_controller",
+      "report_sha256": "0e84d554d99b6d123551c2c9001dca525164236c9939b7b905e9d488ad978698",
+      "audits": {
+        "restored_jobs": 590,
+        "restored_hmx_jobs": 588
+      },
+      "arena_restored": true,
+      "health_service_unchanged": true,
+      "outputs": {
+        "convdwclip_0": {
+          "0": "08a27eab32ce67a60e873fdbcb1d1a7cea15da85aff9abeb49c198853e5ca755",
+          "1": "744d6cdb7fbef80ecd210006fa8703cd73070b6ab8fd66857ac87ece56ee6595",
+          "2": "4636a5f82a55669ef7675ebb88d2cfb9ccdfe8d1a2905a27ae5d7bdf5c91df2f"
+        },
+        "convdwclip_1": {
+          "0": "159d4bbbb6031a6798b361e4061a2a14b6edc9c9b4f12d929c1f1fb088bcde10",
+          "1": "0755133930e17afd44e316b927b20018ecd888114afabddfafba4f1fe6da6f84",
+          "2": "767fa8b91f8cbf4731685fde85226e691b4885e1c17ccfa0e2a4883c527176be"
+        },
+        "convdwclip_8": {
+          "0": "96ca61b75f553b26deb1d322c5bdbeebaa8e449d0715e58213e4dbf2fbef8c5b",
+          "1": "fe7aa2529d661ae29d94d0431a32dd5bf0ea68ea2d6fa8a99c3b239161683247",
+          "2": "a6694df24e7d7d443a52cc4f8770b133c8625479e9a1a53f1b25e68703ea64ac"
+        },
+        "convdwclip_12": {
+          "0": "5d5315a4a18a8edf02697330719685828626903b55f6a48d158b990efda496ce",
+          "1": "8e9bb593ce5672359d0675483a5559a2096d5266585b4dad9e8f63e7600666ec",
+          "2": "6fa370a7f1956fb7f8a26da2e3c8df58bceb8faa59365015dc78d6597f3073a3"
+        }
+      }
+    }
+  ],
+  "layers": [
+    {
+      "name": "convdwclip_0",
+      "input_shape": [
+        24,
+        112,
+        112
+      ],
+      "output_shape": [
+        24,
+        112,
+        112
+      ],
+      "kernel": [
+        3,
+        3
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "modes": [
+        {
+          "mode": 0,
+          "name": "fp32_original_qfloat",
+          "time_ms_per_whole_layer": {
+            "body_ms": {
+              "mean": 22.658893229166665,
+              "median": 22.64841145833333,
+              "min": 22.44744791666667,
+              "max": 22.891302083333333
+            },
+            "stage_ms": {
+              "mean": 13.943333333333333,
+              "median": 13.94046875,
+              "min": 13.7321875,
+              "max": 14.160208333333333
+            },
+            "gather_arithmetic_ms": {
+              "mean": 3.1532161458333334,
+              "median": 3.1532552083333334,
+              "min": 3.1529166666666666,
+              "max": 3.1534375000000003
+            },
+            "store_check_ms": {
+              "mean": 2.2527734375,
+              "median": 2.2521354166666665,
+              "min": 2.2508854166666667,
+              "max": 2.2559375
+            },
+            "wrapper_ms": {
+              "mean": 62.133190104166665,
+              "median": 62.082890625000005,
+              "min": 61.8590625,
+              "max": 62.50791666666667
+            },
+            "host_submit_ms": {
+              "mean": 269.48636750000003,
+              "median": 268.92073800000003,
+              "min": 251.938525,
+              "max": 288.16546900000003
+            },
+            "other_body_ms": {
+              "mean": 3.3095703125,
+              "median": 3.308151041666666,
+              "min": 3.3002083333333334,
+              "max": 3.3217708333333333
+            }
+          },
+          "host_padding_conversion_ms": {
+            "mean": 0.33225125,
+            "median": 0.323696,
+            "min": 0.273905,
+            "max": 0.407708
+          },
+          "vs_local_fp32": {
+            "max_abs": 1.7642974853515625e-05,
+            "rms_over_all_values": 1.2592734655492494e-06,
+            "values": 1204224,
+            "different_fp32_values": 778267
+          },
+          "vs_precision_matched_local": {
+            "max_abs": 1.7642974853515625e-05,
+            "rms_over_all_values": 1.2592734655492494e-06,
+            "values": 1204224,
+            "different_fp32_values": 778267
+          },
+          "vs_ncnn": {
+            "max_abs": 1.7642974853515625e-05,
+            "rms_over_all_values": 1.2592734655492494e-06,
+            "values": 1204224,
+            "different_fp32_values": 778267
+          },
+          "vs_control": {
+            "max_abs": 0.0,
+            "rms_over_all_values": 0.0,
+            "values": 1204224,
+            "different_fp32_values": 0
+          }
+        },
+        {
+          "mode": 1,
+          "name": "fp32_persistent_qfloat32",
+          "time_ms_per_whole_layer": {
+            "body_ms": {
+              "mean": 22.251171875,
+              "median": 22.28875,
+              "min": 22.1,
+              "max": 22.3271875
+            },
+            "stage_ms": {
+              "mean": 13.862591145833333,
+              "median": 13.893229166666666,
+              "min": 13.72671875,
+              "max": 13.9371875
+            },
+            "gather_arithmetic_ms": {
+              "mean": 2.8719791666666667,
+              "median": 2.8719791666666667,
+              "min": 2.8715625,
+              "max": 2.8723958333333335
+            },
+            "store_check_ms": {
+              "mean": 2.255638020833333,
+              "median": 2.2554947916666666,
+              "min": 2.2541666666666664,
+              "max": 2.2573958333333333
+            },
+            "wrapper_ms": {
+              "mean": 61.7866796875,
+              "median": 61.792421875,
+              "min": 61.546875,
+              "max": 62.015
+            },
+            "host_submit_ms": {
+              "mean": 264.9006675,
+              "median": 269.6100375,
+              "min": 244.406459,
+              "max": 275.976136
+            },
+            "other_body_ms": {
+              "mean": 3.260963541666667,
+              "median": 3.263020833333334,
+              "min": 3.245989583333334,
+              "max": 3.271822916666667
+            }
+          },
+          "host_padding_conversion_ms": {
+            "mean": 0.320246,
+            "median": 0.313592,
+            "min": 0.300469,
+            "max": 0.353331
+          },
+          "vs_local_fp32": {
+            "max_abs": 2.002716064453125e-05,
+            "rms_over_all_values": 1.2548670446151189e-06,
+            "values": 1204224,
+            "different_fp32_values": 784997
+          },
+          "vs_precision_matched_local": {
+            "max_abs": 2.002716064453125e-05,
+            "rms_over_all_values": 1.2548670446151189e-06,
+            "values": 1204224,
+            "different_fp32_values": 784997
+          },
+          "vs_ncnn": {
+            "max_abs": 2.002716064453125e-05,
+            "rms_over_all_values": 1.2548670446151189e-06,
+            "values": 1204224,
+            "different_fp32_values": 784997
+          },
+          "vs_control": {
+            "max_abs": 1.71661376953125e-05,
+            "rms_over_all_values": 6.668218435361704e-07,
+            "values": 1204224,
+            "different_fp32_values": 107684
+          }
+        },
+        {
+          "mode": 2,
+          "name": "fp16_persistent_qfloat32",
+          "time_ms_per_whole_layer": {
+            "body_ms": {
+              "mean": 18.547903645833333,
+              "median": 18.556614583333335,
+              "min": 18.432395833333334,
+              "max": 18.645989583333332
+            },
+            "stage_ms": {
+              "mean": 11.139388020833334,
+              "median": 11.15109375,
+              "min": 11.034010416666666,
+              "max": 11.221354166666666
+            },
+            "gather_arithmetic_ms": {
+              "mean": 1.8304036458333333,
+              "median": 1.8298177083333333,
+              "min": 1.8198958333333333,
+              "max": 1.8420833333333333
+            },
+            "store_check_ms": {
+              "mean": 2.2663411458333336,
+              "median": 2.265885416666667,
+              "min": 2.2650520833333334,
+              "max": 2.2685416666666667
+            },
+            "wrapper_ms": {
+              "mean": 57.96221354166667,
+              "median": 58.01184895833333,
+              "min": 57.72838541666667,
+              "max": 58.09677083333333
+            },
+            "host_submit_ms": {
+              "mean": 248.6922225,
+              "median": 245.88955800000002,
+              "min": 233.280796,
+              "max": 269.708978
+            },
+            "other_body_ms": {
+              "mean": 3.3117708333333336,
+              "median": 3.313854166666667,
+              "min": 3.2909375,
+              "max": 3.3284375
+            }
+          },
+          "host_padding_conversion_ms": {
+            "mean": 0.311053,
+            "median": 0.3270815,
+            "min": 0.253124,
+            "max": 0.336925
+          },
+          "vs_local_fp32": {
+            "max_abs": 0.02897930145263672,
+            "rms_over_all_values": 0.0022203984054003896,
+            "values": 1204224,
+            "different_fp32_values": 911263
+          },
+          "vs_precision_matched_local": {
+            "max_abs": 1.430511474609375e-05,
+            "rms_over_all_values": 1.0940820937658253e-06,
+            "values": 1204224,
+            "different_fp32_values": 793392
+          },
+          "vs_ncnn": {
+            "max_abs": 0.02897930145263672,
+            "rms_over_all_values": 0.0022203984054003896,
+            "values": 1204224,
+            "different_fp32_values": 911263
+          },
+          "vs_control": {
+            "max_abs": 0.028977394104003906,
+            "rms_over_all_values": 0.002220399123235269,
+            "values": 1204224,
+            "different_fp32_values": 911053
+          }
+        }
+      ],
+      "fp32_persistent_body_speedup": 1.0183235901667163,
+      "fp16_body_speedup": 1.2216417370842252
+    },
+    {
+      "name": "convdwclip_1",
+      "input_shape": [
+        64,
+        112,
+        112
+      ],
+      "output_shape": [
+        64,
+        56,
+        56
+      ],
+      "kernel": [
+        3,
+        3
+      ],
+      "stride": [
+        2,
+        2
+      ],
+      "modes": [
+        {
+          "mode": 0,
+          "name": "fp32_original_qfloat",
+          "time_ms_per_whole_layer": {
+            "body_ms": {
+              "mean": 29.2666015625,
+              "median": 29.290625,
+              "min": 29.145625,
+              "max": 29.33953125
+            },
+            "stage_ms": {
+              "mean": 18.9509765625,
+              "median": 18.980182291666665,
+              "min": 18.81328125,
+              "max": 19.030260416666668
+            },
+            "gather_arithmetic_ms": {
+              "mean": 2.3025,
+              "median": 2.3015625,
+              "min": 2.2997916666666667,
+              "max": 2.3070833333333334
+            },
+            "store_check_ms": {
+              "mean": 3.1187239583333333,
+              "median": 3.1183854166666665,
+              "min": 3.1166666666666667,
+              "max": 3.1214583333333334
+            },
+            "wrapper_ms": {
+              "mean": 134.27975260416667,
+              "median": 134.318984375,
+              "min": 134.07130208333334,
+              "max": 134.40973958333333
+            },
+            "host_submit_ms": {
+              "mean": 665.19657275,
+              "median": 663.1831999999999,
+              "min": 636.965948,
+              "max": 697.453943
+            },
+            "other_body_ms": {
+              "mean": 4.894401041666667,
+              "median": 4.8934114583333335,
+              "min": 4.884895833333333,
+              "max": 4.905885416666667
+            }
+          },
+          "host_padding_conversion_ms": {
+            "mean": 0.8624825,
+            "median": 0.8549169999999999,
+            "min": 0.724582,
+            "max": 1.015514
+          },
+          "vs_local_fp32": {
+            "max_abs": 1.0013580322265625e-05,
+            "rms_over_all_values": 3.327914070757819e-07,
+            "values": 802816,
+            "different_fp32_values": 358535
+          },
+          "vs_precision_matched_local": {
+            "max_abs": 1.0013580322265625e-05,
+            "rms_over_all_values": 3.327914070757819e-07,
+            "values": 802816,
+            "different_fp32_values": 358535
+          },
+          "vs_ncnn": {
+            "max_abs": 1.0013580322265625e-05,
+            "rms_over_all_values": 3.327914070757819e-07,
+            "values": 802816,
+            "different_fp32_values": 358535
+          },
+          "vs_control": {
+            "max_abs": 0.0,
+            "rms_over_all_values": 0.0,
+            "values": 802816,
+            "different_fp32_values": 0
+          }
+        },
+        {
+          "mode": 1,
+          "name": "fp32_persistent_qfloat32",
+          "time_ms_per_whole_layer": {
+            "body_ms": {
+              "mean": 29.060963541666666,
+              "median": 29.046822916666667,
+              "min": 28.968072916666667,
+              "max": 29.182135416666668
+            },
+            "stage_ms": {
+              "mean": 18.931692708333333,
+              "median": 18.911458333333336,
+              "min": 18.848229166666666,
+              "max": 19.055625
+            },
+            "gather_arithmetic_ms": {
+              "mean": 2.2486067708333333,
+              "median": 2.2484895833333334,
+              "min": 2.247239583333333,
+              "max": 2.250208333333333
+            },
+            "store_check_ms": {
+              "mean": 3.0565234375,
+              "median": 3.0563281250000003,
+              "min": 3.0551041666666667,
+              "max": 3.0583333333333336
+            },
+            "wrapper_ms": {
+              "mean": 134.17891927083332,
+              "median": 134.11848958333331,
+              "min": 134.09244791666666,
+              "max": 134.38625
+            },
+            "host_submit_ms": {
+              "mean": 641.75908675,
+              "median": 641.0276220000001,
+              "min": 614.54374,
+              "max": 670.437363
+            },
+            "other_body_ms": {
+              "mean": 4.824140625,
+              "median": 4.823229166666667,
+              "min": 4.81453125,
+              "max": 4.835572916666666
+            }
+          },
+          "host_padding_conversion_ms": {
+            "mean": 0.76202775,
+            "median": 0.7428095,
+            "min": 0.559372,
+            "max": 1.00312
+          },
+          "vs_local_fp32": {
+            "max_abs": 1.0013580322265625e-05,
+            "rms_over_all_values": 3.3771549999825677e-07,
+            "values": 802816,
+            "different_fp32_values": 390259
+          },
+          "vs_precision_matched_local": {
+            "max_abs": 1.0013580322265625e-05,
+            "rms_over_all_values": 3.3771549999825677e-07,
+            "values": 802816,
+            "different_fp32_values": 390259
+          },
+          "vs_ncnn": {
+            "max_abs": 1.0013580322265625e-05,
+            "rms_over_all_values": 3.3771549999825677e-07,
+            "values": 802816,
+            "different_fp32_values": 390259
+          },
+          "vs_control": {
+            "max_abs": 7.62939453125e-06,
+            "rms_over_all_values": 1.9944935404419756e-07,
+            "values": 802816,
+            "different_fp32_values": 90896
+          }
+        },
+        {
+          "mode": 2,
+          "name": "fp16_persistent_qfloat32",
+          "time_ms_per_whole_layer": {
+            "body_ms": {
+              "mean": 24.661992187499997,
+              "median": 24.649921874999997,
+              "min": 24.5828125,
+              "max": 24.7653125
+            },
+            "stage_ms": {
+              "mean": 15.094583333333333,
+              "median": 15.08140625,
+              "min": 15.041770833333333,
+              "max": 15.17375
+            },
+            "gather_arithmetic_ms": {
+              "mean": 1.4774088541666668,
+              "median": 1.4752343749999999,
+              "min": 1.46828125,
+              "max": 1.4908854166666667
+            },
+            "store_check_ms": {
+              "mean": 3.009557291666667,
+              "median": 3.009557291666667,
+              "min": 3.009479166666667,
+              "max": 3.009635416666667
+            },
+            "wrapper_ms": {
+              "mean": 60.793255208333335,
+              "median": 60.79236979166667,
+              "min": 60.69583333333333,
+              "max": 60.89244791666667
+            },
+            "host_submit_ms": {
+              "mean": 239.83796375,
+              "median": 234.8232625,
+              "min": 213.018674,
+              "max": 276.68665599999997
+            },
+            "other_body_ms": {
+              "mean": 5.080442708333333,
+              "median": 5.0744010416666665,
+              "min": 5.059322916666667,
+              "max": 5.113645833333333
+            }
+          },
+          "host_padding_conversion_ms": {
+            "mean": 0.71734,
+            "median": 0.707027,
+            "min": 0.626978,
+            "max": 0.828328
+          },
+          "vs_local_fp32": {
+            "max_abs": 0.011188507080078125,
+            "rms_over_all_values": 0.0004860016723626303,
+            "values": 802816,
+            "different_fp32_values": 479517
+          },
+          "vs_precision_matched_local": {
+            "max_abs": 4.5299530029296875e-06,
+            "rms_over_all_values": 2.621269952747353e-07,
+            "values": 802816,
+            "different_fp32_values": 412059
+          },
+          "vs_ncnn": {
+            "max_abs": 0.011188507080078125,
+            "rms_over_all_values": 0.0004860016723626303,
+            "values": 802816,
+            "different_fp32_values": 479517
+          },
+          "vs_control": {
+            "max_abs": 0.011187076568603516,
+            "rms_over_all_values": 0.00048599878874337093,
+            "values": 802816,
+            "different_fp32_values": 479102
+          }
+        }
+      ],
+      "fp32_persistent_body_speedup": 1.0070760909402916,
+      "fp16_body_speedup": 1.1867087354497607
+    },
+    {
+      "name": "convdwclip_8",
+      "input_shape": [
+        288,
+        14,
+        14
+      ],
+      "output_shape": [
+        288,
+        14,
+        14
+      ],
+      "kernel": [
+        5,
+        5
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "modes": [
+        {
+          "mode": 0,
+          "name": "fp32_original_qfloat",
+          "time_ms_per_whole_layer": {
+            "body_ms": {
+              "mean": 46.1068359375,
+              "median": 46.143046875,
+              "min": 45.931354166666665,
+              "max": 46.209895833333334
+            },
+            "stage_ms": {
+              "mean": 27.162122395833336,
+              "median": 27.187994791666668,
+              "min": 27.02359375,
+              "max": 27.24890625
+            },
+            "gather_arithmetic_ms": {
+              "mean": 3.226432291666667,
+              "median": 3.226432291666667,
+              "min": 3.2261458333333333,
+              "max": 3.22671875
+            },
+            "store_check_ms": {
+              "mean": 3.609505208333333,
+              "median": 3.609583333333333,
+              "min": 3.6090104166666666,
+              "max": 3.60984375
+            },
+            "wrapper_ms": {
+              "mean": 105.3801953125,
+              "median": 105.40830729166666,
+              "min": 105.11859375,
+              "max": 105.58557291666666
+            },
+            "host_submit_ms": {
+              "mean": 388.7484815,
+              "median": 376.0409055,
+              "min": 370.068014,
+              "max": 432.844101
+            },
+            "other_body_ms": {
+              "mean": 12.108776041666667,
+              "median": 12.117734375000001,
+              "min": 12.072604166666666,
+              "max": 12.12703125
+            }
+          },
+          "host_padding_conversion_ms": {
+            "mean": 0.518878,
+            "median": 0.521299,
+            "min": 0.401977,
+            "max": 0.630937
+          },
+          "vs_local_fp32": {
+            "max_abs": 3.337860107421875e-06,
+            "rms_over_all_values": 1.5135907090795676e-07,
+            "values": 225792,
+            "different_fp32_values": 77736
+          },
+          "vs_precision_matched_local": {
+            "max_abs": 3.337860107421875e-06,
+            "rms_over_all_values": 1.5135907090795676e-07,
+            "values": 225792,
+            "different_fp32_values": 77736
+          },
+          "vs_ncnn": {
+            "max_abs": 3.337860107421875e-06,
+            "rms_over_all_values": 1.5135907090795676e-07,
+            "values": 225792,
+            "different_fp32_values": 77736
+          },
+          "vs_control": {
+            "max_abs": 0.0,
+            "rms_over_all_values": 0.0,
+            "values": 225792,
+            "different_fp32_values": 0
+          }
+        },
+        {
+          "mode": 1,
+          "name": "fp32_persistent_qfloat32",
+          "time_ms_per_whole_layer": {
+            "body_ms": {
+              "mean": 45.802981770833334,
+              "median": 45.807682291666666,
+              "min": 45.70432291666667,
+              "max": 45.892239583333335
+            },
+            "stage_ms": {
+              "mean": 27.2614453125,
+              "median": 27.270833333333336,
+              "min": 27.169427083333332,
+              "max": 27.3346875
+            },
+            "gather_arithmetic_ms": {
+              "mean": 2.763541666666667,
+              "median": 2.763541666666667,
+              "min": 2.763333333333333,
+              "max": 2.76375
+            },
+            "store_check_ms": {
+              "mean": 3.4557421875000003,
+              "median": 3.455729166666667,
+              "min": 3.453854166666667,
+              "max": 3.45765625
+            },
+            "wrapper_ms": {
+              "mean": 105.00803385416665,
+              "median": 105.02630208333332,
+              "min": 104.83161458333333,
+              "max": 105.14791666666666
+            },
+            "host_submit_ms": {
+              "mean": 385.900901,
+              "median": 384.0765065,
+              "min": 381.260757,
+              "max": 394.189834
+            },
+            "other_body_ms": {
+              "mean": 12.322252604166666,
+              "median": 12.319479166666666,
+              "min": 12.309791666666667,
+              "max": 12.340260416666666
+            }
+          },
+          "host_padding_conversion_ms": {
+            "mean": 0.482485,
+            "median": 0.48317449999999995,
+            "min": 0.430625,
+            "max": 0.532966
+          },
+          "vs_local_fp32": {
+            "max_abs": 3.337860107421875e-06,
+            "rms_over_all_values": 1.558275485599246e-07,
+            "values": 225792,
+            "different_fp32_values": 82307
+          },
+          "vs_precision_matched_local": {
+            "max_abs": 3.337860107421875e-06,
+            "rms_over_all_values": 1.558275485599246e-07,
+            "values": 225792,
+            "different_fp32_values": 82307
+          },
+          "vs_ncnn": {
+            "max_abs": 3.337860107421875e-06,
+            "rms_over_all_values": 1.558275485599246e-07,
+            "values": 225792,
+            "different_fp32_values": 82307
+          },
+          "vs_control": {
+            "max_abs": 1.9073486328125e-06,
+            "rms_over_all_values": 7.21645160047781e-08,
+            "values": 225792,
+            "different_fp32_values": 18999
+          }
+        },
+        {
+          "mode": 2,
+          "name": "fp16_persistent_qfloat32",
+          "time_ms_per_whole_layer": {
+            "body_ms": {
+              "mean": 44.939453125,
+              "median": 44.94450520833333,
+              "min": 44.89505208333333,
+              "max": 44.97375
+            },
+            "stage_ms": {
+              "mean": 26.3723828125,
+              "median": 26.378697916666667,
+              "min": 26.334947916666668,
+              "max": 26.3971875
+            },
+            "gather_arithmetic_ms": {
+              "mean": 2.7748307291666667,
+              "median": 2.775,
+              "min": 2.7739583333333333,
+              "max": 2.7753645833333334
+            },
+            "store_check_ms": {
+              "mean": 3.577278645833333,
+              "median": 3.5772916666666665,
+              "min": 3.5770833333333334,
+              "max": 3.577447916666667
+            },
+            "wrapper_ms": {
+              "mean": 104.25782552083334,
+              "median": 104.30031249999999,
+              "min": 104.09369791666667,
+              "max": 104.33697916666667
+            },
+            "host_submit_ms": {
+              "mean": 394.07429025,
+              "median": 397.0376625,
+              "min": 370.305805,
+              "max": 411.916031
+            },
+            "other_body_ms": {
+              "mean": 12.214960937499999,
+              "median": 12.215989583333332,
+              "min": 12.199322916666667,
+              "max": 12.228541666666667
+            }
+          },
+          "host_padding_conversion_ms": {
+            "mean": 0.50533575,
+            "median": 0.48484150000000004,
+            "min": 0.475987,
+            "max": 0.575673
+          },
+          "vs_local_fp32": {
+            "max_abs": 0.0025773048400878906,
+            "rms_over_all_values": 0.00012925553820530988,
+            "values": 225792,
+            "different_fp32_values": 103861
+          },
+          "vs_precision_matched_local": {
+            "max_abs": 3.0994415283203125e-06,
+            "rms_over_all_values": 1.6967887951329834e-07,
+            "values": 225792,
+            "different_fp32_values": 86426
+          },
+          "vs_ncnn": {
+            "max_abs": 0.0025773048400878906,
+            "rms_over_all_values": 0.00012925553820530988,
+            "values": 225792,
+            "different_fp32_values": 103861
+          },
+          "vs_control": {
+            "max_abs": 0.0025777816772460938,
+            "rms_over_all_values": 0.0001292559938769561,
+            "values": 225792,
+            "different_fp32_values": 103774
+          }
+        }
+      ],
+      "fp32_persistent_body_speedup": 1.006633938554196,
+      "fp16_body_speedup": 1.0259767916902083
+    },
+    {
+      "name": "convdwclip_12",
+      "input_shape": [
+        672,
+        7,
+        7
+      ],
+      "output_shape": [
+        672,
+        7,
+        7
+      ],
+      "kernel": [
+        5,
+        5
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "modes": [
+        {
+          "mode": 0,
+          "name": "fp32_original_qfloat",
+          "time_ms_per_whole_layer": {
+            "body_ms": {
+              "mean": 63.119700520833334,
+              "median": 63.10106770833333,
+              "min": 63.0828125,
+              "max": 63.19385416666667
+            },
+            "stage_ms": {
+              "mean": 31.880807291666667,
+              "median": 31.868333333333332,
+              "min": 31.84546875,
+              "max": 31.94109375
+            },
+            "gather_arithmetic_ms": {
+              "mean": 3.8560416666666666,
+              "median": 3.8561197916666665,
+              "min": 3.855625,
+              "max": 3.856302083333333
+            },
+            "store_check_ms": {
+              "mean": 4.018828125000001,
+              "median": 4.018385416666667,
+              "min": 4.018177083333334,
+              "max": 4.0203645833333335
+            },
+            "wrapper_ms": {
+              "mean": 201.04881510416666,
+              "median": 201.03411458333335,
+              "min": 200.94057291666667,
+              "max": 201.18645833333332
+            },
+            "host_submit_ms": {
+              "mean": 855.79041075,
+              "median": 858.1902055,
+              "min": 835.598663,
+              "max": 871.1825690000001
+            },
+            "other_body_ms": {
+              "mean": 23.364023437500002,
+              "median": 23.366901041666665,
+              "min": 23.339791666666667,
+              "max": 23.3825
+            }
+          },
+          "host_padding_conversion_ms": {
+            "mean": 1.15042375,
+            "median": 1.031142,
+            "min": 0.669683,
+            "max": 1.869728
+          },
+          "vs_local_fp32": {
+            "max_abs": 1.9073486328125e-06,
+            "rms_over_all_values": 8.884934559656463e-08,
+            "values": 131712,
+            "different_fp32_values": 35161
+          },
+          "vs_precision_matched_local": {
+            "max_abs": 1.9073486328125e-06,
+            "rms_over_all_values": 8.884934559656463e-08,
+            "values": 131712,
+            "different_fp32_values": 35161
+          },
+          "vs_ncnn": {
+            "max_abs": 1.9073486328125e-06,
+            "rms_over_all_values": 8.884934559656463e-08,
+            "values": 131712,
+            "different_fp32_values": 35161
+          },
+          "vs_control": {
+            "max_abs": 0.0,
+            "rms_over_all_values": 0.0,
+            "values": 131712,
+            "different_fp32_values": 0
+          }
+        },
+        {
+          "mode": 1,
+          "name": "fp32_persistent_qfloat32",
+          "time_ms_per_whole_layer": {
+            "body_ms": {
+              "mean": 62.78587239583333,
+              "median": 62.81135416666666,
+              "min": 62.58713541666667,
+              "max": 62.93364583333333
+            },
+            "stage_ms": {
+              "mean": 31.862643229166665,
+              "median": 31.882734375,
+              "min": 31.696979166666665,
+              "max": 31.988125
+            },
+            "gather_arithmetic_ms": {
+              "mean": 3.263424479166667,
+              "median": 3.263463541666667,
+              "min": 3.2632291666666666,
+              "max": 3.263541666666667
+            },
+            "store_check_ms": {
+              "mean": 4.251067708333333,
+              "median": 4.251145833333333,
+              "min": 4.250416666666667,
+              "max": 4.2515625
+            },
+            "wrapper_ms": {
+              "mean": 200.90506510416668,
+              "median": 200.82989583333332,
+              "min": 200.74973958333334,
+              "max": 201.21072916666668
+            },
+            "host_submit_ms": {
+              "mean": 883.75776175,
+              "median": 880.8720225,
+              "min": 845.363599,
+              "max": 927.923403
+            },
+            "other_body_ms": {
+              "mean": 23.408736979166665,
+              "median": 23.40911458333333,
+              "min": 23.375572916666666,
+              "max": 23.44114583333333
+            }
+          },
+          "host_padding_conversion_ms": {
+            "mean": 0.92722225,
+            "median": 0.8926244999999999,
+            "min": 0.691038,
+            "max": 1.232602
+          },
+          "vs_local_fp32": {
+            "max_abs": 1.9073486328125e-06,
+            "rms_over_all_values": 9.203835962785182e-08,
+            "values": 131712,
+            "different_fp32_values": 37517
+          },
+          "vs_precision_matched_local": {
+            "max_abs": 1.9073486328125e-06,
+            "rms_over_all_values": 9.203835962785182e-08,
+            "values": 131712,
+            "different_fp32_values": 37517
+          },
+          "vs_ncnn": {
+            "max_abs": 1.9073486328125e-06,
+            "rms_over_all_values": 9.203835962785182e-08,
+            "values": 131712,
+            "different_fp32_values": 37517
+          },
+          "vs_control": {
+            "max_abs": 1.1920928955078125e-06,
+            "rms_over_all_values": 4.740286031094986e-08,
+            "values": 131712,
+            "different_fp32_values": 10475
+          }
+        },
+        {
+          "mode": 2,
+          "name": "fp16_persistent_qfloat32",
+          "time_ms_per_whole_layer": {
+            "body_ms": {
+              "mean": 61.43391927083333,
+              "median": 61.51427083333333,
+              "min": 61.12328125,
+              "max": 61.58385416666667
+            },
+            "stage_ms": {
+              "mean": 30.670598958333333,
+              "median": 30.736354166666665,
+              "min": 30.43640625,
+              "max": 30.77328125
+            },
+            "gather_arithmetic_ms": {
+              "mean": 3.289296875,
+              "median": 3.289609375,
+              "min": 3.287864583333333,
+              "max": 3.2901041666666666
+            },
+            "store_check_ms": {
+              "mean": 4.181979166666666,
+              "median": 4.181979166666666,
+              "min": 4.181770833333333,
+              "max": 4.1821874999999995
+            },
+            "wrapper_ms": {
+              "mean": 199.8386328125,
+              "median": 199.94213541666664,
+              "min": 199.42604166666666,
+              "max": 200.04421875
+            },
+            "host_submit_ms": {
+              "mean": 894.5629974999999,
+              "median": 889.4550065,
+              "min": 863.783378,
+              "max": 935.558599
+            },
+            "other_body_ms": {
+              "mean": 23.292044270833333,
+              "median": 23.30645833333333,
+              "min": 23.216822916666665,
+              "max": 23.338437499999998
+            }
+          },
+          "host_padding_conversion_ms": {
+            "mean": 0.9851645,
+            "median": 0.960906,
+            "min": 0.916301,
+            "max": 1.102545
+          },
+          "vs_local_fp32": {
+            "max_abs": 0.0019943714141845703,
+            "rms_over_all_values": 9.945191171125507e-05,
+            "values": 131712,
+            "different_fp32_values": 47612
+          },
+          "vs_precision_matched_local": {
+            "max_abs": 2.384185791015625e-06,
+            "rms_over_all_values": 9.836417492557544e-08,
+            "values": 131712,
+            "different_fp32_values": 39020
+          },
+          "vs_ncnn": {
+            "max_abs": 0.0019943714141845703,
+            "rms_over_all_values": 9.945191171125507e-05,
+            "values": 131712,
+            "different_fp32_values": 47612
+          },
+          "vs_control": {
+            "max_abs": 0.001993894577026367,
+            "rms_over_all_values": 9.94522536248222e-05,
+            "values": 131712,
+            "different_fp32_values": 47574
+          }
+        }
+      ],
+      "fp32_persistent_body_speedup": 1.005316930581061,
+      "fp16_body_speedup": 1.0274405616637967
+    }
+  ],
+  "total_values_compared": 7093632,
+  "saved_output_files": 48,
+  "final_matrix_audits": {
+    "restored_jobs": 2487,
+    "restored_hmx_jobs": 2443
+  },
+  "guarded_faults_final_matrix": 15,
+  "rejections_final_matrix": 15,
+  "max_wrapper_ms_layer_jobs": 2.984375,
+  "sdk": {
+    "report_sha256": "222485d3bff96418b2716cc526ec4a23b61e0e41cbab9b7a30eef663219f067f",
+    "audits": {
+      "restored_jobs": 72,
+      "restored_hmx_jobs": 38
+    },
+    "passed": true
+  },
+  "final_health": {
+    "state": {
+      "abi": 9,
+      "control": [
+        1,
+        0,
+        1
+      ],
+      "callback": 0,
+      "poisoned": false
+    },
+    "firmware_code_prefix_bytes": 114688,
+    "firmware_code_prefix_sha256": "55679e13486357627ea22e494b25342acd9d24d73450f3f28eb1113b82c71b95",
+    "power_configuration_sha256": "2405bda200a51fd0bd699568e8415e53ba7b631cbaa9d4812c656b7240159bbd",
+    "power_restored": true
+  },
+  "service_unchanged": true,
+  "automatic_recovery": false,
+  "development": {
+    "initial_numeric_stop": "The initial IEEE oracle rejected an all-zero mixed result after its audited restoration had completed. No native fault or poison. A read-only full arena/health comparison against the failed-run pre-snapshot passed before diagnostic captures; QFloat worked while every IEEE variant zeroed.",
+    "initial_report_sha256": "81193f59d9b77e3740b6df017b8991f2e545ab00a259c0158e230069d44fe1c5",
+    "diagnostic_report_sha256": "ef304b5419a25afbb1a44427ae0d5d2d990bd8d0e305ab4ed3afd4e23260a368",
+    "generic_pilot": "Earlier generic kernels passed on the calibration crop. Their timings are superseded by the source-pinned geometry-specialized/VTCM-counter matrix; no failed or generic timing sample enters the final layer table.",
+    "reboots_or_service_restarts": 0
+  },
+  "offline_tests": 212,
+  "conclusion": "Precision relaxation is usable through supported QFloat instructions, but these isolated kernels show modest body-time gains only: about 1.2x on large maps and 1.03x on small maps for half storage. Deferred FP32-input conversion alone gains at most a few percent of total body time here. Stage/other work dominates. IEEE-specific arithmetic cannot be used in the present configuration.",
+  "next": "Prototype channel-blocked depthwise tiles that fill vector lanes and reuse staged rows/coefficient tiles in VTCM. Compare equal layouts/tiling with FP32 and FP16 storage, retaining QFloat32 reduction, before deciding precision. Convolution/HMX staging and fusion still require redesign to approach 17-25ms native per crop.",
+  "limitations": [
+    "Isolated padded/staged CHW kernels, not the optimized resident row-tiling executor. Ratios compare arithmetic variants of the SAME probe, not a speedup of the current graph.",
+    "Total body includes prototype staging/coefficient/bookkeeping costs and instrumentation; scalar stack accesses remain. Component timings describe this probe schedule, not a hardware execution floor.",
+    "One pass per crop/mode, three register-slope samples per count, one boot; no randomized repeated layer timing or sustained thermal qualification.",
+    "Half inputs add local max deviation up to 0.0289793 versus FP32/ncnn on these crops; matched-precision arithmetic error is much smaller. No task-level acceptance threshold, whole-graph four-head accuracy or tracking validation is established.",
+    "All four crops share one recording/scene. Padding/quantization preparation and repeated cached job publication are outside kernel body and separately measured; results are not end-to-end frame latency."
+  ]
+}

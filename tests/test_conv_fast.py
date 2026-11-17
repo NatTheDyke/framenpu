@@ -48,6 +48,9 @@ class ConvFastBuildTests(unittest.TestCase):
             self.assertNotRegex(text, r"vmemu?\((r29|r30)")
             for function in ("rg_pack_unit", "rg_stem_unit", "hmx_rows"):
                 self.assertIn(f"<{function}>:", text)
+            # The separate bias operator is unreachable in a fused image.
+            self.assertNotIn("<rg_op_post>:", text)
+            self.assertIn("<rg_op_post>:", (folder / "tile/linked/disassembly.txt").read_text())
 
     def test_fused_path_requires_the_wide_reservation(self):
         with tempfile.TemporaryDirectory() as folder:

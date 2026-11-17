@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- Added public-weight HMX model feasibility accounting and distinct-operand
+  native probes. Packed streaming dominates the tested pipeline; a half-width
+  fused 3x3 candidate forecasts 47 ms of prepacked convolution work and still
+  needs reuse and training/accuracy validation. No new graph is integrated.
+- Added bounded native arithmetic and real-weight depthwise experiments.
+  Direct IEEE HVX variants return zeros on the tested configuration; supported
+  persistent QFloat32 reductions and FP16 storage pass arithmetic/range and
+  restoration checks on four crops. Isolated kernel gains are modest; no new
+  arithmetic is integrated into the graph or qualified for tracking accuracy.
+- Profiled fused resident host overhead without changing production execution:
+  ordinary API wall time averages 762 ms, including 498 ms native, 150 ms
+  Python state replay and 74 ms input checking/conversion/packing. All 48
+  frames preserve qualified head bits and restore cleanly. Added an opt-in
+  audited/ordinary profiling harness and three timing-accounting regressions.
+- Omitted the unreachable bias/clip operator and its dispatch branch from
+  fused convolution builds, reducing the linked image from 13,752 to 12,888
+  bytes. Four crops preserve all head bits; fault, teardown and SDK checks
+  pass. Non-fused images remain byte-identical.
 - Added an opt-in fused 1x1 convolution path
   (`--dw-reuse 6 --dw-row-tile --conv-fast`): the HMX operator adds bias and
   clips while storing each row, removing the separate bias unit, and packing
