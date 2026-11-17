@@ -1,5 +1,10 @@
 # HMX-oriented landmark model feasibility
 
+> **Update 2026-11-17:** the cost basis below (5.4 µs per streamed pair) is
+> superseded by resident VTCM costs. With them and a measured HVX FP16
+> depthwise kernel, the unchanged teacher forecasts at about 7-10 ms of
+> convolution, needing no retraining. See [TEACHER_HMX_HVX.md](TEACHER_HMX_HVX.md).
+
 HMX can execute the spatial work, but a model rewrite alone does not establish
 the required 20–30x improvement. On 2026-11-16, distinct-operand measurements
 showed that streaming packed operands dominates the tested pipeline. A smaller

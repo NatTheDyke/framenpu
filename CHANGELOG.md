@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Re-forecast the unchanged public teacher on HMX + HVX
+  ([TEACHER_HMX_HVX.md](docs/TEACHER_HMX_HVX.md)). Measured single-thread HVX
+  issue rates (1.84 GHz core; about 2 cycles per load, `valign` or QFloat16
+  multiply+add) and two FP16 depthwise probes over all 12 stride-1 teacher
+  depthwise layers. v2 (guard-column rows, pre-splatted coefficients, four
+  blocks per coefficient load) takes 1.76 ms, versus 8.36 ms for v1 and about
+  250 ms for the existing exact path. The teacher's convolution forecasts at
+  about 7-10 ms with no retraining. Activation traffic in the 112x112 stage,
+  job count, stride-2 depthwise and FP16 accuracy remain to be proven.
 - Added the v3 layer-chain executor prototype
   ([HMX_SPATIAL_BLOCK.md](docs/HMX_SPATIAL_BLOCK.md#v3-layer-chain-executor)).
   It runs whole fused 3x3+1x1 layers from runtime descriptors, with weights,

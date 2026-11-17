@@ -48,3 +48,6 @@ include evidence/hmx-spatial-block.json
 include evidence/vtcm-ownership.json
 include evidence/hmx-resident-block.json
 include evidence/hmx-layer-chain.json
+include evidence/hvx-depthwise-v1.json
+include evidence/hvx-depthwise-v2.json
+include evidence/hvx-issue-rate.json

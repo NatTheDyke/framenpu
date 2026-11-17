@@ -1,0 +1,147 @@
+{
+ "format": "framenpu-hvx-rate-probe",
+ "build": {
+  "format": "framenpu-hvx-rate-probe-build",
+  "bytes": 2664,
+  "sha256": "505d8546f90133056c791bfd4b87f6f74b52f282076f8ee45e5e5fe777a33dab",
+  "flags": [
+   "--target=hexagon",
+   "-mcpu=hexagonv75",
+   "-mhvx",
+   "-mhvx-length=128b",
+   "-Os",
+   "-ffreestanding",
+   "-fno-builtin",
+   "-fno-stack-protector",
+   "-fno-unwind-tables",
+   "-fno-asynchronous-unwind-tables",
+   "-ffp-contract=off",
+   "-mllvm",
+   "-spill-func-threshold=100",
+   "-mllvm",
+   "-spill-func-threshold-Os=100",
+   "-G0",
+   "-fno-jump-tables"
+  ],
+  "toolchain": {
+   "clang": "clang version 23.1.4",
+   "linker": "LLD 23.1.4 (compatible with GNU linkers)",
+   "objcopy": "llvm-objcopy, compatible with GNU objcopy"
+  },
+  "sources": {
+   "tests/resident_graph_entry.S": "bb0b48aaf26908b7feccb7eacac98a93bfa1e483cb3cc84a25c060c60f5f1c14",
+   "tests/hvx_rate_probe.c": "3ef69328f66ffeec888d91530aa5eafa9e8151fa1b73fd40017dcc74f4749f19",
+   "tests/landmark_common.h": "e2e922baaf80e217350ee3926e445449430ccbdb7cf3f55ed8409d73e89909bb",
+   "tests/hmx_block_layout.py": "ced35770431898d9a89255a801934a5896b6b5f7dcc71510ac60683612d1ac9b",
+   "src/framenpu/sdk/include/framenpu.h": "4e65f4b8fb82586428a810714d91540685cc4895810ad5bb753b178e1db62754",
+   "src/framenpu/sdk/include/fnpu_readback.h": "4c5fd740bcc9269a64d7923d51cedd11bda2a1b4ed5430dcd796332e20a8f820",
+   "src/framenpu/sdk/link.ld": "c0b7dd53a7e254de549280ead79f303db3ab657e13e8565e5be3852c29a08e82"
+  }
+ },
+ "audits": {
+  "restored_jobs": 47,
+  "restored_hmx_jobs": 45
+ },
+ "service_before": "MainPID=1015\nNRestarts=0\nActiveState=active\n",
+ "initial_health": {
+  "state": {
+   "abi": 9,
+   "control": [
+    1,
+    0,
+    1
+   ],
+   "callback": 0,
+   "poisoned": false
+  },
+  "firmware_code_prefix_bytes": 114688,
+  "firmware_code_prefix_sha256": "55679e13486357627ea22e494b25342acd9d24d73450f3f28eb1113b82c71b95",
+  "power_configuration_sha256": "2405bda200a51fd0bd699568e8415e53ba7b631cbaa9d4812c656b7240159bbd",
+  "power_restored": true
+ },
+ "modes": {
+  "vadd_w": {
+   "cycles_per_iteration": 3.974739583333333,
+   "cycles_per_op": 0.49684244791666665,
+   "core_mhz": 1843.079245283019,
+   "samples": [
+    3.849739583333333,
+    3.974739583333333,
+    4.525
+   ]
+  },
+  "vtcm_load": {
+   "cycles_per_iteration": 15.975260416666666,
+   "cycles_per_op": 1.9969075520833333,
+   "core_mhz": 1843.1999999999998,
+   "samples": [
+    15.74921875,
+    15.975260416666666,
+    16.0
+   ]
+  },
+  "valign": {
+   "cycles_per_iteration": 15.875,
+   "cycles_per_op": 1.984375,
+   "core_mhz": 1843.1999999999998,
+   "samples": [
+    15.65,
+    15.875,
+    15.975
+   ]
+  },
+  "qf16_mpy_add_pair": {
+   "cycles_per_iteration": 7.85078125,
+   "cycles_per_op": 1.9626953125,
+   "core_mhz": 1843.3834394904457,
+   "samples": [
+    7.84921875,
+    7.85078125,
+    7.951302083333333
+   ]
+  },
+  "vtcm_store": {
+   "cycles_per_iteration": 15.900260416666667,
+   "cycles_per_op": 1.9875325520833333,
+   "core_mhz": 1843.2300469483569,
+   "samples": [
+    15.824479166666666,
+    15.900260416666667,
+    15.975260416666666
+   ]
+  },
+  "empty": {
+   "cycles_per_iteration": 2.2744791666666666,
+   "cycles_per_op": 2.2744791666666666,
+   "core_mhz": 1842.7780219780218,
+   "samples": [
+    2.02421875,
+    2.2744791666666666,
+    2.4752604166666665
+   ]
+  }
+ },
+ "controls": {
+  "guarded_fault": 1,
+  "mode_rejection": 1,
+  "post_fault_valid": 1
+ },
+ "final_health": {
+  "state": {
+   "abi": 9,
+   "control": [
+    1,
+    0,
+    1
+   ],
+   "callback": 0,
+   "poisoned": false
+  },
+  "firmware_code_prefix_bytes": 114688,
+  "firmware_code_prefix_sha256": "55679e13486357627ea22e494b25342acd9d24d73450f3f28eb1113b82c71b95",
+  "power_configuration_sha256": "2405bda200a51fd0bd699568e8415e53ba7b631cbaa9d4812c656b7240159bbd",
+  "power_restored": true
+ },
+ "service_after": "MainPID=1015\nNRestarts=0\nActiveState=active\n",
+ "all_checks_passed": true
+}
