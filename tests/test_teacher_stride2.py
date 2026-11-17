@@ -1,0 +1,164 @@
+"""Bounds checks for the linked teacher stride-2 extension; opens no device."""
+
+import ctypes
+import importlib.util
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import tempfile
+import unittest
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path[:0] = [str(ROOT / "src"), str(ROOT / "tests"), str(ROOT / "tools")]
+MODEL = Path(os.environ.get("FNPU_TEACHER_MODEL", "/nonexistent"))
+HAVE_MODEL = (MODEL / "hand.ncnn.param").exists()
+NUMPY = importlib.util.find_spec("numpy") is not None
+
+
+@unittest.skipUnless(
+    NUMPY and HAVE_MODEL and shutil.which("cc"), "numpy, model and host C compiler required"
+)
+class NativeStride2Checks(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        import numpy as np
+        from framenpu.convolution import load_landmark_graph
+        from framenpu.landmark import specifications
+        import teacher_resident_layout as R
+
+        graph = load_landmark_graph(MODEL / "hand.ncnn.param", MODEL / "hand.ncnn.bin")
+        specs = specifications(graph)
+        cls.plans = [
+            R.build_plan(graph, specs, m, split_after=split)
+            for m in ("merged", "merged-observe")
+            for split in (None, "convdwclip_5")
+        ]
+        cls.rows = np.concatenate(
+            [np.frombuffer(p.table, "<u4").reshape(-1, 32) for p in cls.plans]
+        )
+        cls.R = R
+        # Compile the actual descriptor checker on the host. Only the vector
+        # copy and address macros are stubbed; its validation code is verbatim.
+        source = (ROOT / "tests/teacher_resident_probe.c").read_text()
+        struct = source[
+            source.index("typedef struct {") : source.index("} rs_op;") + len("} rs_op;")
+        ]
+        check = source[
+            source.index("static __attribute__((noinline)) fnpu_u32 rs_get") : source.index(
+                "/* Shared post"
+            )
+        ]
+        prefix = """
+#include <stdint.h>
+#include <string.h>
+typedef uint32_t fnpu_u32;
+typedef long HVX_Vector __attribute__((vector_size(128)));
+#define RS_STRIDE2
+#define RS_MAX_KIND 5u
+#define SPAN ((0x311e0000u - 0x31002000u) / 128u)
+#define RS_DDR 0xf0000000u
+#define RS_WIN_LO 0x1a40000u
+#define RS_WIN_HI 0x1f00000u
+#define FR(i) (0x31002000u + 128u * (i))
+static HVX_Vector desc, input;
+#define RS_DESC (&desc)
+static void rs_copy(volatile HVX_Vector *to, const volatile HVX_Vector *from, fnpu_u32 n) {
+    (void)from; (void)n;
+    memcpy((void *)to, &input, 128);
+}
+"""
+        suffix = """
+int accepted(const uint32_t *row) {
+    memcpy(&input, row, 128);
+    rs_op d;
+    return rs_get(RS_WIN_LO, 0, &d) == 0;
+}
+"""
+        cls.tmp = tempfile.TemporaryDirectory()
+        folder = Path(cls.tmp.name)
+        (folder / "check.c").write_text(prefix + struct + check + suffix)
+        subprocess.run(
+            [
+                shutil.which("cc"),
+                "-shared",
+                "-fPIC",
+                "-O2",
+                str(folder / "check.c"),
+                "-o",
+                str(folder / "check.so"),
+            ],
+            check=True,
+            capture_output=True,
+        )
+        cls.lib = ctypes.CDLL(str(folder / "check.so"))
+        cls.lib.accepted.argtypes = [ctypes.POINTER(ctypes.c_uint32)]
+        cls.lib.accepted.restype = ctypes.c_int
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def accepted(self, row):
+        import numpy as np
+
+        row = np.asarray(row, dtype="<u4")
+        return bool(self.lib.accepted(row.ctypes.data_as(ctypes.POINTER(ctypes.c_uint32))))
+
+    def test_all_plan_descriptors_pass_actual_native_checker(self):
+        for i, row in enumerate(self.rows):
+            with self.subTest(row=i):
+                self.assertTrue(self.accepted(row))
+
+    def test_mutations_match_python_mirror(self):
+        import numpy as np
+
+        rng = np.random.default_rng(19)
+        for i in range(4000):
+            row = self.rows[int(rng.integers(len(self.rows)))].copy()
+            field = int(rng.integers(21))
+            values = (
+                0,
+                1,
+                0x3FFF,
+                0x4000,
+                0xFFFFFFFF,
+                self.R.SPAN,
+                (int(row[field]) - 1) & 0xFFFFFFFF,
+                (int(row[field]) + 1) & 0xFFFFFFFF,
+            )
+            row[field] = values[int(rng.integers(len(values)))]
+            with self.subTest(case=i, field=field):
+                self.assertEqual(self.accepted(row), bool(self.R.native_ok(row)))
+
+    def test_stride2_rejects_invalid_geometry_and_buffer_bounds(self):
+        s2 = [r for r in self.rows if r[0] == 5]
+        for base in s2:
+            for field, value in (
+                (15, 0),
+                (15, self.R.SPAN),
+                (16, self.R.SPAN),
+                (17, 0),
+                (18, 0),
+                (18, 255),
+                (19, 0),
+                (19, 255),
+                (20, 0),
+                (20, self.R.SPAN),
+                (12, self.R.SPAN),
+                (11, self.R.SPAN),
+                (9, 0x1A3FF80),
+                (9, 0x1F00000),
+                (13, 1),
+                (4, 0),
+            ):
+                row = base.copy()
+                row[field] = value
+                with self.subTest(field=field, value=value):
+                    self.assertFalse(self.accepted(row))
+                    self.assertFalse(self.R.native_ok(row))
+
+
+if __name__ == "__main__":
+    unittest.main()

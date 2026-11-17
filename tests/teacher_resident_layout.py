@@ -7,7 +7,7 @@ descriptors (1x1, stride-1 depthwise, load, store) with tensors kept in VTCM
 between ops; the three stride-2 depthwise layers run as
 tests/teacher_dw_probe.c jobs (opcode 110) from and to the window.
 
-Two plan modes:
+Plan modes:
 - "resident": one resident job per stride-1 segment (4 jobs + 3 stride-2
   jobs); every parameter image lives in the window, written once; only
   tensors that cross a job boundary (and the final tensor) are stored.
@@ -15,6 +15,11 @@ Two plan modes:
   each job's parameters staged into a shared window area just before it.
 Both use the same kernel and per-op arithmetic, so their outputs must agree
 bit for bit.
+
+"merged" runs all 42 compute ops, including stride 2, in one linked request
+(or two with split_after). "merged-observe" also stores the three stride-2
+outputs for comparison with qualification. Kind 5 descriptors use words
+15..20 for output nbin, blk0, ws, h, w and a full-resolution temporary grid.
 """
 
 from dataclasses import dataclass, field
@@ -23,7 +28,7 @@ import teacher_tail_layout as T
 
 RS_MAGIC, RS_OPCODE = 0x31535254, 111  # "TRS1"
 SPAN = T.VTCM_SPAN_VECTORS
-KIND = {"pw": 1, "dw": 2, "load": 3, "store": 4}
+KIND = {"pw": 1, "dw": 2, "load": 3, "store": 4, "s2": 5}
 VTCM_FIRST = 4  # vector 0 is never allocated (vres = 0 means "no residual")
 FINAL = "79"
 INPUTS = ("8", "10")
@@ -173,15 +178,36 @@ class _Op:
     stride2: bool
 
 
-def build_plan(graph, specs, mode):
-    if mode not in ("resident", "qualify"):
+def build_plan(graph, specs, mode, *, split_after=None):
+    if mode not in ("resident", "qualify", "merged", "merged-observe"):
         raise ValueError(mode)
+    merged = mode.startswith("merged")
+    if split_after is not None and not merged:
+        raise ValueError("split_after requires a merged plan")
     by = {s["name"]: s for s in specs}
     tail, _ = T.tail_ops(specs)
     shape_of = T.shapes(specs)
-    ops = [_Op(o.kind, o.name, o.src, o.dst, o.res, by[o.name],
-               o.kind == "dw" and by[o.name]["stride"] == (2, 2)) for o in tail]
-    groups = segments(ops, mode)
+    ops = [
+        _Op(
+            o.kind,
+            o.name,
+            o.src,
+            o.dst,
+            o.res,
+            by[o.name],
+            o.kind == "dw" and by[o.name]["stride"] == (2, 2),
+        )
+        for o in tail
+    ]
+    if merged:
+        groups = [list(range(len(ops)))]
+        if split_after is not None:
+            cut = next((i + 1 for i, o in enumerate(ops) if o.name == split_after), None)
+            if cut is None or cut == len(ops):
+                raise ValueError("split_after must name a non-final tail op")
+            groups = [list(range(cut)), list(range(cut, len(ops)))]
+    else:
+        groups = segments(ops, mode)
     job_of = {i: g for g, idx in enumerate(groups) for i in idx}
     grid = lambda b: T.grid_of(shape_of[b])  # noqa: E731
     pairs = lambda b: shape_of[b][0] // 2  # noqa: E731
@@ -197,12 +223,14 @@ def build_plan(graph, specs, mode):
     stored = {b for b in producer if b == FINAL or any(u != producer[b] for u in users.get(b, []))}
     if mode == "qualify":
         stored |= {o.dst for o in ops}
+    if mode == "merged-observe":
+        stored |= {o.dst for o in ops if o.stride2}
     stored |= set(INPUTS)
 
     # parameter images
     images = {}
     for i, o in enumerate(ops):
-        if o.stride2:
+        if o.stride2 and not merged:
             coef, bias, mask = s2_params(graph, o.spec, grid(o.src))
             images[i] = (coef + bias + mask, 0, (len(coef), len(bias)))
         else:
@@ -214,7 +242,7 @@ def build_plan(graph, specs, mode):
     table_at = T.WIN_LO
     cursor = _al(table_at + 128 * n_desc_bound, 4096)
     par_at = {}
-    if mode == "resident":
+    if mode != "qualify":
         for i in range(len(ops)):
             par_at[i] = cursor
             cursor = _al(cursor + len(images[i][0]))
@@ -250,11 +278,13 @@ def build_plan(graph, specs, mode):
     # descriptors
     table, jobs = [], []
     for g, idx in enumerate(groups):
-        if ops[idx[0]].stride2:
+        if ops[idx[0]].stride2 and not merged:
             i = idx[0]
             o = ops[i]
             image, _, sizes = images[i]
-            desc = T.dw_descriptor(o.spec, grid(o.src), grid(o.dst), where[o.src], par_at[i], list(sizes), where[o.dst])
+            desc = T.dw_descriptor(
+                o.spec, grid(o.src), grid(o.dst), where[o.src], par_at[i], list(sizes), where[o.dst]
+            )
             job = Job("s2", op=o, desc=desc, ops=[o.name], stores=[o.dst])
             if mode == "qualify":
                 job.staged = {par_at[i]: image}
@@ -272,27 +302,88 @@ def build_plan(graph, specs, mode):
             for b in (o.src, o.res):
                 if b and b not in at:
                     at[b] = vt.take(vec(b))
-                    table.append(_words(KIND["load"], 0, 0, 0, 0, 0, 0, 0, 0, where[b], vec(b), 0, 0, 0, at[b]))
+                    table.append(
+                        _words(
+                            KIND["load"], 0, 0, 0, 0, 0, 0, 0, 0, where[b], vec(b), 0, 0, 0, at[b]
+                        )
+                    )
             later = [k for k in idx if k > i and o.dst in (ops[k].src, ops[k].res)]
             at[o.dst] = vt.take(vec(o.dst), top=bool(later) and later[-1] > i + 1)
             image, scratch, _ = images[i]
             npar = len(image) // 128
             vpar = vt.take(npar + scratch, align=16 if o.kind == "pw" else 1)  # HMX tiles: 2 KiB
             gin = grid(o.src)
+            tmp = vt.take(vec(o.src)) if o.stride2 else None
             if o.kind == "pw":
                 cin, cout = o.spec["input_shape"][0], o.spec["output_shape"][0]
-                table.append(_words(KIND["pw"], cin // 2, cout // 2, (cin // 2 + 15) >> 4,
-                                    int(o.spec["activation"] == "clip"), gin.nbin, gin.blk0, gin.nj, gin.ws,
-                                    par_at[i], npar, at[o.src], at[o.dst], at[o.res] if o.res else 0, vpar))
+                table.append(
+                    _words(
+                        KIND["pw"],
+                        cin // 2,
+                        cout // 2,
+                        (cin // 2 + 15) >> 4,
+                        int(o.spec["activation"] == "clip"),
+                        gin.nbin,
+                        gin.blk0,
+                        gin.nj,
+                        gin.ws,
+                        par_at[i],
+                        npar,
+                        at[o.src],
+                        at[o.dst],
+                        at[o.res] if o.res else 0,
+                        vpar,
+                    )
+                )
             else:
                 cp = pairs(o.src)
-                table.append(_words(KIND["dw"], cp, cp, o.spec["kernel"][0], 1, gin.nbin, gin.blk0, gin.nj4, gin.ws,
-                                    par_at[i], npar, at[o.src], at[o.dst], 0, vpar))
+                gout = grid(o.dst)
+                extra = (gout.nbin, gout.blk0, gout.ws, gout.h, gout.w, tmp) if o.stride2 else ()
+                table.append(
+                    _words(
+                        KIND["s2" if o.stride2 else "dw"],
+                        cp,
+                        cp,
+                        o.spec["kernel"][0],
+                        1,
+                        gin.nbin,
+                        gin.blk0,
+                        gin.nj4,
+                        gin.ws,
+                        par_at[i],
+                        npar,
+                        at[o.src],
+                        at[o.dst],
+                        0,
+                        vpar,
+                        *extra,
+                    )
+                )
             if mode == "qualify":
                 job.staged = {par_at[i]: image}
             vt.give(vpar, npar + scratch)
+            if tmp is not None:
+                vt.give(tmp, vec(o.src))
             if o.dst in stored:
-                table.append(_words(KIND["store"], 0, 0, 0, 0, 0, 0, 0, 0, where[o.dst], vec(o.dst), 0, 0, 0, at[o.dst]))
+                table.append(
+                    _words(
+                        KIND["store"],
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        where[o.dst],
+                        vec(o.dst),
+                        0,
+                        0,
+                        0,
+                        at[o.dst],
+                    )
+                )
                 job.stores.append(o.dst)
             for b in {o.src, o.res} - {None}:
                 if last_use[b] == i:
@@ -336,7 +427,9 @@ def simulate(plan, window):
     from hmx_block_layout import unpack
 
     def vecs(off, n):
-        return np.frombuffer(bytes(window[off - T.WIN_LO : off - T.WIN_LO + 128 * n]), "<f2").reshape(n, 32, 2)
+        return np.frombuffer(
+            bytes(window[off - T.WIN_LO : off - T.WIN_LO + 128 * n]), "<f2"
+        ).reshape(n, 32, 2)
 
     def put(off, data):
         window[off - T.WIN_LO : off - T.WIN_LO + len(data)] = data
@@ -347,15 +440,23 @@ def simulate(plan, window):
     for job in plan.jobs:
         for off, data in job.staged.items():
             put(off, data)
-        tab = np.frombuffer(bytes(window[plan.table_at - T.WIN_LO : plan.table_at - T.WIN_LO + len(plan.table)]),
-                            "<u4").reshape(-1, 32)
+        tab = np.frombuffer(
+            bytes(window[plan.table_at - T.WIN_LO : plan.table_at - T.WIN_LO + len(plan.table)]),
+            "<u4",
+        ).reshape(-1, 32)
         if job.kind == "s2":
-            for off, data in T.model_dw(job.desc, lambda o, n: bytes(window[o - T.WIN_LO : o - T.WIN_LO + n])).items():
+            for off, data in T.model_dw(
+                job.desc, lambda o, n: bytes(window[o - T.WIN_LO : o - T.WIN_LO + n])
+            ).items():
                 put(off, data)
             continue
         vt = np.full((SPAN, 32, 2), np.nan, np.float16)
         for row in tab[job.first : job.end]:
-            kind, cpi, cpo, k, clip, nb, blk0, nj, ws, dpar, npar, vin, vout, vres, vpar = (int(x) for x in row[:15])
+            if not native_ok(row):
+                raise ValueError("invalid resident descriptor")
+            kind, cpi, cpo, k, clip, nb, blk0, nj, ws, dpar, npar, vin, vout, vres, vpar = (
+                int(x) for x in row[:15]
+            )
             if kind == 3:
                 vt[vpar : vpar + npar] = vecs(dpar, npar)
                 continue
@@ -363,14 +464,24 @@ def simulate(plan, window):
                 put(dpar, vt[vpar : vpar + npar].tobytes())
                 continue
             vt[vpar : vpar + npar] = vecs(dpar, npar)
-            vt[vout : vout + cpo * nb] = 0
+            dst = vout
+            if kind == 5:
+                onb, oblk, ows, oh, ow, vout = (int(x) for x in row[15:21])
+                vt[dst : dst + cpo * onb] = 0
+            else:
+                vt[vout : vout + cpo * nb] = 0
             if kind == 1:
                 if (vpar | npar) % 16:
                     raise ValueError("HMX tiles not 2 KiB aligned")
                 no = (cpo + 15) >> 4
                 bias = vpar + no * k * 16
                 raw = vt[vpar : vpar + no * k * 16].tobytes()
-                A = np.block([[unpack(raw[2048 * (o * k + t) : 2048 * (o * k + t + 1)]) for t in range(k)] for o in range(no)])
+                A = np.block(
+                    [
+                        [unpack(raw[2048 * (o * k + t) : 2048 * (o * k + t + 1)]) for t in range(k)]
+                        for o in range(no)
+                    ]
+                )
                 for j in range(nj):
                     blk = vt[vin + blk0 + j : vin + blk0 + j + cpi * nb : nb]  # [cpi, 32, 2]
                     B = np.zeros((k * 32, 32))
@@ -380,9 +491,16 @@ def simulate(plan, window):
                     if clip:
                         v = np.clip(v, 0, 6).astype(np.float16)
                     if vres:
-                        v = f16(v.astype(np.float64) + vt[vres + blk0 + j : vres + blk0 + j + cpo * nb : nb].astype(np.float64))
+                        v = f16(
+                            v.astype(np.float64)
+                            + vt[vres + blk0 + j : vres + blk0 + j + cpo * nb : nb].astype(
+                                np.float64
+                            )
+                        )
                     m = vt[bias + cpo + j].view("<u4").reshape(32) != 0
-                    vt[vout + blk0 + j : vout + blk0 + j + cpo * nb : nb] = np.where(m[None, :, None], v, 0)
+                    vt[vout + blk0 + j : vout + blk0 + j + cpo * nb : nb] = np.where(
+                        m[None, :, None], v, 0
+                    )
             else:
                 kk, r = k * k, k // 2
                 coef = vt[vpar:].reshape(-1, 2)[: cpi * kk].reshape(cpi, kk, 2).astype(np.float32)
@@ -393,7 +511,9 @@ def simulate(plan, window):
                 t = 0
                 for dy in range(k):
                     for dx in range(k):
-                        acc = acc + (src[:, o + (dy - r) * ws + (dx - r)] * coef[:, t][:, None, :]).astype(np.float32)
+                        acc = acc + (
+                            src[:, o + (dy - r) * ws + (dx - r)] * coef[:, t][:, None, :]
+                        ).astype(np.float32)
                         t += 1
                 bv = vt[bias : bias + cpi, 0, :].astype(np.float64)  # splatted: lane 0 suffices
                 v = np.clip(f16(f16(acc).astype(np.float64) + bv[:, None, :]), 0, 6)
@@ -402,6 +522,12 @@ def simulate(plan, window):
                 flat = vt[vout : vout + cpi * nb].reshape(cpi, nb * 32, 2)
                 flat[:, 32 * blk0 : 32 * (blk0 + nj)] = out
                 vt[vout : vout + cpi * nb] = flat.reshape(-1, 32, 2)
+                if kind == 5:
+                    target = vt[dst : dst + cpo * onb].reshape(cpo, onb * 32, 2)
+                    for y in range(oh):
+                        start = 32 * blk0 + (2 * y + 1) * ws + 3
+                        to = 32 * oblk + y * ows + 2
+                        target[:, to : to + ow] = flat[:, start : start + 2 * ow : 2]
     return window
 
 
@@ -417,21 +543,61 @@ def native_ok(row):
     for i, x in enumerate(w):
         if i != 9:
             big |= x
+    s2 = kind == 5
+    for x in row[15:21]:
+        big |= int(x)
+    if s2:
+        onb, oblk, ows, oh, ow, tmp = (int(x) for x in row[15:21])
     align = ((vpar | npar) << 3) if kind == 1 else 0
-    bad = (big > 0x3FFF) or (kind - 1) & m > 3 or vpar + npar > SPAN or (dpar | align) & 127
+    bad = (big > 0x3FFF) or (kind - 1) & m > 4 or vpar + npar > SPAN or (dpar | align) & 127
     bad = bad or ((dpar - T.WIN_LO) & m) + 128 * npar > T.WIN_HI - T.WIN_LO or vpar == 0
-    if kind > 2 or bad:
+    bad = bad or dpar < T.WIN_LO or dpar > T.WIN_HI or npar > (T.WIN_HI - dpar) // 128
+    if kind in (3, 4) or bad:
         return not bad
+    out_nb = onb if s2 else nb
+    if s2:
+        bad = (
+            oh == 0
+            or ow == 0
+            or (oh | ow | ows | ws) > 255
+            or ows != ow + 2
+            or ws != 2 * ow + 2
+            or onb == 0
+            or tmp == 0
+            or tmp + cpo * nb > SPAN
+            or vres != 0
+            or clip != 1
+        )
+        if bad:
+            return False
+        if 2 * oh * ws > 32 * nj or 32 * oblk + (oh - 1) * ows + 2 + ow > 32 * onb:
+            return False
     kk, reach, no = k * k, (k >> 1) * (ws + 1), (cpo + 15) >> 4
     pw = kind == 1
     bias = vpar + (no * k * 16 if pw else (cpi * kk + 31) // 32)
     scr = vpar + npar
-    bad = (cpi == 0 or nj == 0 or vin == 0 or vout == 0 or clip > 1 or blk0 + nj > nb or vin + cpi * nb > SPAN
-           or vout + cpo * nb > SPAN or vres + cpo * nb > SPAN or bias + cpo + nj > scr
-           or scr + (k * 16 if pw else cpi * kk) > SPAN)
+    bad = (
+        cpi == 0
+        or nj == 0
+        or vin == 0
+        or vout == 0
+        or clip > 1
+        or blk0 + nj > nb
+        or vin + cpi * nb > SPAN
+        or vout + cpo * out_nb > SPAN
+        or vres + cpo * nb > SPAN
+        or bias + cpo + nj > scr
+        or scr + (k * 16 if pw else cpi * kk) > SPAN
+    )
     if pw:
         bad = bad or k != (cpi + 15) >> 4
     else:
-        bad = (bad or cpi != cpo or k not in (3, 5) or nj & 1 or 32 * blk0 < reach
-               or 32 * (blk0 + nj) + reach > 32 * nb)
+        bad = (
+            bad
+            or cpi != cpo
+            or k not in (3, 5)
+            or nj & 1
+            or 32 * blk0 < reach
+            or 32 * (blk0 + nj) + reach > 32 * nb
+        )
     return not bad

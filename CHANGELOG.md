@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Added an optional resident stride-2 teacher-tail path
+  ([TEACHER_STRIDE2.md](docs/TEACHER_STRIDE2.md)), qualified on hardware. It keeps
+  all 42 compute ops in one 45-descriptor linked request, with an explicit
+  two-request split option. The three stride-2 outputs stay in VTCM; the
+  qualified per-layer kernels and default linked image remain byte-identical.
+  All four corpus crops match qualification byte for byte. Median tail time
+  is 15.80 ms in-DSP and 26.69 ms host wall (previous linked run: 18.80 ms
+  and 76.85 ms). All controls and 359 restoration audits pass. The two-request
+  option remains checked offline only.
 - Teacher tail through a linked operator image ([TEACHER_LINK.md](docs/TEACHER_LINK.md)).
   The resident and stride-2 kernels are linked unchanged into one image,
   sealed in the owned 16 KiB reservation at 0x1ff0000. A 1,960-byte slot

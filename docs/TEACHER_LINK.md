@@ -1,5 +1,9 @@
 # Teacher tail through a linked operator image
 
+The optional resident stride-2 extension is described in
+[TEACHER_STRIDE2.md](TEACHER_STRIDE2.md). It is hardware-qualified at one
+request and 15.80 ms in-DSP; the results below remain the seven-request baseline.
+
 This follows [TEACHER_RESIDENT.md](TEACHER_RESIDENT.md). That run cut the tail
 from 42 jobs to 7, but every job still paid about 1.6 ms of in-DSP overhead.
 Most of that overhead is publishing the 4 KiB kernel through the cached code

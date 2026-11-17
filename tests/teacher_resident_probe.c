@@ -5,7 +5,8 @@
  * (128-byte descriptors, tests/teacher_resident_layout.py). Tensors stay in
  * borrowed VTCM between ops of a job at host-planned vector offsets; load and
  * store ops move whole tensors between VTCM and the window. The stride-2
- * depthwise layers run as separate tests/teacher_dw_probe.c jobs.
+ * depthwise layers run as separate tests/teacher_dw_probe.c jobs unless
+ * RS_STRIDE2 is defined for the linked image.
  *
  * Arithmetic per output vector is that of tests/teacher_pw_probe.c (1x1) and
  * tests/teacher_dw_probe.c (stride 1): one shared post adds the bias (here a
@@ -24,6 +25,10 @@
  * Input payload: [MAGIC, table offset, table entries]. Meta: [0] magic [1] pc
  * [2] ops run; flags vector at words 64..95; ticks after op i at
  * word 96+i. Ops stop between whole ops at the 20 ms budget. */
+/* RS_STRIDE2 adds kind 5: full-resolution depthwise into a temporary grid,
+ * then the qualified scalar (2*y+1, 2*x+1) decimation into vout. Descriptor
+ * words 15..20 are output nbin, blk0, ws, h, w and temporary vector offset.
+ * The ordinary 4 KiB reference build does not include this extension. */
 #include "landmark_common.h"
 void fnpu_hmx_clear(void);
 void fnpu_hmx_load(const fnpu_u16 *, const fnpu_u16 *);
@@ -35,6 +40,11 @@ void fnpu_hmx_store(fnpu_u16 *, const void *);
 #define RS_WIN_LO 0x1a40000u
 #define RS_WIN_HI 0x1f00000u
 #define RS_META 1024u
+#ifdef RS_STRIDE2
+#define RS_MAX_KIND 5u
+#else
+#define RS_MAX_KIND 4u
+#endif
 #define SPAN ((0x311e0000u - 0x31002000u) / 128u)
 #define LV(i) ((volatile HVX_Vector *)(0x31000000u + 128u * (i)))
 #define RS_SCALE LV(56)
@@ -48,6 +58,9 @@ typedef long rs_uv __attribute__((__vector_size__(128), __aligned__(4)));
 typedef struct {
     fnpu_u32 kind, cpi, cpo, nk, clip, nbin, blk0, nj, ws, dpar, npar, vin, vout, vres, vpar;
     fnpu_u32 bias, scr; /* derived */
+#ifdef RS_STRIDE2
+    fnpu_u32 onbin, oblk0, ows, oh, ow, tmp;
+#endif
 } rs_op;
 /* After validation of a compute op, vin, vout, vres, bias and scr hold VTCM
  * addresses (vres stays 0 when absent; plans never place anything at vector
@@ -76,17 +89,40 @@ static __attribute__((noinline)) fnpu_u32 rs_get(fnpu_u32 tab, fnpu_u32 i, rs_op
     fnpu_u32 *t = (fnpu_u32 *)d, big = 0;
 #pragma clang loop unroll(disable)
     for (fnpu_u32 w = 0; w < 15; w++) big |= (t[w] = ((const volatile fnpu_u32 *)RS_DESC)[w]) & -(w != 9);
+#ifdef RS_STRIDE2
+    for (fnpu_u32 w = 0; w < 6; w++) big |= ((fnpu_u32 *)&d->onbin)[w] = ((const volatile fnpu_u32 *)RS_DESC)[15 + w];
+    fnpu_u32 s2 = d->kind == 5;
+#endif
     /* every word but dpar < 2^14: no product or sum below can wrap */
     fnpu_u32 cpi = d->cpi, cpo = d->cpo, nb = d->nbin, nj = d->nj, k = d->nk, pw = d->kind == 1;
-    fnpu_u32 bad = (big > 0x3fff) | (d->kind - 1 > 3) | (d->vpar + d->npar > SPAN) |
+    fnpu_u32 bad = (big > 0x3fff) | (d->kind - 1 >= RS_MAX_KIND) | (d->vpar + d->npar > SPAN) |
                    ((d->dpar | ((d->vpar | d->npar) << 3 & -(d->kind == 1))) & 127) | /* 1x1: tiles 2 KiB aligned */ (d->dpar - RS_WIN_LO + 128 * d->npar > RS_WIN_HI - RS_WIN_LO);
     bad |= d->vpar == 0;
+#ifdef RS_STRIDE2
+    bad |= (d->dpar < RS_WIN_LO) | (d->dpar > RS_WIN_HI) |
+           (d->npar > (RS_WIN_HI - d->dpar) / 128);
+    if (d->kind == 3 || d->kind == 4) return bad;
+    /* Reject caps before products involving the additional dimensions. */
+    if (bad) return bad;
+    fnpu_u32 out_nb = s2 ? d->onbin : nb;
+    if (s2) {
+        bad |= (d->oh == 0) | (d->ow == 0) | ((d->oh | d->ow | d->ows | d->ws) > 255) |
+               (d->ows != d->ow + 2) | (d->ws != 2 * d->ow + 2) | (d->onbin == 0) |
+               (d->tmp == 0) | (d->tmp + cpo * nb > SPAN) | (d->vres != 0) | (d->clip != 1);
+        if (bad) return bad;
+        bad |= (2 * d->oh * d->ws > 32 * nj) |
+               (32 * d->oblk0 + (d->oh - 1) * d->ows + 2 + d->ow > 32 * d->onbin);
+        d->tmp = (fnpu_u32)FR(d->tmp);
+    }
+#else
     if (d->kind > 2) return bad; /* load/store: frame_job addresses FR(vpar) itself */
+    fnpu_u32 out_nb = nb;
+#endif
     fnpu_u32 kk = k * k, reach = (k >> 1) * (d->ws + 1), no = (cpo + 15) >> 4;
     d->bias = d->vpar + (pw ? no * k * 16 : (cpi * kk + 31) / 32);
     d->scr = d->vpar + d->npar;
     bad |= (cpi == 0) | (nj == 0) | (d->vin == 0) | (d->vout == 0) | (d->clip > 1) |
-           (d->blk0 + nj > nb) | (d->vin + cpi * nb > SPAN) | (d->vout + cpo * nb > SPAN) |
+           (d->blk0 + nj > nb) | (d->vin + cpi * nb > SPAN) | (d->vout + cpo * out_nb > SPAN) |
            (d->vres + cpo * nb > SPAN) | (d->bias + cpo + nj > d->scr) | (d->scr + (pw ? k * 16 : cpi * kk) > SPAN);
     bad |= pw ? (k != (cpi + 15) >> 4)
               : (cpi != cpo) | ((k != 3) & (k != 5)) | (nj & 1) | (32 * d->blk0 < reach) |
@@ -164,11 +200,37 @@ static __attribute__((noinline)) void rs_dw(const rs_op *d) {
     }
 }
 
+#ifdef RS_STRIDE2
+static __attribute__((noinline)) void rs_s2(rs_op *d) {
+    fnpu_u32 dst = d->vout;
+    rs_zero((volatile HVX_Vector *)dst, d->cpo * d->onbin);
+    d->vout = d->tmp;
+    rs_dw(d);
+    d->vout = dst;
+    const volatile fnpu_u32 *s0 = (const volatile fnpu_u32 *)d->tmp + 32 * d->blk0 + d->ws + 3;
+    volatile fnpu_u32 *t0 = (volatile fnpu_u32 *)dst + 32 * d->oblk0 + 2;
+#pragma clang loop unroll(disable)
+    for (fnpu_u32 c = 0; c < d->cpo; c++, s0 += 32 * d->nbin, t0 += 32 * d->onbin) {
+        const volatile fnpu_u32 *s = s0;
+        volatile fnpu_u32 *t = t0;
+#pragma clang loop unroll(disable)
+        for (fnpu_u32 y = 0; y < d->oh; y++, s += 2 * d->ws, t += d->ows) {
+#pragma clang loop unroll(disable)
+            for (fnpu_u32 x = 0; x < d->ow; x++) t[x] = s[2 * x];
+        }
+    }
+}
+#endif
+
 fnpu_u32 frame_job(const fnpu_context *c) {
     const volatile fnpu_u32 *in = fnpu_input(c);
     fnpu_u32 tab = in[1], n = in[2], a = c->params[1], b = c->params[2], i;
     rs_op ds[1];
     rs_op *d = ds;
+#ifdef RS_STRIDE2
+    if (tab < RS_WIN_LO || tab > RS_WIN_HI || n > (RS_WIN_HI - tab) / 128)
+        return FNPU_BAD_ARGUMENT;
+#endif
     if (!valid(c) || c->opcode != RS_OPCODE || c->params[0] != 1 || c->input_bytes != 128 ||
         c->output_bytes != RS_META || in[0] != RS_MAGIC || (tab & 127) | (n > 160) | (b > n) | /* a >= b runs no op */
         (tab - RS_WIN_LO + 128 * n > RS_WIN_HI - RS_WIN_LO))
@@ -188,6 +250,9 @@ fnpu_u32 frame_job(const fnpu_context *c) {
         if (d->kind < 3) rs_zero(P(vout), d->cpo * d->nbin);
         if (d->kind == 1) rs_pw(d);
         if (d->kind == 2) rs_dw(d);
+#ifdef RS_STRIDE2
+        if (d->kind == 5) rs_s2(d);
+#endif
         fnpu_u32 t = rs_ticks() - t0;
         meta[96 + i - a] = t;
         if (t > 384000u) { i++; break; }

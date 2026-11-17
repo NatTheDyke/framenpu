@@ -30,6 +30,7 @@ class TeacherLinkBuild(unittest.TestCase):
         cls.tmp = tempfile.TemporaryDirectory()
         cls.out = Path(cls.tmp.name)
         cls.record = BL.build(cls.out / "link")
+        cls.stride2 = BL.build(cls.out / "stride2", stride2=True)
         cls.reference = BR.build(cls.out / "ref")
 
     @classmethod
@@ -45,6 +46,27 @@ class TeacherLinkBuild(unittest.TestCase):
     def test_reference_kernels_unchanged_by_link_build(self):
         for k in ("rs", "dw"):
             self.assertEqual(self.record["reference"][k]["sha256"], self.reference[k]["sha256"])
+            self.assertEqual(self.stride2["reference"][k]["sha256"], self.reference[k]["sha256"])
+
+    def test_stride2_build_preserves_qualified_images(self):
+        self.assertLessEqual(self.stride2["linked"]["bytes"], 0x3F80)
+        self.assertTrue(self.stride2["stride2"])
+        self.assertFalse(self.record["stride2"])
+        self.assertEqual(self.record["loader"], self.stride2["loader"])
+        # Frozen hashes from teacher-link-fp16.json: the per-layer oracle and
+        # seven-request control must remain the qualified machine code.
+        self.assertEqual(
+            self.record["linked"]["sha256"],
+            "30d64e47b5caf56dc730ef847645b7e5f594bc74ccbb9d11d8a360f09874a90a",
+        )
+        self.assertEqual(
+            self.reference["rs"]["sha256"],
+            "8eef3ad03b232fa54addd6713e390b49ccee3c4db679e89ce87b63ed408448ae",
+        )
+        self.assertEqual(
+            self.reference["dw"]["sha256"],
+            "3d11cee3f26c441490f094735956bcd6102dfc2ad59e01225e8c54d32c97aa8e",
+        )
 
     def test_loader_checks_reject_a_wrong_seal_constant(self):
         text = (self.out / "link/loader/disassembly.txt").read_text()
