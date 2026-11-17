@@ -156,6 +156,90 @@ post-fault results passed for both v1 and v2 on four fixtures (8 each). The
 resident arena hash, DSP service PID and restart count were unchanged, and
 the longest job took 9.7 ms.
 
+## v3: layer-chain executor
+
+**Status:** measured 2026-11-17 ([evidence](../evidence/hmx-layer-chain.json),
+two sessions; numbers are from the 5-round one).
+[hmx_layer_chain_probe.c](../tests/hmx_layer_chain_probe.c) runs whole
+layers and chains them on the device. It is the first measurement of what
+v2 did not model: inputs from the persistent DDR arena, inter-layer traffic,
+and job splitting.
+
+- **Runtime geometry.** The 4 KiB payload is a header plus one 32-word
+  descriptor per layer. Each descriptor holds the shape and arena offsets of
+  the input, W1|W2 tiles, biases, gather table, x|position table and output.
+  The kernel checks every descriptor before any work: all six regions must
+  lie in the arena window `[0x1a40000, 0x1f00000)`, the output and gather
+  extents are bounded, and the VTCM plan must end inside the borrowed span.
+  The gather and position tables are built by the host
+  ([hmx_chain_layout.py](../tests/hmx_chain_layout.py)). Their contents only
+  steer values: gather offsets are masked, and every write target comes from
+  checked descriptor fields.
+- **Chaining.** Activations use a padded planar layout (zero halo rows and
+  guards, `(pad + w) % 32 == 0`). Each layer writes the next layer's input
+  layout directly, so the host never repacks between layers.
+- **Per layer:** the prologue copies W1|W2, biases, tables and the input band
+  from the uncached DDR alias into VTCM. Blocks then run as in v2 with single
+  loads, and outputs are stored straight to the arena. A job covers layers
+  `params[1]..params[2]-1`. A job that reaches 20 ms stops between blocks and
+  reports where it stopped.
+- **Chains:** the stride-1 fused3_w050 runs. `c14` has five 14x14 layers
+  (24→144→24 ×2, 24→144→32, 32→192→32 ×2). `c7` has four 7x7 layers
+  (56→336→56). Each chain runs as one whole-chain job and as one job per
+  layer, alternating over 5 rounds after checked warmups. Data is synthetic
+  and deterministic.
+
+Results (medians):
+
+| Chain | Schedule | Kernel body | Wrapper (in-DSP) | Host wall |
+|---|---|---:|---:|---:|
+| `c14` (5 layers) | whole chain, 1 job | 1.37 ms | 3.07 ms | 9.7 ms |
+| `c14` | per layer, 5 jobs | 1.47 ms | 10.0 ms | 42.9 ms |
+| `c7` (4 layers) | whole chain, 1 job | 2.13 ms | 3.82 ms | 10.5 ms |
+| `c7` | per layer, 4 jobs | 2.20 ms | 8.95 ms | 35.2 ms |
+
+Per layer inside the whole-chain job (µs):
+
+| Layer | Prologue | Blocks | Blocks per layer |
+|---|---:|---:|---:|
+| 14x14 24→144→24/32 | 93–99 | 129–146 | 7 |
+| 14x14 32→192→32 | 137 | 154–156 | 7 |
+| 7x7 56→336→56 | 419–440 | 82–99 | 2 |
+
+What this shows:
+
+- **Chaining on the device costs almost nothing in the kernel.** Writing to
+  the arena and re-staging the input adds tens of µs per layer. Splitting
+  into per-layer jobs adds only about 0.1 ms of kernel body.
+- **Per-job overhead is what job splitting costs.** Each job adds about
+  1.5–1.7 ms of in-DSP wrapper time beyond the body (entry, cached-code
+  publication and cleanup) and about 6–8 ms of host wall time on this audited
+  harness path. Whole-chain jobs are therefore much cheaper: a chain should
+  run as few jobs as the 20 ms budget allows. The longest job measured was
+  3.85 ms of wrapper time.
+- **At 7x7 the cost is weight streaming.** Each 7x7 layer copies 198 tiles
+  (396 KiB) from uncached DDR, at about 2.1 µs per tile (~0.95 GB/s). That is
+  80% of the `c7` body; the HMX blocks take about 83 µs. This matches v2's
+  1.97 µs per tile. The 7x7 weights are the next target: faster DDR→VTCM
+  streaming (cached alias or prefetch) or keeping weights resident across
+  jobs.
+- **Accuracy:** every layer of every run was checked against the oracle of
+  its actual device input. The worst error was 0.11 of the bound, all values
+  were finite, and padding stayed zero.
+
+**Checks:** 74 audited restorations (72 HMX) in the 5-round session and 41 in
+the first. Per chain there was one guarded fault in the first block, one
+out-of-window descriptor rejection and one clean post-fault chain, all
+validated. The resident arena window was saved before any write and restored
+afterwards, and the full arena hash then matched its initial value. The DSP
+service, health and power configuration were unchanged. The kernel is
+4,056 B.
+
+**Not covered yet:** stride-2 and stem layers, residual adds, pooling,
+heads, host scheduling in production (no audits), and chains longer than
+the 20 ms budget (the resume path exists in the kernel but was not
+exercised).
+
 ## What one block computes
 
 A dense 3x3 stride-1 convolution (Cin→Cmid, bias, clip6) feeds a 1x1
@@ -283,3 +367,12 @@ the effects of batching, residency and timers, and a fused3_w050
 convolution forecast against the 12–20 ms decision gate, with and without
 weight copies. Stride-2 and RGB-stem layers reuse stride-1 costs, and the
 analyzer flags them as approximations.
+
+The v3 chain executor:
+
+```sh
+python tools/build_hmx_chain_probe.py --output /path/cjobs
+# On the qualified device, as root (needs numpy):
+python tests/hardware_hmx_chain.py --run-on-device --jobs /path/cjobs \
+  --output /path/chain.json --rounds 5
+```

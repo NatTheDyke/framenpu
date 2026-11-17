@@ -1,0 +1,1338 @@
+{
+ "format": "framenpu-hmx-chain-probe",
+ "build": {
+  "format": "framenpu-hmx-chain-probe-build",
+  "bytes": 4056,
+  "sha256": "a5f8e2c865c1994652fc3b8704f4054de82d7952d5a918fb8c79c85c84c1c698",
+  "flags": [
+   "--target=hexagon",
+   "-mcpu=hexagonv75",
+   "-mhvx",
+   "-mhvx-length=128b",
+   "-Os",
+   "-ffreestanding",
+   "-fno-builtin",
+   "-fno-stack-protector",
+   "-fno-unwind-tables",
+   "-fno-asynchronous-unwind-tables",
+   "-ffp-contract=off",
+   "-mllvm",
+   "-spill-func-threshold=100",
+   "-mllvm",
+   "-spill-func-threshold-Os=100",
+   "-G0",
+   "-fno-jump-tables"
+  ],
+  "toolchain": {
+   "clang": "clang version 23.1.4",
+   "linker": "LLD 23.1.4 (compatible with GNU linkers)",
+   "objcopy": "llvm-objcopy, compatible with GNU objcopy"
+  },
+  "sources": {
+   "tests/resident_graph_entry.S": "bb0b48aaf26908b7feccb7eacac98a93bfa1e483cb3cc84a25c060c60f5f1c14",
+   "src/framenpu/sdk/hmx.S": "ca725000e846c220cdf709a82ce61d223dd0862d66687fa968e41be18f262fb6",
+   "tests/hmx_layer_chain_probe.c": "0b9f4bf38e9a9fa839019b2762dc71fd92b33d6dff67fbf4ec217075f962a845",
+   "tests/landmark_common.h": "e2e922baaf80e217350ee3926e445449430ccbdb7cf3f55ed8409d73e89909bb",
+   "tests/hmx_chain_layout.py": "2347fb8cf45d8d90d397d6cc6a4a039df0b6251122599ac60268a6d5a5584bc1",
+   "tests/hmx_block_layout.py": "ced35770431898d9a89255a801934a5896b6b5f7dcc71510ac60683612d1ac9b",
+   "src/framenpu/sdk/include/framenpu.h": "4e65f4b8fb82586428a810714d91540685cc4895810ad5bb753b178e1db62754",
+   "src/framenpu/sdk/include/fnpu_readback.h": "4c5fd740bcc9269a64d7923d51cedd11bda2a1b4ed5430dcd796332e20a8f820",
+   "src/framenpu/sdk/link.ld": "c0b7dd53a7e254de549280ead79f303db3ab657e13e8565e5be3852c29a08e82"
+  }
+ },
+ "source_sha256": {
+  "tests/hardware_hmx_chain.py": "95e925e2a4971894f9fc0eca97de916f19dbeaf176994ba87810861690d250ae",
+  "tests/hmx_chain_layout.py": "2347fb8cf45d8d90d397d6cc6a4a039df0b6251122599ac60268a6d5a5584bc1"
+ },
+ "conditions": "synthetic deterministic activations and weights; headset idle",
+ "window": [
+  "0x1a40000",
+  "0x1f00000"
+ ],
+ "audits": {
+  "restored_jobs": 74,
+  "restored_hmx_jobs": 72
+ },
+ "chains": {
+  "c14": {
+   "layers": [
+    {
+     "w": 14,
+     "h": 14,
+     "cin": 24,
+     "cmid": 144,
+     "cout": 24,
+     "nj": 7,
+     "nm": 5,
+     "nk1": 7
+    },
+    {
+     "w": 14,
+     "h": 14,
+     "cin": 24,
+     "cmid": 144,
+     "cout": 24,
+     "nj": 7,
+     "nm": 5,
+     "nk1": 7
+    },
+    {
+     "w": 14,
+     "h": 14,
+     "cin": 24,
+     "cmid": 144,
+     "cout": 32,
+     "nj": 7,
+     "nm": 5,
+     "nk1": 7
+    },
+    {
+     "w": 14,
+     "h": 14,
+     "cin": 32,
+     "cmid": 192,
+     "cout": 32,
+     "nj": 7,
+     "nm": 6,
+     "nk1": 9
+    },
+    {
+     "w": 14,
+     "h": 14,
+     "cin": 32,
+     "cmid": 192,
+     "cout": 32,
+     "nj": 7,
+     "nm": 6,
+     "nk1": 9
+    }
+   ],
+   "arena_bytes": 663552,
+   "descriptor_sha256": "afa6f7e011ff7d81a99a59925065b1c316aba8d9cce056221cbd7e39485ab367",
+   "runs": [
+    {
+     "schedule": "whole",
+     "round": 0,
+     "jobs": [
+      {
+       "l0": 0,
+       "l1": 5,
+       "wall_ms": 9.869326997431926,
+       "wrapper_ms": 3.0734895833333336,
+       "body_us": 1379.9479166666667,
+       "prologue_us": [
+        102.13541666666667,
+        97.8125,
+        97.44791666666667,
+        135.98958333333334,
+        143.33333333333334
+       ],
+       "blocks_us": [
+        145.05208333333334,
+        129.0625,
+        130.15625,
+        156.25,
+        156.25
+       ]
+      }
+     ],
+     "wall_ms": 9.869326997431926,
+     "wrapper_ms": 3.0734895833333336,
+     "body_us": 1379.9479166666667,
+     "max_error_to_bound_ratio": 0.11244684551857041,
+     "output_abs_max": 0.458251953125
+    },
+    {
+     "schedule": "per_layer",
+     "round": 0,
+     "jobs": [
+      {
+       "l0": 0,
+       "l1": 1,
+       "wall_ms": 8.715554999071173,
+       "wrapper_ms": 1.9958854166666666,
+       "body_us": 265.46875,
+       "prologue_us": [
+        102.34375
+       ],
+       "blocks_us": [
+        144.11458333333334
+       ]
+      },
+      {
+       "l0": 1,
+       "l1": 2,
+       "wall_ms": 8.405771004618146,
+       "wrapper_ms": 1.97296875,
+       "body_us": 262.70833333333337,
+       "prologue_us": [
+        95.9375
+       ],
+       "blocks_us": [
+        148.07291666666669
+       ]
+      },
+      {
+       "l0": 2,
+       "l1": 3,
+       "wall_ms": 8.404886000789702,
+       "wrapper_ms": 1.9769270833333332,
+       "body_us": 263.125,
+       "prologue_us": [
+        98.07291666666667
+       ],
+       "blocks_us": [
+        146.30208333333334
+       ]
+      },
+      {
+       "l0": 3,
+       "l1": 4,
+       "wall_ms": 8.374991011805832,
+       "wrapper_ms": 2.05203125,
+       "body_us": 330.15625,
+       "prologue_us": [
+        139.73958333333334
+       ],
+       "blocks_us": [
+        171.97916666666669
+       ]
+      },
+      {
+       "l0": 4,
+       "l1": 5,
+       "wall_ms": 8.372906988370232,
+       "wrapper_ms": 2.044114583333333,
+       "body_us": 331.40625,
+       "prologue_us": [
+        142.03125
+       ],
+       "blocks_us": [
+        170.57291666666669
+       ]
+      }
+     ],
+     "wall_ms": 42.274110004655086,
+     "wrapper_ms": 10.041927083333333,
+     "body_us": 1452.8645833333335,
+     "max_error_to_bound_ratio": 0.11244684551857041,
+     "output_abs_max": 0.458251953125
+    },
+    {
+     "schedule": "per_layer",
+     "round": 1,
+     "jobs": [
+      {
+       "l0": 0,
+       "l1": 1,
+       "wall_ms": 8.685399006935768,
+       "wrapper_ms": 1.9508333333333334,
+       "body_us": 266.14583333333337,
+       "prologue_us": [
+        101.66666666666667
+       ],
+       "blocks_us": [
+        145.88541666666669
+       ]
+      },
+      {
+       "l0": 1,
+       "l1": 2,
+       "wall_ms": 8.724200990400277,
+       "wrapper_ms": 1.97515625,
+       "body_us": 262.1875,
+       "prologue_us": [
+        97.86458333333334
+       ],
+       "blocks_us": [
+        145.41666666666669
+       ]
+      },
+      {
+       "l0": 2,
+       "l1": 3,
+       "wall_ms": 8.56253800156992,
+       "wrapper_ms": 2.0005729166666666,
+       "body_us": 263.3854166666667,
+       "prologue_us": [
+        99.47916666666667
+       ],
+       "blocks_us": [
+        145.0
+       ]
+      },
+      {
+       "l0": 3,
+       "l1": 4,
+       "wall_ms": 8.640504005597904,
+       "wrapper_ms": 2.0766666666666667,
+       "body_us": 339.21875,
+       "prologue_us": [
+        147.08333333333334
+       ],
+       "blocks_us": [
+        172.8125
+       ]
+      },
+      {
+       "l0": 4,
+       "l1": 5,
+       "wall_ms": 8.65467099356465,
+       "wrapper_ms": 2.0465104166666666,
+       "body_us": 336.14583333333337,
+       "prologue_us": [
+        144.375
+       ],
+       "blocks_us": [
+        173.17708333333334
+       ]
+      }
+     ],
+     "wall_ms": 43.26731299806852,
+     "wrapper_ms": 10.049739583333333,
+     "body_us": 1467.0833333333335,
+     "max_error_to_bound_ratio": 0.11244684551857041,
+     "output_abs_max": 0.458251953125
+    },
+    {
+     "schedule": "whole",
+     "round": 1,
+     "jobs": [
+      {
+       "l0": 0,
+       "l1": 5,
+       "wall_ms": 10.187078994931653,
+       "wrapper_ms": 3.045052083333333,
+       "body_us": 1362.9166666666667,
+       "prologue_us": [
+        99.21875,
+        92.44791666666667,
+        96.875,
+        137.1875,
+        136.51041666666669
+       ],
+       "blocks_us": [
+        147.03125,
+        128.85416666666669,
+        129.375,
+        155.67708333333334,
+        154.375
+       ]
+      }
+     ],
+     "wall_ms": 10.187078994931653,
+     "wrapper_ms": 3.045052083333333,
+     "body_us": 1362.9166666666667,
+     "max_error_to_bound_ratio": 0.11244684551857041,
+     "output_abs_max": 0.458251953125
+    },
+    {
+     "schedule": "whole",
+     "round": 2,
+     "jobs": [
+      {
+       "l0": 0,
+       "l1": 5,
+       "wall_ms": 9.697613000753336,
+       "wrapper_ms": 3.07265625,
+       "body_us": 1369.375,
+       "prologue_us": [
+        97.1875,
+        93.28125,
+        94.58333333333334,
+        145.10416666666669,
+        136.66666666666669
+       ],
+       "blocks_us": [
+        145.88541666666669,
+        129.16666666666669,
+        129.58333333333334,
+        157.55208333333334,
+        153.59375
+       ]
+      }
+     ],
+     "wall_ms": 9.697613000753336,
+     "wrapper_ms": 3.07265625,
+     "body_us": 1369.375,
+     "max_error_to_bound_ratio": 0.11244684551857041,
+     "output_abs_max": 0.458251953125
+    },
+    {
+     "schedule": "per_layer",
+     "round": 2,
+     "jobs": [
+      {
+       "l0": 0,
+       "l1": 1,
+       "wall_ms": 9.041953002451919,
+       "wrapper_ms": 1.969375,
+       "body_us": 263.8541666666667,
+       "prologue_us": [
+        102.03125
+       ],
+       "blocks_us": [
+        142.86458333333334
+       ]
+      },
+      {
+       "l0": 1,
+       "l1": 2,
+       "wall_ms": 8.588162992964499,
+       "wrapper_ms": 1.9980208333333334,
+       "body_us": 268.17708333333337,
+       "prologue_us": [
+        101.61458333333334
+       ],
+       "blocks_us": [
+        147.55208333333334
+       ]
+      },
+      {
+       "l0": 2,
+       "l1": 3,
+       "wall_ms": 8.498998009599745,
+       "wrapper_ms": 1.97828125,
+       "body_us": 266.40625,
+       "prologue_us": [
+        100.52083333333334
+       ],
+       "blocks_us": [
+        146.5625
+       ]
+      },
+      {
+       "l0": 3,
+       "l1": 4,
+       "wall_ms": 8.52253899211064,
+       "wrapper_ms": 2.031875,
+       "body_us": 328.4375,
+       "prologue_us": [
+        141.14583333333334
+       ],
+       "blocks_us": [
+        168.02083333333334
+       ]
+      },
+      {
+       "l0": 4,
+       "l1": 5,
+       "wall_ms": 8.26796199544333,
+       "wrapper_ms": 2.0305208333333336,
+       "body_us": 339.11458333333337,
+       "prologue_us": [
+        148.90625
+       ],
+       "blocks_us": [
+        171.09375
+       ]
+      }
+     ],
+     "wall_ms": 42.91961499257013,
+     "wrapper_ms": 10.008072916666666,
+     "body_us": 1465.9895833333335,
+     "max_error_to_bound_ratio": 0.11244684551857041,
+     "output_abs_max": 0.458251953125
+    },
+    {
+     "schedule": "per_layer",
+     "round": 3,
+     "jobs": [
+      {
+       "l0": 0,
+       "l1": 1,
+       "wall_ms": 8.627015995443799,
+       "wrapper_ms": 1.9961979166666666,
+       "body_us": 270.3125,
+       "prologue_us": [
+        103.95833333333334
+       ],
+       "blocks_us": [
+        147.8125
+       ]
+      },
+      {
+       "l0": 1,
+       "l1": 2,
+       "wall_ms": 8.208536004531197,
+       "wrapper_ms": 1.9608333333333334,
+       "body_us": 257.86458333333337,
+       "prologue_us": [
+        95.05208333333334
+       ],
+       "blocks_us": [
+        143.85416666666669
+       ]
+      },
+      {
+       "l0": 2,
+       "l1": 3,
+       "wall_ms": 8.13119500526227,
+       "wrapper_ms": 1.9741666666666666,
+       "body_us": 264.7916666666667,
+       "prologue_us": [
+        97.8125
+       ],
+       "blocks_us": [
+        148.02083333333334
+       ]
+      },
+      {
+       "l0": 3,
+       "l1": 4,
+       "wall_ms": 10.773573987535201,
+       "wrapper_ms": 2.0500520833333336,
+       "body_us": 341.14583333333337,
+       "prologue_us": [
+        149.16666666666669
+       ],
+       "blocks_us": [
+        172.8125
+       ]
+      },
+      {
+       "l0": 4,
+       "l1": 5,
+       "wall_ms": 15.409442989039235,
+       "wrapper_ms": 2.0201041666666666,
+       "body_us": 334.9479166666667,
+       "prologue_us": [
+        145.10416666666669
+       ],
+       "blocks_us": [
+        171.25
+       ]
+      }
+     ],
+     "wall_ms": 51.1497639818117,
+     "wrapper_ms": 10.001354166666667,
+     "body_us": 1469.0625,
+     "max_error_to_bound_ratio": 0.11244684551857041,
+     "output_abs_max": 0.458251953125
+    },
+    {
+     "schedule": "whole",
+     "round": 3,
+     "jobs": [
+      {
+       "l0": 0,
+       "l1": 5,
+       "wall_ms": 9.688915000879206,
+       "wrapper_ms": 3.0477083333333335,
+       "body_us": 1364.4791666666667,
+       "prologue_us": [
+        102.65625,
+        93.125,
+        94.11458333333334,
+        134.89583333333334,
+        140.20833333333334
+       ],
+       "blocks_us": [
+        147.86458333333334,
+        127.70833333333334,
+        129.89583333333334,
+        155.26041666666669,
+        153.85416666666669
+       ]
+      }
+     ],
+     "wall_ms": 9.688915000879206,
+     "wrapper_ms": 3.0477083333333335,
+     "body_us": 1364.4791666666667,
+     "max_error_to_bound_ratio": 0.11244684551857041,
+     "output_abs_max": 0.458251953125
+    },
+    {
+     "schedule": "whole",
+     "round": 4,
+     "jobs": [
+      {
+       "l0": 0,
+       "l1": 5,
+       "wall_ms": 9.723861992824823,
+       "wrapper_ms": 3.0892708333333334,
+       "body_us": 1366.9270833333335,
+       "prologue_us": [
+        97.29166666666667,
+        91.45833333333334,
+        92.8125,
+        147.03125,
+        135.88541666666669
+       ],
+       "blocks_us": [
+        143.4375,
+        129.6875,
+        129.89583333333334,
+        158.95833333333334,
+        154.89583333333334
+       ]
+      }
+     ],
+     "wall_ms": 9.723861992824823,
+     "wrapper_ms": 3.0892708333333334,
+     "body_us": 1366.9270833333335,
+     "max_error_to_bound_ratio": 0.11244684551857041,
+     "output_abs_max": 0.458251953125
+    },
+    {
+     "schedule": "per_layer",
+     "round": 4,
+     "jobs": [
+      {
+       "l0": 0,
+       "l1": 1,
+       "wall_ms": 8.86331099900417,
+       "wrapper_ms": 1.9688020833333333,
+       "body_us": 264.375,
+       "prologue_us": [
+        101.51041666666667
+       ],
+       "blocks_us": [
+        144.0625
+       ]
+      },
+      {
+       "l0": 1,
+       "l1": 2,
+       "wall_ms": 8.565871001337655,
+       "wrapper_ms": 1.96078125,
+       "body_us": 257.55208333333337,
+       "prologue_us": [
+        96.5625
+       ],
+       "blocks_us": [
+        142.03125
+       ]
+      },
+      {
+       "l0": 2,
+       "l1": 3,
+       "wall_ms": 8.181142009561881,
+       "wrapper_ms": 1.97375,
+       "body_us": 268.59375,
+       "prologue_us": [
+        103.17708333333334
+       ],
+       "blocks_us": [
+        146.51041666666669
+       ]
+      },
+      {
+       "l0": 3,
+       "l1": 4,
+       "wall_ms": 8.249004007666372,
+       "wrapper_ms": 2.0517708333333333,
+       "body_us": 328.125,
+       "prologue_us": [
+        136.71875
+       ],
+       "blocks_us": [
+        172.39583333333334
+       ]
+      },
+      {
+       "l0": 4,
+       "l1": 5,
+       "wall_ms": 8.230566993006505,
+       "wrapper_ms": 2.05046875,
+       "body_us": 337.39583333333337,
+       "prologue_us": [
+        146.09375
+       ],
+       "blocks_us": [
+        172.44791666666669
+       ]
+      }
+     ],
+     "wall_ms": 42.08989501057658,
+     "wrapper_ms": 10.005572916666667,
+     "body_us": 1456.0416666666667,
+     "max_error_to_bound_ratio": 0.11244684551857041,
+     "output_abs_max": 0.458251953125
+    }
+   ],
+   "post_fault_accuracy": [
+    {
+     "values": 4704,
+     "max_abs": 0.000244140625,
+     "max_error_to_bound_ratio": 0.06612151536711629,
+     "output_abs_max": 0.458251953125
+    },
+    {
+     "values": 4704,
+     "max_abs": 0.000244140625,
+     "max_error_to_bound_ratio": 0.07952833873716245,
+     "output_abs_max": 0.322998046875
+    },
+    {
+     "values": 6272,
+     "max_abs": 0.0003662109375,
+     "max_error_to_bound_ratio": 0.0989960894964539,
+     "output_abs_max": 0.33740234375
+    },
+    {
+     "values": 6272,
+     "max_abs": 0.00048828125,
+     "max_error_to_bound_ratio": 0.11244684551857041,
+     "output_abs_max": 0.401123046875
+    },
+    {
+     "values": 6272,
+     "max_abs": 0.000244140625,
+     "max_error_to_bound_ratio": 0.07187158534303348,
+     "output_abs_max": 0.35888671875
+    }
+   ],
+   "controls": {
+    "guarded_fault": 1,
+    "window_rejection": 1,
+    "post_fault_valid": 1
+   },
+   "summary": {
+    "whole": {
+     "wall_ms": 9.723861992824823,
+     "wrapper_ms": 3.07265625,
+     "body_us": 1366.9270833333335
+    },
+    "per_layer": {
+     "wall_ms": 42.91961499257013,
+     "wrapper_ms": 10.008072916666666,
+     "body_us": 1465.9895833333335
+    },
+    "per_layer_us": [
+     {
+      "prologue": 99.21875,
+      "blocks": 145.88541666666669
+     },
+     {
+      "prologue": 93.125,
+      "blocks": 129.0625
+     },
+     {
+      "prologue": 94.58333333333334,
+      "blocks": 129.89583333333334
+     },
+     {
+      "prologue": 137.1875,
+      "blocks": 156.25
+     },
+     {
+      "prologue": 136.66666666666669,
+      "blocks": 154.375
+     }
+    ]
+   }
+  },
+  "c7": {
+   "layers": [
+    {
+     "w": 7,
+     "h": 7,
+     "cin": 56,
+     "cmid": 336,
+     "cout": 56,
+     "nj": 2,
+     "nm": 11,
+     "nk1": 16
+    },
+    {
+     "w": 7,
+     "h": 7,
+     "cin": 56,
+     "cmid": 336,
+     "cout": 56,
+     "nj": 2,
+     "nm": 11,
+     "nk1": 16
+    },
+    {
+     "w": 7,
+     "h": 7,
+     "cin": 56,
+     "cmid": 336,
+     "cout": 56,
+     "nj": 2,
+     "nm": 11,
+     "nk1": 16
+    },
+    {
+     "w": 7,
+     "h": 7,
+     "cin": 56,
+     "cmid": 336,
+     "cout": 56,
+     "nj": 2,
+     "nm": 11,
+     "nk1": 16
+    }
+   ],
+   "arena_bytes": 1773568,
+   "descriptor_sha256": "6e0093359cfdc942d3b00b5390b0262016ad204d6881a2354a104e9fda2b242d",
+   "runs": [
+    {
+     "schedule": "whole",
+     "round": 0,
+     "jobs": [
+      {
+       "l0": 0,
+       "l1": 4,
+       "wall_ms": 10.67597299697809,
+       "wrapper_ms": 3.814322916666667,
+       "body_us": 2133.0208333333335,
+       "prologue_us": [
+        446.61458333333337,
+        417.08333333333337,
+        431.14583333333337,
+        420.3125
+       ],
+       "blocks_us": [
+        98.90625,
+        83.4375,
+        82.03125,
+        83.48958333333334
+       ]
+      }
+     ],
+     "wall_ms": 10.67597299697809,
+     "wrapper_ms": 3.814322916666667,
+     "body_us": 2133.0208333333335,
+     "max_error_to_bound_ratio": 0.06415389356640246,
+     "output_abs_max": 0.461181640625
+    },
+    {
+     "schedule": "per_layer",
+     "round": 0,
+     "jobs": [
+      {
+       "l0": 0,
+       "l1": 1,
+       "wall_ms": 8.998360004625283,
+       "wrapper_ms": 2.2377083333333334,
+       "body_us": 549.4270833333334,
+       "prologue_us": [
+        430.8854166666667
+       ],
+       "blocks_us": [
+        99.63541666666667
+       ]
+      },
+      {
+       "l0": 1,
+       "l1": 2,
+       "wall_ms": 8.807480000541545,
+       "wrapper_ms": 2.2473958333333335,
+       "body_us": 556.09375,
+       "prologue_us": [
+        438.02083333333337
+       ],
+       "blocks_us": [
+        99.11458333333334
+       ]
+      },
+      {
+       "l0": 2,
+       "l1": 3,
+       "wall_ms": 8.666442008689046,
+       "wrapper_ms": 2.2272916666666664,
+       "body_us": 556.25,
+       "prologue_us": [
+        438.59375
+       ],
+       "blocks_us": [
+        98.80208333333334
+       ]
+      },
+      {
+       "l0": 3,
+       "l1": 4,
+       "wall_ms": 8.699565994902514,
+       "wrapper_ms": 2.2504166666666667,
+       "body_us": 550.2083333333334,
+       "prologue_us": [
+        432.4479166666667
+       ],
+       "blocks_us": [
+        99.16666666666667
+       ]
+      }
+     ],
+     "wall_ms": 35.17184800875839,
+     "wrapper_ms": 8.9628125,
+     "body_us": 2211.979166666667,
+     "max_error_to_bound_ratio": 0.06415389356640246,
+     "output_abs_max": 0.461181640625
+    },
+    {
+     "schedule": "per_layer",
+     "round": 1,
+     "jobs": [
+      {
+       "l0": 0,
+       "l1": 1,
+       "wall_ms": 8.936331010772847,
+       "wrapper_ms": 2.236875,
+       "body_us": 543.1770833333334,
+       "prologue_us": [
+        424.73958333333337
+       ],
+       "blocks_us": [
+        99.63541666666667
+       ]
+      },
+      {
+       "l0": 1,
+       "l1": 2,
+       "wall_ms": 8.471029999782331,
+       "wrapper_ms": 2.234114583333333,
+       "body_us": 553.59375,
+       "prologue_us": [
+        436.0416666666667
+       ],
+       "blocks_us": [
+        99.01041666666667
+       ]
+      },
+      {
+       "l0": 2,
+       "l1": 3,
+       "wall_ms": 8.615505008492619,
+       "wrapper_ms": 2.2399479166666665,
+       "body_us": 536.71875,
+       "prologue_us": [
+        418.0729166666667
+       ],
+       "blocks_us": [
+        99.63541666666667
+       ]
+      },
+      {
+       "l0": 3,
+       "l1": 4,
+       "wall_ms": 8.52540299820248,
+       "wrapper_ms": 2.2434375,
+       "body_us": 565.3125,
+       "prologue_us": [
+        446.45833333333337
+       ],
+       "blocks_us": [
+        99.89583333333334
+       ]
+      }
+     ],
+     "wall_ms": 34.54826901725028,
+     "wrapper_ms": 8.954374999999999,
+     "body_us": 2198.8020833333335,
+     "max_error_to_bound_ratio": 0.06415389356640246,
+     "output_abs_max": 0.461181640625
+    },
+    {
+     "schedule": "whole",
+     "round": 1,
+     "jobs": [
+      {
+       "l0": 0,
+       "l1": 4,
+       "wall_ms": 10.476810988620855,
+       "wrapper_ms": 3.84984375,
+       "body_us": 2154.947916666667,
+       "prologue_us": [
+        440.20833333333337,
+        435.52083333333337,
+        426.92708333333337,
+        434.0625
+       ],
+       "blocks_us": [
+        100.26041666666667,
+        83.54166666666667,
+        82.76041666666667,
+        82.96875
+       ]
+      }
+     ],
+     "wall_ms": 10.476810988620855,
+     "wrapper_ms": 3.84984375,
+     "body_us": 2154.947916666667,
+     "max_error_to_bound_ratio": 0.06415389356640246,
+     "output_abs_max": 0.461181640625
+    },
+    {
+     "schedule": "whole",
+     "round": 2,
+     "jobs": [
+      {
+       "l0": 0,
+       "l1": 4,
+       "wall_ms": 10.541496987571009,
+       "wrapper_ms": 3.8354166666666667,
+       "body_us": 2129.375,
+       "prologue_us": [
+        431.30208333333337,
+        444.0104166666667,
+        407.7604166666667,
+        424.375
+       ],
+       "blocks_us": [
+        99.375,
+        83.85416666666667,
+        84.58333333333334,
+        83.75
+       ]
+      }
+     ],
+     "wall_ms": 10.541496987571009,
+     "wrapper_ms": 3.8354166666666667,
+     "body_us": 2129.375,
+     "max_error_to_bound_ratio": 0.06415389356640246,
+     "output_abs_max": 0.461181640625
+    },
+    {
+     "schedule": "per_layer",
+     "round": 2,
+     "jobs": [
+      {
+       "l0": 0,
+       "l1": 1,
+       "wall_ms": 9.212678007315844,
+       "wrapper_ms": 2.2166145833333335,
+       "body_us": 548.75,
+       "prologue_us": [
+        433.3854166666667
+       ],
+       "blocks_us": [
+        96.61458333333334
+       ]
+      },
+      {
+       "l0": 1,
+       "l1": 2,
+       "wall_ms": 9.106795012485236,
+       "wrapper_ms": 2.2371875,
+       "body_us": 553.5416666666667,
+       "prologue_us": [
+        434.9479166666667
+       ],
+       "blocks_us": [
+        100.15625
+       ]
+      },
+      {
+       "l0": 2,
+       "l1": 3,
+       "wall_ms": 8.894300000974908,
+       "wrapper_ms": 2.2329166666666667,
+       "body_us": 541.3541666666667,
+       "prologue_us": [
+        423.80208333333337
+       ],
+       "blocks_us": [
+        98.69791666666667
+       ]
+      },
+      {
+       "l0": 3,
+       "l1": 4,
+       "wall_ms": 8.725659004994668,
+       "wrapper_ms": 2.2680729166666667,
+       "body_us": 562.0833333333334,
+       "prologue_us": [
+        443.48958333333337
+       ],
+       "blocks_us": [
+        99.63541666666667
+       ]
+      }
+     ],
+     "wall_ms": 35.93943202577066,
+     "wrapper_ms": 8.954791666666667,
+     "body_us": 2205.729166666667,
+     "max_error_to_bound_ratio": 0.06415389356640246,
+     "output_abs_max": 0.461181640625
+    },
+    {
+     "schedule": "per_layer",
+     "round": 3,
+     "jobs": [
+      {
+       "l0": 0,
+       "l1": 1,
+       "wall_ms": 9.09450299513992,
+       "wrapper_ms": 2.231875,
+       "body_us": 545.6770833333334,
+       "prologue_us": [
+        428.64583333333337
+       ],
+       "blocks_us": [
+        98.28125
+       ]
+      },
+      {
+       "l0": 1,
+       "l1": 2,
+       "wall_ms": 8.683628009748645,
+       "wrapper_ms": 2.199895833333333,
+       "body_us": 532.1875,
+       "prologue_us": [
+        413.4375
+       ],
+       "blocks_us": [
+        100.05208333333334
+       ]
+      },
+      {
+       "l0": 2,
+       "l1": 3,
+       "wall_ms": 8.591443998739123,
+       "wrapper_ms": 2.2280729166666666,
+       "body_us": 549.7395833333334,
+       "prologue_us": [
+        434.6875
+       ],
+       "blocks_us": [
+        96.61458333333334
+       ]
+      },
+      {
+       "l0": 3,
+       "l1": 4,
+       "wall_ms": 8.732428992516361,
+       "wrapper_ms": 2.259375,
+       "body_us": 562.03125,
+       "prologue_us": [
+        443.90625
+       ],
+       "blocks_us": [
+        99.21875
+       ]
+      }
+     ],
+     "wall_ms": 35.10200399614405,
+     "wrapper_ms": 8.919218749999999,
+     "body_us": 2189.635416666667,
+     "max_error_to_bound_ratio": 0.06415389356640246,
+     "output_abs_max": 0.461181640625
+    },
+    {
+     "schedule": "whole",
+     "round": 3,
+     "jobs": [
+      {
+       "l0": 0,
+       "l1": 4,
+       "wall_ms": 10.501810000278056,
+       "wrapper_ms": 3.79140625,
+       "body_us": 2111.875,
+       "prologue_us": [
+        438.4375,
+        431.1979166666667,
+        415.3125,
+        414.21875
+       ],
+       "blocks_us": [
+        96.82291666666667,
+        82.1875,
+        81.875,
+        83.33333333333334
+       ]
+      }
+     ],
+     "wall_ms": 10.501810000278056,
+     "wrapper_ms": 3.79140625,
+     "body_us": 2111.875,
+     "max_error_to_bound_ratio": 0.06415389356640246,
+     "output_abs_max": 0.461181640625
+    },
+    {
+     "schedule": "whole",
+     "round": 4,
+     "jobs": [
+      {
+       "l0": 0,
+       "l1": 4,
+       "wall_ms": 10.465666011441499,
+       "wrapper_ms": 3.820520833333333,
+       "body_us": 2119.8958333333335,
+       "prologue_us": [
+        446.61458333333337,
+        415.4166666666667,
+        419.11458333333337,
+        423.48958333333337
+       ],
+       "blocks_us": [
+        98.75,
+        82.55208333333334,
+        82.08333333333334,
+        82.5
+       ]
+      }
+     ],
+     "wall_ms": 10.465666011441499,
+     "wrapper_ms": 3.820520833333333,
+     "body_us": 2119.8958333333335,
+     "max_error_to_bound_ratio": 0.06415389356640246,
+     "output_abs_max": 0.461181640625
+    },
+    {
+     "schedule": "per_layer",
+     "round": 4,
+     "jobs": [
+      {
+       "l0": 0,
+       "l1": 1,
+       "wall_ms": 9.271738003008068,
+       "wrapper_ms": 2.216458333333333,
+       "body_us": 533.0729166666667,
+       "prologue_us": [
+        417.03125
+       ],
+       "blocks_us": [
+        97.1875
+       ]
+      },
+      {
+       "l0": 1,
+       "l1": 2,
+       "wall_ms": 8.990338988951407,
+       "wrapper_ms": 2.224270833333333,
+       "body_us": 541.7708333333334,
+       "prologue_us": [
+        422.96875
+       ],
+       "blocks_us": [
+        100.3125
+       ]
+      },
+      {
+       "l0": 2,
+       "l1": 3,
+       "wall_ms": 8.805969002423808,
+       "wrapper_ms": 2.25109375,
+       "body_us": 550.8854166666667,
+       "prologue_us": [
+        433.90625
+       ],
+       "blocks_us": [
+        97.86458333333334
+       ]
+      },
+      {
+       "l0": 3,
+       "l1": 4,
+       "wall_ms": 8.872738006175496,
+       "wrapper_ms": 2.2319270833333333,
+       "body_us": 552.34375,
+       "prologue_us": [
+        436.1979166666667
+       ],
+       "blocks_us": [
+        97.70833333333334
+       ]
+      }
+     ],
+     "wall_ms": 35.94078400055878,
+     "wrapper_ms": 8.92375,
+     "body_us": 2178.072916666667,
+     "max_error_to_bound_ratio": 0.06415389356640246,
+     "output_abs_max": 0.461181640625
+    }
+   ],
+   "post_fault_accuracy": [
+    {
+     "values": 2744,
+     "max_abs": 0.0003662109375,
+     "max_error_to_bound_ratio": 0.05394872181437948,
+     "output_abs_max": 0.461181640625
+    },
+    {
+     "values": 2744,
+     "max_abs": 0.000244140625,
+     "max_error_to_bound_ratio": 0.05329848289081482,
+     "output_abs_max": 0.364501953125
+    },
+    {
+     "values": 2744,
+     "max_abs": 0.0003662109375,
+     "max_error_to_bound_ratio": 0.06415389356640246,
+     "output_abs_max": 0.35400390625
+    },
+    {
+     "values": 2744,
+     "max_abs": 0.000244140625,
+     "max_error_to_bound_ratio": 0.05734722186229682,
+     "output_abs_max": 0.332763671875
+    }
+   ],
+   "controls": {
+    "guarded_fault": 1,
+    "window_rejection": 1,
+    "post_fault_valid": 1
+   },
+   "summary": {
+    "whole": {
+     "wall_ms": 10.501810000278056,
+     "wrapper_ms": 3.820520833333333,
+     "body_us": 2129.375
+    },
+    "per_layer": {
+     "wall_ms": 35.17184800875839,
+     "wrapper_ms": 8.954374999999999,
+     "body_us": 2198.8020833333335
+    },
+    "per_layer_us": [
+     {
+      "prologue": 440.20833333333337,
+      "blocks": 98.90625
+     },
+     {
+      "prologue": 431.1979166666667,
+      "blocks": 83.4375
+     },
+     {
+      "prologue": 419.11458333333337,
+      "blocks": 82.08333333333334
+     },
+     {
+      "prologue": 423.48958333333337,
+      "blocks": 83.33333333333334
+     }
+    ]
+   }
+  }
+ },
+ "service_before": "MainPID=1015\nNRestarts=0\nActiveState=active\n",
+ "initial_health": {
+  "state": {
+   "abi": 9,
+   "control": [
+    1,
+    0,
+    1
+   ],
+   "callback": 0,
+   "poisoned": false
+  },
+  "firmware_code_prefix_bytes": 114688,
+  "firmware_code_prefix_sha256": "55679e13486357627ea22e494b25342acd9d24d73450f3f28eb1113b82c71b95",
+  "power_configuration_sha256": "2405bda200a51fd0bd699568e8415e53ba7b631cbaa9d4812c656b7240159bbd",
+  "power_restored": true
+ },
+ "arena_before_sha256": "94674964076f61f96f8eb7e5ba78b1e5defde8c1d2f320ba45fda8c3ac6c3b48",
+ "arena_after_sha256": "94674964076f61f96f8eb7e5ba78b1e5defde8c1d2f320ba45fda8c3ac6c3b48",
+ "final_health": {
+  "state": {
+   "abi": 9,
+   "control": [
+    1,
+    0,
+    1
+   ],
+   "callback": 0,
+   "poisoned": false
+  },
+  "firmware_code_prefix_bytes": 114688,
+  "firmware_code_prefix_sha256": "55679e13486357627ea22e494b25342acd9d24d73450f3f28eb1113b82c71b95",
+  "power_configuration_sha256": "2405bda200a51fd0bd699568e8415e53ba7b631cbaa9d4812c656b7240159bbd",
+  "power_restored": true
+ },
+ "service_after": "MainPID=1015\nNRestarts=0\nActiveState=active\n",
+ "all_checks_passed": true
+}

@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Added the v3 layer-chain executor prototype
+  ([HMX_SPATIAL_BLOCK.md](docs/HMX_SPATIAL_BLOCK.md#v3-layer-chain-executor)).
+  It runs whole fused 3x3+1x1 layers from runtime descriptors, with weights,
+  tables and activations in a window of the persistent DDR arena. Each layer
+  writes the next layer's input on the device. The five-layer 14x14 chain
+  takes 1.37 ms of kernel body and the four-layer 7x7 chain 2.13 ms, of
+  which 80% is weight streaming from uncached DDR. Each extra job adds about
+  1.6 ms of in-DSP wrapper time, so chains should run as few jobs as
+  possible. All layers matched the oracle, fault and rejection controls
+  passed, and the arena was restored byte for byte.
 - Added the VTCM-resident v2 HMX spatial block. It stages weights, the source
   band and mid tiles in the proven 1,912 KiB FeatureNN scratch span. Steady
   per-block time falls 9-30x versus v1, and the half-width convolution

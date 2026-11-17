@@ -47,3 +47,4 @@ include evidence/hmx-model-feasibility.json
 include evidence/hmx-spatial-block.json
 include evidence/vtcm-ownership.json
 include evidence/hmx-resident-block.json
+include evidence/hmx-layer-chain.json
