@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Resident teacher tail ([TEACHER_RESIDENT.md](docs/TEACHER_RESIDENT.md)).
+  One opcode-111 kernel runs whole sequences of 1x1 (HMX) and stride-1
+  depthwise (HVX) layers, with tensors kept in VTCM, from a natively validated
+  op table. The stride-2 layers stay as opcode-110 jobs. Per frame this is 7
+  jobs instead of 42, 30.0 ms of in-DSP time instead of 96.2 ms, and
+  94.6 ms of host wall time instead of 430 ms. Every compared tensor was
+  bit-identical to the per-layer qualification run on all four corpus crops,
+  and accuracy is unchanged.
 - Ran the unchanged teacher in FP16 on the DSP from the 56x56 stage to the
   heads ([TEACHER_TAIL_FP16.md](docs/TEACHER_TAIL_FP16.md)): 42 jobs per crop
   (HMX 1x1 with fused bias, clip and residual; HVX QFloat16 depthwise, stride

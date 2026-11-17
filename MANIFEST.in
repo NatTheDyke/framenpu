@@ -53,3 +53,4 @@ include evidence/hvx-depthwise-v2.json
 include evidence/hvx-issue-rate.json
 include evidence/teacher-tail-fp16.json
 include evidence/teacher-tail-fp16-emulation.json
+include evidence/teacher-resident-fp16.json
