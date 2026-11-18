@@ -109,7 +109,7 @@ def main(argv=None):
             [
                 python,
                 "-c",
-                "import framenpu.convolution, framenpu.landmark, framenpu.resident_landmark; from framenpu.provenance import verify_kernel; verify_kernel()",
+                "import framenpu.convolution, framenpu.landmark, framenpu.resident_landmark; from framenpu.mercury_runtime import MercurySession; from framenpu.provenance import verify_kernel; verify_kernel(); import sys; assert not any(n in sys.modules for n in ('mercury_layout', 'teacher_resident_layout', 'teacher_tail_layout', 'hmx_block_layout'))",
             ],
             cwd=work,
             env=env,

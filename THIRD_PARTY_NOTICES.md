@@ -22,6 +22,14 @@ The recorded source frames/crops and generated tensor dumps remain private.
 Only source adapters, hashes, ROI metadata and sanitized numerical summaries
 are included. Optional NumPy/Pillow preparation dependencies are external.
 
+## Tracker integration patch
+
+The [steam-frame-hand-tracking patch](integrations/steam-frame-hand-tracking.patch)
+contains context from spyjacob's MIT-licensed tracker, copyright (c) 2026 spyjacob,
+based on upstream commit `8852ec9bdd4f81fb5a359e5bf88ed25f0e6fc89e`.
+Its [upstream license](integrations/steam-frame-hand-tracking.LICENSE) is included.
+The tracker and its model weights are not bundled with the Python wheel.
+
 ## Primary research references
 
 Referenced projects are not redistributed here.

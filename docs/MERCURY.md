@@ -654,9 +654,11 @@ are unchanged.
   itself is about 1.45 and parameter copies about 0.72; depthwise 0.98;
   stride 2 0.59; activation load/store 0.17. Hiding the posts and gathers
   behind HMX would need a second hardware thread for the HVX work.
-- **Request scheduling.** Integrate replay with actual groups of 1..3 crops
-  at the Mercury call site. Three is the maximum; submit fewer crops as
-  available, without padding or waiting for a third crop.
+- **Tracker integration.** The [pluggable backend](MERCURY_INTEGRATION.md)
+  submits actual groups of 1..3 crops immediately and keeps CPU as the default
+  and fallback. A [live comparison](MERCURY_LIVE.md) confirms worker CPU savings
+  and a modest two-crop gain; the remaining target is consistent end-to-end
+  improvement and sustained thermal/coexistence qualification.
 - **Host overhead** is now about 1.8 ms per crop at batch 2 with held power.
   The remaining pieces are the dispatch wake and completion poll (about 0.9 ms
   per request), the staging in NumPy (about 0.55 ms per crop) and the gate

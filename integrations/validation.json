@@ -1,0 +1,29 @@
+{
+  "format": "framenpu-tracker-integration-validation",
+  "upstream": "https://github.com/spyjacob/steam-frame-hand-tracking",
+  "base_commit": "8852ec9bdd4f81fb5a359e5bf88ed25f0e6fc89e",
+  "patch_sha256": "4377606cc8764011a4f59cc9158cad31b9a5c3f9b2dac33d36833ff70c3feca1",
+  "cpu_default": true,
+  "accelerator_failure_latched_to_cpu": true,
+  "request_crop_counts": [
+    1,
+    2,
+    3
+  ],
+  "wait_for_more_crops": false,
+  "padding": false,
+  "framenpu_tests_passed": 344,
+  "tracker_tests_passed": 14,
+  "original_cpu_geometry_decode_exact_observations": 4,
+  "clean_patch_application_passed": true,
+  "device_evidence": "evidence/mercury-runtime-device.json",
+  "device_evidence_sha256": "6e2ecfd053ee391980657bbb4c529350552e187d56a965e9ecaf87ec662dfef9",
+  "live_camera_coexistence_and_thermals_validated": false,
+  "short_live_camera_comparison_passed": true,
+  "sustained_thermal_and_pc_rendering_validated": false,
+  "live_evidence": "evidence/mercury-live-validation.json",
+  "live_evidence_sha256": "cc43b9e5482304b3908d48f0a6b3e7e538b72439df08304ee1480654c98ed390",
+  "tracker_commit": "07833fbacf406792fc9c4e3f3957b37eb30389e5",
+  "tracker_fork": "https://github.com/NatTheDyke/steam-frame-hand-tracking",
+  "tracker_branch": "framenpu-inference"
+}

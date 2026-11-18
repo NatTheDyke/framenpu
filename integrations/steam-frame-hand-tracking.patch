@@ -1,0 +1,862 @@
+diff --git a/README.md b/README.md
+index 8e1d009..8f85496 100644
+--- a/README.md
++++ b/README.md
+@@ -26,6 +26,13 @@ back on the controller.**
+ - Works with Valve's normal Frame streaming. Any app with Frame-controller bindings works.
+ - Status, measurements and limitations: **[REPORT.md](REPORT.md)**; latest latency work: [LATENCY_REPORT_V2.md](LATENCY_REPORT_V2.md); next research: [RESEARCH_BRIEF_V3.md](RESEARCH_BRIEF_V3.md).
+ 
++## Optional FrameNPU inference
++
++Mercury tracking can use a pluggable FrameNPU inference backend with automatic
++CPU fallback. CPU remains the default. Available crops are submitted immediately
++in groups of one to three; the worker never waits for a third crop.
++Setup, selection and validation: [docs/FRAMENPU.md](docs/FRAMENPU.md).
++
+ ## The panel
+ 
+ ![Hand Tracking panel](overlay/panel_preview.png)
+diff --git a/docs/FRAMENPU.md b/docs/FRAMENPU.md
+new file mode 100644
+index 0000000..c2cde81
+--- /dev/null
++++ b/docs/FRAMENPU.md
+@@ -0,0 +1,131 @@
++# Mercury inference backends
++
++Mercury tracking keeps its existing crop geometry, normalization, hint policy,
++heatmap decoder, handedness, camera assignment, discovery, optical flow and hand
++fit. Inference is selected independently with `--merc-inference cpu|framenpu`.
++CPU is the default and still uses the same ONNX Runtime session settings.
++
++The optional FrameNPU backend runs `Conv_0..Conv_139` on the Frame's DSP using
++the qualified 55-descriptor replay image. Hint projection, pooling and heads
++remain on the CPU. Short live-camera trials alongside Valve tracking confirm
++inference-worker CPU savings and a modest two-crop processing-time gain.
++Sustained thermal/coexistence qualification and PC-rendering latency remain
++unmeasured; CPU stays the default.
++
++## Install and select
++
++Install FrameNPU in the tracker's Python environment (the version with
++`framenpu.mercury_runtime.MercurySession`) and build its qualified image in the
++FrameNPU source checkout:
++
++```sh
++python tools/build_teacher_link.py --stride2 --s2-even --s2-direct --pw-fast \
++  --dw-fast --pw-group 8 --replay --output /tmp/mercury-jobs
++```
++
++Deploy `link.json`, `teacher_link.bin` and `teacher_link_loader.fjob` together
++into, for example, `~/handtrack/framenpu-jobs`. The linked image SHA256 is
++`d7a78a81469c10acaf193b0d99cc0415f92d1de845a7a9aa292a7a1ebe691819`;
++the loader code SHA256 is
++`72280ad93eb4ffcf49e7de26908fa2d8f9056e0d9e1e8618f75eba867a7ba3f0`.
++FrameNPU verifies both and the existing Mercury model hash before use. Weights
++are still fetched privately via the existing model setup; none are bundled.
++
++CPU, including on machines with no FrameNPU installation:
++
++```sh
++python -m handtrack.live --backend mercury --merc-inference cpu
++```
++
++FrameNPU needs `/dev/mem` access (currently root) and the firmware supported by
++FrameNPU. Stop an existing tracker first. From the tracker checkout, using the
++same environment and the user's model/calibration paths:
++
++```sh
++sudo env HOME="$HOME" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
++  HANDTRACK_CPUS="${HANDTRACK_CPUS:-0-4}" \
++  ../venv/bin/python -m handtrack.live --backend mercury \
++  --merc-inference framenpu --framenpu-jobs "$HOME/handtrack/framenpu-jobs"
++```
++
++The normal unprivileged launcher can also pass these flags, but without device
++access the worker logs the reason and uses CPU. There is no automatic elevation.
++Mercury shadow comparisons in the MediaPipe worker continue to use CPU; a
++separate process must not contend for the same DSP session.
++
++## Submit the observations that exist
++
++`MercuryKeypoint.run()` submits its single observation immediately.
++`run_many(observations)` processes the currently available list in chunks of at
++most three. One or two crops are sent immediately at their actual count; no
++padding, batch timer, accumulation across captures or wait for a third crop is
++introduced. Four observations become requests of three and one. Zero-contrast
++crops keep a `None` result in their original position and use no inference slot.
++Camera, side, flip, hint and result order stay attached to each observation.
++
++The continuous tracker normally has one or two hand observations per cycle.
++The existing rate/thermal caps and `--merc-sched batch|perhand` selection remain;
++`perhand` still submits one hand at a time. Each request in the worker contains
++only the observations supplied by that scheduling decision. Group wall time in
++worker telemetry is the latency of every observation in the group; it is not
++divided by the crop count. The telemetry also records the active backend,
++actual request crop count and DSP body time. `--no-bridge` keeps Mercury's
++local palm tracking while disabling UDP output.
++
++## Fallback and lifetime
++
++The CPU session stays available. Missing FrameNPU, unsupported firmware, missing
++privileges, a busy DSP, a bad image/model, malformed accelerator output, or an
++inference error switches this worker to CPU. It reruns the complete affected
++batch on CPU, preserving order. It logs the failure once and never retries or
++reopens the accelerator during that worker's lifetime.
++
++HMX power is held between tracking requests and released when the tracker has
++no observations or the thermal guard pauses inference. A later observation
++resumes the same session. Shutdown waits for the active job, releases power,
++retires the image and restores the borrowed arena. The worker also registers a
++multiprocessing finalizer. The stop script lets the parent perform that cleanup
++before terminating leftover worker processes.
++
++An uncertain DSP completion retains the refusal record and device bytes, as
++required by FrameNPU; fallback does not clear gates, restart services, replay a
++failed DSP request, or attempt firmware recovery. CPU inference can continue
++without touching the DSP. A hard kill cannot run cleanup.
++
++## Plugin contract and validation
++
++A custom `backend=` passed to `MercuryKeypoint` implements:
++
++- `infer(feeds)`: one to three normalized ONNX feed dictionaries, returning one
++  dictionary per crop with `heatmap_xy`, `heatmap_depth`, `scalar_extras`, `curls`;
++- `idle()`: release active compute resources while keeping reusable state;
++- `close()`: release the session.
++
++Run local tests (NumPy + OpenCV; ONNX Runtime and the pinned model enable CPU
++parity tests):
++
++```sh
++FNPU_MERCURY_MODEL=/path/to/grayscale_keypoint_jan18.onnx \
++  python -m unittest discover -s tests -v
++```
++
++Tests cover immediate small submissions, 3+1 splitting, blank slots, metadata
++identity/hints, CPU default, CPU parity, cleanup and failure latching. The
++FrameNPU package separately checks planner byte parity, actual native bounds,
++metadata corruption and session ownership/restoration. Its packaged session
++passed 16 mixed-count requests on the Frame, with all feature tensors identical
++to the prior replay evidence and full arena/power/service restoration. Actual
++camera ground-truth accuracy, sustained live coexistence and thermals remain
++to be measured before enabling this backend by default.
++
++A subsequent CPU/NPU/NPU/CPU live comparison (four 18-second runs, three seconds
++warmup excluded) measured two-crop worker wall time of 34.09 ms CPU versus
++31.23 ms FrameNPU, and worker thread CPU of 29.66 versus 17.76 ms. One-crop
++wall time was slightly worse (17.87 versus 18.48 ms). Whole-pipeline median
++camera-detected-to-collect latency was 74.93 versus 72.07 ms, while accepted
++observations/s was 32.45 versus 31.04; the differing live hand/crop mixes and
++short trials do not establish a consistent throughput gain. A paired test of
++53 identical live crops produced no hand-presence decision flips, with max
++0.52 detector-pixel displacement. No ground-truth accuracy claim is made.
++FrameNPU's `docs/MERCURY_LIVE.md` and `evidence/mercury-live-validation.json`
++contain methodology, limitations and aggregate results.
+diff --git a/handtrack/inference.py b/handtrack/inference.py
+new file mode 100644
+index 0000000..c430d2b
+--- /dev/null
++++ b/handtrack/inference.py
+@@ -0,0 +1,129 @@
++"""Pluggable Mercury inference over normalized crops; CPU remains the default.
++
++Backends implement infer(feeds) -> one output dict per feed, plus idle()/close().
++A call contains 1..3 available crops. There is no batching timer or crop queue.
++"""
++import logging
++
++import numpy as np
++
++OUTPUTS = ("heatmap_xy", "heatmap_depth", "scalar_extras", "curls")
++SHAPES = ((1, 21, 22, 22), (1, 21, 22), (1, 8), (1, 10))
++LOG = logging.getLogger(__name__)
++
++
++class CPUBackend:
++    name = "cpu"
++
++    def __init__(self, model_path, threads=1):
++        import onnxruntime as ort
++        so = ort.SessionOptions()
++        so.intra_op_num_threads = threads
++        so.inter_op_num_threads = 1
++        so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
++        self.sess = ort.InferenceSession(str(model_path), so, providers=["CPUExecutionProvider"])
++
++    def infer(self, feeds):
++        return [dict(zip(OUTPUTS, self.sess.run(list(OUTPUTS), f))) for f in feeds]
++
++    def idle(self):
++        pass
++
++    def close(self):
++        pass
++
++
++class FrameNPUBackend:
++    name = "framenpu"
++
++    def __init__(self, model_path, jobs):
++        # Optional dependency; CPU-only installations never import FrameNPU.
++        from framenpu.mercury_runtime import MercurySession
++        self.session = MercurySession(model_path, jobs)
++
++    @property
++    def last_timing(self):
++        return self.session.last_timing
++
++    def infer(self, feeds):
++        return self.session.infer(feeds)
++
++    def idle(self):
++        self.session.idle()
++
++    def close(self):
++        self.session.close()
++
++
++class FallbackBackend:
++    """Latch an accelerator failure to CPU for this worker's remaining lifetime.
++
++    RecoveryRequired is never retried. The session's close leaves poisoned
++    device bytes/refusal state intact; CPU inference uses no DSP resources.
++    """
++    def __init__(self, cpu, accelerator_factory):
++        self.cpu, self.accelerator = cpu, None
++        try:
++            self.accelerator = accelerator_factory()
++        except Exception as exc:
++            LOG.warning("FrameNPU unavailable; using CPU: %s", exc)
++
++    @property
++    def name(self):
++        return "framenpu" if self.accelerator is not None else "cpu"
++
++    @property
++    def last_timing(self):
++        return getattr(self.accelerator, "last_timing", None)
++
++    def _disable(self, exc):
++        backend, self.accelerator = self.accelerator, None
++        LOG.warning("FrameNPU disabled for this worker; using CPU: %s", exc)
++        try:
++            backend.close()
++        except Exception as cleanup:
++            LOG.warning("FrameNPU cleanup retained device state: %s", cleanup)
++
++    def infer(self, feeds):
++        if not 1 <= len(feeds) <= 3:
++            raise ValueError("inference calls carry one to three crops")
++        if self.accelerator is not None:
++            try:
++                out = self.accelerator.infer(feeds)
++                if len(out) != len(feeds):
++                    raise ValueError("FrameNPU returned the wrong crop count")
++                for crop in out:
++                    for name, shape in zip(OUTPUTS, SHAPES):
++                        v = np.asarray(crop[name])
++                        if v.shape != shape or not np.isfinite(v).all():
++                            raise ValueError("FrameNPU returned invalid " + name)
++                return out
++            except Exception as exc:
++                self._disable(exc)
++        return self.cpu.infer(feeds)
++
++    def idle(self):
++        if self.accelerator is not None:
++            try:
++                self.accelerator.idle()
++            except Exception as exc:
++                self._disable(exc)
++
++    def close(self):
++        backend, self.accelerator = self.accelerator, None
++        try:
++            if backend is not None:
++                backend.close()
++        except Exception as exc:
++            LOG.warning("FrameNPU cleanup retained device state: %s", exc)
++        finally:
++            self.cpu.close()
++
++
++def make_backend(model_path, threads=1, inference="cpu", framenpu_jobs=None):
++    if inference not in ("cpu", "framenpu"):
++        raise ValueError("unknown Mercury inference backend: " + inference)
++    cpu = CPUBackend(model_path, threads)
++    if inference == "cpu":
++        return cpu
++    return FallbackBackend(cpu, lambda: FrameNPUBackend(model_path, framenpu_jobs))
+diff --git a/handtrack/live.py b/handtrack/live.py
+index 80689d4..dc46d28 100644
+--- a/handtrack/live.py
++++ b/handtrack/live.py
+@@ -310,6 +310,10 @@ def main():
+     ap.add_argument("--idle-hz", type=float, default=5.0, help="detection rate while no hand has been seen for 1 s")
+     ap.add_argument("--backend", choices=("mediapipe", "mercury"), default="mediapipe",
+                     help="mercury: MediaPipe only discovers hands; Mercury keypoints track them continuously")
++    ap.add_argument("--merc-inference", choices=("cpu", "framenpu"), default="cpu",
++                    help="Mercury inference (default CPU); FrameNPU failures fall back to CPU")
++    ap.add_argument("--framenpu-jobs", type=os.path.expanduser,
++                    help="qualified FrameNPU replay build directory (link.json, image and loader)")
+     ap.add_argument("--curl-source", choices=("mercury", "geometric"), default="mercury",
+                     help="finger curls from Mercury's curl output (default) or from the 3D joint angles")
+     ap.add_argument("--merc-hz", type=float, default=30.0, help="Mercury tracking cycles per second (one crop per hand)")
+@@ -349,12 +353,16 @@ def main():
+                     help="rotation glides toward each new orientation with this time constant (0 = step)")
+     ap.add_argument("--blend-ms", type=float, default=120.0,
+                     help="ease MediaPipe re-seed corrections in over this time constant (0 = snap)")
+-    ap.add_argument("--no-bridge", action="store_true", help="no stereo palm pose / UDP bridge to the PC")
++    ap.add_argument("--no-bridge", action="store_true", help="disable the UDP bridge (Mercury keeps its local palm pose)")
+     ap.add_argument("--telemetry", default=os.path.expanduser("~/handtrack/data/telemetry.csv"),
+                     help="per-frame telemetry CSV (rotated at 20 MB); '' disables")
+     ap.add_argument("--log", help="append per-frame results as JSON lines")
+     ap.add_argument("--seconds", type=float, default=0, help="stop after N s (0 = run forever)")
+     a = ap.parse_args()
++    if a.merc_inference == "framenpu" and not a.framenpu_jobs:
++        ap.error("--merc-inference framenpu requires --framenpu-jobs")
++    if a.merc_inference == "framenpu" and a.backend != "mercury":
++        ap.error("--merc-inference framenpu requires --backend mercury")
+     import handtrack.fasttrack as _ft
+     _ft.MAX_SPEED = a.max_speed
+     _ft.LK["maxLevel"] = a.lk_levels
+@@ -383,13 +391,15 @@ def main():
+         print("debug view: ssh -L 8765:127.0.0.1:8765 frame  ->  http://localhost:8765", file=sys.stderr)
+     logf = open(a.log, "a") if a.log else None
+ 
+-    palm = None if a.no_bridge else PalmTracker(a.size)
++    palm = PalmTracker(a.size) if not a.no_bridge or a.backend == "mercury" else None
+     mt = None
++    merc_pool = None
+     if a.backend == "mercury":
+         # continuous per-hand tracking with Mercury's keypoint model, in its own process
+         from handtrack.merctrack import MercuryTracker
+         merc_pool = ProcessPoolExecutor(1, mp_context=multiprocessing.get_context("spawn"),
+-                                        initializer=mpworker.init_mercury_proc)
++                                        initializer=mpworker.init_mercury_proc,
++                                        initargs=(a.merc_inference, a.framenpu_jobs))
+         mt = MercuryTracker(palm, merc_pool, mpworker)
+         mt.curl_source = a.curl_source
+         mt.sched = a.merc_sched
+@@ -409,6 +419,10 @@ def main():
+     lock = threading.Lock()
+     stats = new_stats()
+     stop = threading.Event()
++    # Dashboard stop sends SIGTERM. Let the worker retire its image and release
++    # held power before ProcessPoolExecutor exits.
++    import signal
++    signal.signal(signal.SIGTERM, lambda *_: stop.set())
+     NAME = {0: "cam0 (right)", 1: "cam1 (left)"}
+ 
+     pool = ThreadPoolExecutor(2)
+@@ -534,9 +548,9 @@ def main():
+                     # thread CPU vs runqueue wait, hands in the job, outcome, raw (unfiltered) orientation
+                     for rc in mt.records:
+                         q_ = rc["rq"] if rc["rq"] is not None else (0, 0, 0, 0)
+-                        tel.write("R,%d,%s,%d,%d,%d,%d,%d,%d,%.2f,%.2f,%d,%s,%.4f,%.4f,%.4f,%.4f,%d" % (
++                        tel.write("R,%d,%s,%d,%d,%d,%d,%d,%d,%.2f,%.2f,%d,%s,%.4f,%.4f,%.4f,%.4f,%d,%s,%d,%.3f" % (
+                             rc["id"], rc["side"], rc["slot"], rc["t_cap"], rc["t_sub"], rc["t0"], rc["t1"], rc["t_col"],
+-                            rc["cpu_ns"] / 1e6, rc["wait_ns"] / 1e6, rc["njob"], rc["outcome"], *q_, rc["hint"]))
++                            rc["cpu_ns"] / 1e6, rc["wait_ns"] / 1e6, rc["njob"], rc["outcome"], *q_, rc["hint"], rc["inference"], rc["request_crops"], rc["dsp_body_ms"]))
+                 mt.records.clear()
+                 if mt.collapsed:
+                     # both trackers ended up on one physical hand: forget the dropped one everywhere and
+@@ -547,6 +561,8 @@ def main():
+                     next_det = 0.0
+                     if tel is not None:
+                         tel.write("C,%d,%s" % (t_cap, mt.collapsed))
++                if not mt.busy() and not mt.tracked():
++                    mt.idle()
+                 if not mt.busy() and time.monotonic() >= next_merc:
+                     # perhand: one crop per job, so the same per-hand rate cap allows n jobs per period
+                     n_ = max(1, len(mt.hands)) if a.merc_sched == "perhand" else 1
+@@ -558,6 +574,8 @@ def main():
+                            if not a.flow_v2 or fast.info.get(sd, {}).get("src") == "stereo"}
+                     if iv is not None and mt.submit(imgs, t_cap, fast_pos, anchor_pos=fp_):
+                         next_merc = time.monotonic() + iv
++                    else:
++                        mt.idle()
+ 
+ 
+         hands_cfg = EnabledHands()
+@@ -910,7 +928,7 @@ def main():
+         t.start()
+     t0 = tstat = time.monotonic()
+     try:
+-        while not a.seconds or time.monotonic() - t0 < a.seconds:
++        while not stop.is_set() and (not a.seconds or time.monotonic() - t0 < a.seconds):
+             time.sleep(0.25)
+             now = time.monotonic()
+             if now - tstat > 5:
+@@ -951,9 +969,17 @@ def main():
+                 tstat = now
+     except KeyboardInterrupt:
+         pass
+-    stop.set()
+-    for t in threads:
+-        t.join(1)
++    finally:
++        stop.set()
++        for t in threads:
++            t.join(1)
++        if merc_pool is not None:
++            try:
++                merc_pool.submit(mpworker.close_mercury).result()
++            finally:
++                merc_pool.shutdown(wait=True)
++        mp_pool.shutdown(wait=True)
++        pool.shutdown(wait=True)
+ 
+ 
+ if __name__ == "__main__":
+diff --git a/handtrack/merctrack.py b/handtrack/merctrack.py
+index ae1ed2e..57d55ac 100644
+--- a/handtrack/merctrack.py
++++ b/handtrack/merctrack.py
+@@ -46,6 +46,7 @@ class MercuryTracker:
+         self.worker = worker                      # module with run_mercury(jobs, imgs)
+         self.hands = {}                           # side -> HandState
+         self.job = None
++        self.idle_future = None
+         self.curl_source = "mercury"
+         self.predict_roi = False
+         self.stereo_ms = STEREO_MS                # max capture-time gap for triangulating two views (0 = same capture only)
+@@ -82,6 +83,11 @@ class MercuryTracker:
+     def busy(self):
+         return self.job is not None
+ 
++    def idle(self):
++        """Queue one power release after the current observations finish."""
++        if self.job is None and self.idle_future is None:
++            self.idle_future = self.pool.submit(self.worker.idle_mercury)
++
+     def submit(self, imgs, t_cap_ns, fast_pos, anchor_pos=None):
+         """One Mercury crop per tracked hand on this frame (alternating cameras); in "perhand" mode
+         only the least recently serviced hand.  fast_pos places the crop (its image location is right
+@@ -127,6 +133,7 @@ class MercuryTracker:
+             jobs.append((slot, side, jc, expand, hint))
+         if not jobs:
+             return False
++        self.idle_future = None
+         used = sorted({j[0] for j in jobs})
+         self.job = (self.pool.submit(self.worker.run_mercury, jobs, {s: imgs[s] for s in used}), t_cap_ns, fast_pos,
+                     {s: imgs[s] for s in used}, time.monotonic_ns(), len(jobs))
+@@ -155,7 +162,8 @@ class MercuryTracker:
+             rec = {"id": self.next_id, "side": side, "slot": slot, "t_cap": t_ns, "t_sub": t_sub_ns,
+                    "t0": tim.get("t0", 0), "t1": tim.get("t1", 0), "cpu_ns": tim.get("cpu_ns", 0),
+                    "wait_ns": tim.get("wait_ns", 0), "t_col": t_col_ns, "njob": njob, "outcome": "rej", "rq": None,
+-                   "hint": int(tim.get("hint", True))}
++                   "hint": int(tim.get("hint", True)), "inference": tim.get("inference", "unknown"),
++                   "request_crops": tim.get("request_crops", 0), "dsp_body_ms": tim.get("dsp_body_ms", 0.0)}
+             self.next_id += 1
+             self.records.append(rec)
+             hs = self.hands.get(side)
+diff --git a/handtrack/mercury_kp.py b/handtrack/mercury_kp.py
+index 1e577e5..03054fa 100644
+--- a/handtrack/mercury_kp.py
++++ b/handtrack/mercury_kp.py
+@@ -111,13 +111,11 @@ def make_instructions(joints_m, flip, expand=EXPAND, twist=0.0):
+ 
+ # ---------------------------------------------------------------- model wrapper
+ class MercuryKeypoint:
+-    def __init__(self, model_path, rig, slot_cams, det_size, raw_size=2464, threads=1):
+-        import onnxruntime as ort
+-        so = ort.SessionOptions()
+-        so.intra_op_num_threads = threads
+-        so.inter_op_num_threads = 1
+-        so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+-        self.sess = ort.InferenceSession(model_path, so, providers=["CPUExecutionProvider"])
++    def __init__(self, model_path, rig, slot_cams, det_size, raw_size=2464, threads=1,
++                 backend=None, inference="cpu", framenpu_jobs=None):
++        from handtrack.inference import make_backend
++        self.backend = backend if backend is not None else make_backend(
++            model_path, threads, inference, framenpu_jobs)
+         self.cam = {s: rig.cams[n] for s, n in slot_cams.items()}
+         self.det_size, self.raw_size = det_size, raw_size
+         g = (np.arange(WSIZE, dtype=np.float32))
+@@ -155,9 +153,34 @@ class MercuryKeypoint:
+         return f
+ 
+     def run(self, slot, det_img, joints_cv, flip, use_hint=True, expand=None):
+-        """joints_cv: (21,3) predicted joints in this camera's OpenCV frame (metres).
+-        Returns dict: rays (21,3) unit directions in the OpenCV camera frame, det_px (21,2),
+-        conf (21,) heatmap peak values, rel_depth (21,), is_hand prob, curls (5,), curl_var (5,)."""
++        """One available observation: submit immediately, never wait for more crops."""
++        return self.run_many([dict(slot=slot, det_img=det_img, joints_cv=joints_cv,
++                                   flip=flip, use_hint=use_hint, expand=expand)])[0]
++
++    def run_many(self, observations):
++        """Available observations, in order; synchronous chunks of at most three.
++
++        Zero-contrast crops produce None in their original position and consume
++        no inference slot. This method owns no queue and never pads a request.
++        """
++        results = []
++        for start in range(0, len(observations), 3):
++            prepared = [self._prepare(**o) for o in observations[start:start + 3]]
++            valid = [p for p in prepared if p is not None]
++            outputs = self.backend.infer([p[-1] for p in valid]) if valid else []
++            if len(outputs) != len(valid):
++                raise ValueError("inference returned the wrong crop count")
++            it = iter(outputs)
++            results.extend(None if p is None else self._decode(p, next(it)) for p in prepared)
++        return results
++
++    def idle(self):
++        self.backend.idle()
++
++    def close(self):
++        self.backend.close()
++
++    def _prepare(self, slot, det_img, joints_cv, flip, use_hint=True, expand=None):
+         jm = joints_cv * np.array([1, -1, -1])
+         q, r, kp, _ = make_instructions(jm, flip, expand=EXPAND if expand is None else expand)
+         img = self.crop(slot, det_img, q, r, flip)
+@@ -166,7 +189,13 @@ class MercuryKeypoint:
+             return None
+         feeds = {"inputImg": x[None, None], "lastKeypoints": kp.reshape(1, 42) if use_hint else np.zeros((1, 42), np.float32),
+                  "useLastKeypoints": np.array([1.0 if use_hint else 0.0], np.float32)}
+-        hm, hd, extras, curls = self.sess.run(["heatmap_xy", "heatmap_depth", "scalar_extras", "curls"], feeds)
++        return slot, img, q, r, flip, feeds
++
++    def _decode(self, prepared, outputs):
++        # Geometry and decoding are shared by CPU and FrameNPU.
++        slot, img, q, r, flip, _ = prepared
++        hm, hd, extras, curls = (outputs[n] for n in (
++            "heatmap_xy", "heatmap_depth", "scalar_extras", "curls"))
+         hm = hm[0].reshape(21, GRID * GRID)
+         locs = np.zeros((21, 2))
+         conf = hm.max(1)
+diff --git a/handtrack/mpworker.py b/handtrack/mpworker.py
+index 6a744cd..9e0a887 100644
+--- a/handtrack/mpworker.py
++++ b/handtrack/mpworker.py
+@@ -38,6 +38,7 @@ def init(gpu=False, mirrored=True):
+ 
+ 
+ _merc = None
++_merc_config = {}
+ 
+ 
+ def init_mercury():
+@@ -48,11 +49,11 @@ def init_mercury():
+         from handtrack.mercury_kp import MercuryKeypoint
+         from handtrack.palm import SLOT_CAM
+         _merc = MercuryKeypoint(os.path.expanduser("~/handtrack/models/mercury/grayscale_keypoint_jan18.onnx"),
+-                                Rig(), SLOT_CAM, 640)
++                                Rig(), SLOT_CAM, 640, **_merc_config)
+     return _merc
+ 
+ 
+-def init_mercury_proc():
++def init_mercury_proc(inference="cpu", framenpu_jobs=None):
+     """Initializer for the dedicated Mercury worker process (no MediaPipe in it)."""
+     for v in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
+         os.environ.setdefault(v, "1")
+@@ -61,7 +62,23 @@ def init_mercury_proc():
+         os.nice(10)
+     except (AttributeError, OSError):
+         pass
++    global _merc_config
++    _merc_config = dict(inference=inference, framenpu_jobs=framenpu_jobs)
+     init_mercury()
++    from multiprocessing.util import Finalize
++    Finalize(None, close_mercury, exitpriority=10)
++
++
++def idle_mercury():
++    if _merc is not None:
++        _merc.idle()
++
++
++def close_mercury():
++    global _merc
++    if _merc is not None:
++        current, _merc = _merc, None
++        current.close()
+ 
+ 
+ def _schedstat():
+@@ -78,21 +95,29 @@ def run_mercury(jobs, imgs):
+     """jobs: [(slot, side, joints_cv (21,3))]; ROI from those joints, same images MediaPipe saw.
+     Returns [(slot, side, result-without-crop or None, seconds, timing)] where timing =
+     {t0, t1: CLOCK_MONOTONIC ns around this crop (same clock as the tracker), cpu_ns: thread CPU
+-    time, wait_ns: runqueue wait (schedstat) during the crop}."""
++    time, wait_ns: runqueue wait (schedstat) during the crop group}."""
+     import time
+     mk = init_mercury()
+     out = []
+-    for job in jobs:
+-        slot, side, jc = job[:3]
+-        expand = job[3] if len(job) > 3 else None
+-        hint = job[4] if len(job) > 4 else True
++    for start in range(0, len(jobs), 3):
++        group = jobs[start:start + 3]
++        observations = [dict(slot=j[0], det_img=imgs[j[0]], joints_cv=j[2],
++                             flip=(j[1] == "right"), expand=j[3] if len(j) > 3 else None,
++                             use_hint=j[4] if len(j) > 4 else True) for j in group]
+         s0, t0, td = _schedstat(), time.monotonic_ns(), time.perf_counter()
+-        r = mk.run(slot, imgs[slot], jc, flip=(side == "right"), expand=expand, use_hint=hint)
++        results = mk.run_many(observations)
+         dsec, t1, s1 = time.perf_counter() - td, time.monotonic_ns(), _schedstat()
+-        if r is not None:
+-            r.pop("crop", None)
+-        out.append((slot, side, r, dsec, {"t0": t0, "t1": t1, "cpu_ns": s1[0] - s0[0], "wait_ns": s1[1] - s0[1],
+-                                          "hint": hint}))
++        timing = (getattr(mk.backend, "last_timing", None) or {}) if any(r is not None for r in results) else {}
++        for job, observation, r in zip(group, observations, results):
++            if r is not None:
++                r.pop("crop", None)
++            # Group wall time is the latency of each observation, not wall/count.
++            out.append((job[0], job[1], r, dsec,
++                        {"t0": t0, "t1": t1, "cpu_ns": s1[0] - s0[0],
++                         "wait_ns": s1[1] - s0[1], "hint": observation["use_hint"],
++                         "batch_crops": len(group), "inference": mk.backend.name,
++                         "request_crops": timing.get("crops", sum(r is not None for r in results)),
++                         "dsp_body_ms": timing.get("body_ms", 0.0)}))
+     return out
+ 
+ 
+diff --git a/headset/stop.sh b/headset/stop.sh
+index 22e55ce..bf824b6 100644
+--- a/headset/stop.sh
++++ b/headset/stop.sh
+@@ -1,6 +1,20 @@
+ #!/bin/bash
+ # Stop the hand-tracking pipeline (tracker, its MediaPipe worker, ptgrab, watchdog).
+ R=$XDG_RUNTIME_DIR/mrhand
++# Let live.py finish outstanding inference and close its Mercury session before
++# terminating spawned workers. Do not interrupt DSP teardown with a second kill.
++if [ -f "$R/live.pid" ]; then
++  live_pid=$(cat "$R/live.pid")
++  kill "$live_pid" 2>/dev/null
++  for attempt in {1..100}; do
++    kill -0 "$live_pid" 2>/dev/null || break
++    sleep 0.1
++  done
++  if kill -0 "$live_pid" 2>/dev/null; then
++    echo "tracker is still shutting down; leaving its workers running" >&2
++    exit 1
++  fi
++fi
+ names="live ptgrab"
+ [ "$1" = "--from-watchdog" ] || names="$names watchdog"
+ for n in $names; do f=$R/$n.pid; [ -f $f ] && kill "$(cat $f)" 2>/dev/null; rm -f $f; done
+diff --git a/tests/test_inference.py b/tests/test_inference.py
+new file mode 100644
+index 0000000..3a6c283
+--- /dev/null
++++ b/tests/test_inference.py
+@@ -0,0 +1,211 @@
++import os
++from pathlib import Path
++import sys
++import unittest
++from unittest.mock import Mock, patch
++
++import numpy as np
++
++sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
++from handtrack.inference import CPUBackend, FallbackBackend, OUTPUTS, SHAPES, make_backend
++from handtrack.mercury_kp import MercuryKeypoint
++from handtrack import mpworker
++
++
++def outputs(value=0):
++    return {n: np.full(s, value, np.float32) for n, s in zip(OUTPUTS, SHAPES)}
++
++
++class BackendTests(unittest.TestCase):
++    def test_init_failure_keeps_cpu_and_does_not_retry(self):
++        cpu, factory = Mock(), Mock(side_effect=PermissionError("no device access"))
++        with self.assertLogs("handtrack.inference", "WARNING"):
++            backend = FallbackBackend(cpu, factory)
++        backend.infer([1])
++        backend.infer([2, 3])
++        self.assertEqual(factory.call_count, 1)
++        self.assertEqual(cpu.infer.call_args_list[0].args[0], [1])
++        self.assertEqual(backend.name, "cpu")
++
++    def test_inference_failure_replays_entire_batch_on_cpu_and_latches(self):
++        cpu = Mock()
++        accelerator = Mock()
++        accelerator.infer.side_effect = RuntimeError("completion uncertain")
++        accelerator.close.side_effect = RuntimeError("state retained")
++        backend = FallbackBackend(cpu, lambda: accelerator)
++        feeds = [object(), object(), object()]
++        with self.assertLogs("handtrack.inference", "WARNING"):
++            backend.infer(feeds)
++        self.assertIs(cpu.infer.call_args.args[0], feeds)
++        backend.infer([object()])
++        accelerator.infer.assert_called_once_with(feeds)
++        accelerator.close.assert_called_once()
++        backend.idle()
++        accelerator.idle.assert_not_called()
++        backend.close()
++        cpu.close.assert_called_once()
++
++    def test_invalid_accelerator_outputs_fall_back(self):
++        for result in ([], [outputs(float("nan"))], [{"heatmap_xy": np.zeros(1)}]):
++            with self.subTest(result=len(result)):
++                cpu, accelerator = Mock(), Mock()
++                accelerator.infer.return_value = result
++                backend = FallbackBackend(cpu, lambda: accelerator)
++                with self.assertLogs("handtrack.inference", "WARNING"):
++                    backend.infer([object()])
++                cpu.infer.assert_called_once()
++                self.assertEqual(backend.name, "cpu")
++
++    def test_valid_batches_are_not_padded_and_idle_releases_accelerator(self):
++        cpu, accelerator = Mock(), Mock()
++        backend = FallbackBackend(cpu, lambda: accelerator)
++        for count in (1, 2, 3, 1):
++            accelerator.infer.return_value = [outputs(i) for i in range(count)]
++            self.assertEqual(len(backend.infer([object() for _ in range(count)])), count)
++        self.assertEqual([len(c.args[0]) for c in accelerator.infer.call_args_list], [1, 2, 3, 1])
++        cpu.infer.assert_not_called()
++        backend.idle()
++        accelerator.idle.assert_called_once()
++        for count in (0, 4):
++            with self.assertRaises(ValueError):
++                backend.infer([None] * count)
++
++    def test_idle_failure_disables_accelerator_before_next_observation(self):
++        cpu, accelerator = Mock(), Mock()
++        accelerator.idle.side_effect = RuntimeError("power verification failed")
++        backend = FallbackBackend(cpu, lambda: accelerator)
++        with self.assertLogs("handtrack.inference", "WARNING"):
++            backend.idle()
++        backend.infer([object()])
++        accelerator.close.assert_called_once()
++        accelerator.infer.assert_not_called()
++        cpu.infer.assert_called_once()
++
++    def test_backend_timing_disappears_on_cpu_fallback(self):
++        cpu, accelerator = Mock(), Mock()
++        accelerator.last_timing = {"crops": 2, "body_ms": 10.0}
++        backend = FallbackBackend(cpu, lambda: accelerator)
++        self.assertEqual(backend.last_timing, accelerator.last_timing)
++        accelerator.idle.side_effect = RuntimeError("cannot verify power")
++        with self.assertLogs("handtrack.inference", "WARNING"):
++            backend.idle()
++        self.assertIsNone(backend.last_timing)
++
++    def test_cpu_default_does_not_construct_accelerator(self):
++        with patch("handtrack.inference.CPUBackend") as cpu, patch("handtrack.inference.FrameNPUBackend") as npu:
++            self.assertIs(make_backend("model"), cpu.return_value)
++            npu.assert_not_called()
++
++
++class CropBatchTests(unittest.TestCase):
++    def wrapper(self):
++        mk = object.__new__(MercuryKeypoint)
++        mk.backend = Mock(name="backend")
++        mk.backend.name = "test"
++        mk.backend.last_timing = None
++        mk.backend.infer.side_effect = lambda fs: [{"value": f} for f in fs]
++        mk._prepare = Mock(side_effect=lambda value: None if value is None else ("context", value))
++        mk._decode = Mock(side_effect=lambda p, out: out["value"])
++        return mk
++
++    def test_small_calls_submit_before_return_and_never_wait_for_third(self):
++        mk = self.wrapper()
++        for values in ([1], [2, 3], [4, 5, 6], [7]):
++            self.assertEqual(mk.run_many([{"value": i} for i in values]), values)
++            self.assertEqual(mk.backend.infer.call_args.args[0], values)
++        self.assertEqual(mk.backend.infer.call_count, 4)
++
++    def test_four_observations_submit_three_then_one_in_order(self):
++        mk = self.wrapper()
++        self.assertEqual(mk.run_many([{"value": i} for i in range(4)]), [0, 1, 2, 3])
++        self.assertEqual([c.args[0] for c in mk.backend.infer.call_args_list], [[0, 1, 2], [3]])
++
++    def test_blank_crop_keeps_its_slot_and_does_not_infer_or_pad(self):
++        mk = self.wrapper()
++        self.assertEqual(mk.run_many([{"value": i} for i in (1, None, 3)]), [1, None, 3])
++        mk.backend.infer.assert_called_once_with([1, 3])
++        mk.backend.infer.reset_mock()
++        self.assertEqual(mk.run_many([{"value": None}]), [None])
++        self.assertEqual(mk.run_many([]), [])
++        mk.backend.infer.assert_not_called()
++
++    def test_worker_preserves_identity_hint_and_order_across_chunks(self):
++        mk = self.wrapper()
++        mk.run_many = Mock(side_effect=lambda obs: [dict(crop=np.zeros(1), is_hand=i) for i in range(len(obs))])
++        jobs = [(i % 2, "left" if i % 2 == 0 else "right", np.zeros((21, 3)), 2.0, i % 2 == 0)
++                for i in range(4)]
++        with patch.object(mpworker, "init_mercury", return_value=mk):
++            out = mpworker.run_mercury(jobs, {0: np.zeros(1), 1: np.zeros(1)})
++        self.assertEqual([len(c.args[0]) for c in mk.run_many.call_args_list], [3, 1])
++        self.assertEqual([(r[0], r[1]) for r in out], [(j[0], j[1]) for j in jobs])
++        self.assertEqual([r[4]["hint"] for r in out], [True, False, True, False])
++        self.assertTrue(all("crop" not in r[2] for r in out))
++        self.assertEqual([r[4]["batch_crops"] for r in out], [3, 3, 3, 1])
++        self.assertEqual([r[4]["request_crops"] for r in out], [3, 3, 3, 1])
++        self.assertEqual([r[4]["dsp_body_ms"] for r in out], [0.0] * 4)
++
++
++@unittest.skipUnless(os.environ.get("FNPU_MERCURY_MODEL"), "pinned local model required")
++class CPUParityTests(unittest.TestCase):
++    def test_cpu_outputs_are_exactly_the_existing_onnx_session(self):
++        backend = CPUBackend(os.environ["FNPU_MERCURY_MODEL"])
++        fs = [{"inputImg": np.random.default_rng(i).uniform(-1, 1, (1, 1, 128, 128)).astype(np.float32),
++               "lastKeypoints": np.zeros((1, 42), np.float32),
++               "useLastKeypoints": np.zeros(1, np.float32)} for i in range(3)]
++        for feeds, out in zip(fs, backend.infer(fs)):
++            old = backend.sess.run(list(OUTPUTS), feeds)
++            for name, value in zip(OUTPUTS, old):
++                np.testing.assert_array_equal(out[name], value)
++
++
++class SchedulerTests(unittest.TestCase):
++    def test_one_hand_submits_now_and_idle_is_sent_once(self):
++        from concurrent.futures import Future
++        from types import SimpleNamespace
++        from handtrack.merctrack import MercuryTracker, HandState
++
++        pool, worker = Mock(), Mock()
++        pending = Future()
++        pool.submit.return_value = pending
++        palm = SimpleNamespace(pose={0: (np.eye(3), np.zeros(3)), 1: (np.eye(3), np.zeros(3))})
++        tracker = MercuryTracker(palm, pool, worker)
++        joints = np.random.default_rng(9).normal(0, .01, (21, 3)) + [0, 0, .5]
++        tracker.hands["left"] = HandState("left", joints, 1.0)
++        self.assertTrue(tracker.submit({0: np.zeros(1), 1: np.zeros(1)}, 1000000000, {}))
++        self.assertEqual(len(pool.submit.call_args.args[1]), 1)
++        self.assertFalse(tracker.submit({0: np.zeros(1), 1: np.zeros(1)}, 1000000001, {}))
++        self.assertEqual(pool.submit.call_count, 1)
++        tracker.idle()
++        self.assertEqual(pool.submit.call_count, 1)  # outstanding observations must finish first
++        tracker.job = None
++        tracker.hands.clear()
++        tracker.idle()
++        tracker.idle()
++        self.assertEqual(pool.submit.call_count, 2)
++        self.assertIs(pool.submit.call_args.args[0], worker.idle_mercury)
++
++
++@unittest.skipUnless(os.environ.get("FNPU_MERCURY_MODEL"), "pinned local model required")
++class GeometryParityTests(unittest.TestCase):
++    def test_batch_preserves_crop_decode_and_observation_order(self):
++        from types import SimpleNamespace
++
++        class Camera:
++            def project(self, rays):
++                return rays[:, :2] / rays[:, 2:] * 1000 + 1231.5
++
++        cam = Camera()
++        mk = MercuryKeypoint(os.environ["FNPU_MERCURY_MODEL"],
++                             SimpleNamespace(cams={"a": cam, "b": cam}), {0: "a", 1: "b"}, 640)
++        rng = np.random.default_rng(63)
++        img = rng.integers(0, 256, (640, 640), dtype=np.uint8)
++        observations = [dict(slot=i % 2, det_img=img,
++                             joints_cv=rng.normal(0, .02, (21, 3)) + [0, 0, .5],
++                             flip=i % 2 == 0, use_hint=i < 2, expand=1.7 + i * .1)
++                        for i in range(4)]
++        singles = [mk.run(**o) for o in observations]
++        batched = mk.run_many(observations)
++        for single, batch in zip(singles, batched):
++            for name in single:
++                np.testing.assert_array_equal(single[name], batch[name])
++        mk.close()

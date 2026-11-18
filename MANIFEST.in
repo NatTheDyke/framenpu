@@ -95,3 +95,6 @@ include evidence/mercury-pw-group-device.json
 include evidence/ncnn-cpu-baseline.json
 include evidence/mercury-replay-pilot.json
 include evidence/mercury-replay-device.json
+include evidence/mercury-runtime-device.json
+recursive-include integrations *.patch *.md *.json *.LICENSE
+include evidence/mercury-live-validation.json

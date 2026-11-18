@@ -11,7 +11,17 @@ sys.path.insert(0, str(ROOT / "src"))
 from framenpu import Job, Model, __version__
 from framenpu.provenance import verify_kernel
 
-PUBLIC_DIRS = ("src", "docs", "tools", "tests", "examples", "evidence", ".github", "handoff-tools")
+PUBLIC_DIRS = (
+    "src",
+    "docs",
+    "tools",
+    "tests",
+    "examples",
+    "evidence",
+    ".github",
+    "handoff-tools",
+    "integrations",
+)
 IGNORED_PARTS = {"__pycache__", ".ruff_cache", ".pytest_cache", "build", "dist"}
 BINARY_FILES = {
     "src/framenpu/data/runtime.bin",

@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- Ran a [live stereo-camera comparison](docs/MERCURY_LIVE.md) of the integrated
+  tracker. Two-crop processing wall time falls 34.09 → 31.23 ms (8.4%), and
+  Mercury worker thread CPU time falls 29.66 → 17.76 ms (40.1%). Single-crop
+  requests are slightly slower; the short CPU/NPU/NPU/CPU trials do not show a
+  consistent overall tracking-throughput gain. Added paired-input and pipeline
+  benchmark/report tools, explicit backend/DSP telemetry, and a Mercury fix
+  for local pose tracking with `--no-bridge`. CPU remains the default.
+
+- Added an installable `framenpu.mercury_runtime.MercurySession` and a
+  [tracker integration](docs/MERCURY_INTEGRATION.md) for spyjacob's
+  steam-frame-hand-tracking. Mercury inference is pluggable with CPU as the
+  default and fallback. Available crops submit immediately in groups of 1–3,
+  without padding or waiting for more observations. The session holds HMX
+  power while tracking, releases it at idle, and preserves refusal state on
+  uncertain completion. The packaged session passed 16 mixed-count requests
+  on the Frame, with feature tensors bit-identical to replay qualification
+  and the arena, power and service restored.
+
 - Added [1–3 crop replay requests](docs/MERCURY.md#one-to-three-crops-per-request)
   (`build_teacher_link.py --replay`, frozen image; earlier images unchanged).
   One 55-descriptor table runs the actual crop count, at most 3, without

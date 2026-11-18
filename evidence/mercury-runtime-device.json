@@ -1,0 +1,389 @@
+{
+ "format": "framenpu-mercury-runtime-run",
+ "model_sha256": "40c0daa598cedb993b54fff17685231b7465d6db342656c401b01c2029efd1d5",
+ "image_sha256": "d7a78a81469c10acaf193b0d99cc0415f92d1de845a7a9aa292a7a1ebe691819",
+ "source_sha256": {
+  "src/framenpu/mercury_runtime.py": "f4afb60c4e4965d7f011a4bad07506a722c07d5265b336bb7e24a1f7b990d70c",
+  "src/framenpu/_mercury_layout.py": "b9d1e762670594140f6915aa853f89584ec30831ae41ae7130d62eb2566a3f9b",
+  "src/framenpu/_mercury_common.py": "40e277a3357b0414d3a7a8381ebb9ebba26911cb5bdbce60c17471313144256c",
+  "tests/hardware_mercury_runtime.py": "71a1251d2f5f661a6be024de7823b38a0870079f3a39973b6ac784da109494f1"
+ },
+ "baseline_sha256": "e6d2bed19fbdfba26387bbab16009e8233134a2274109d7f8e0ad3da36abf08d",
+ "cases_manifest_sha256": "6d26ad1c96c62c7119bef70330f66aad2fe7be72edd05e6f51dc9b7a93895918",
+ "service_before": "MainPID=1047\nNRestarts=0\nActiveState=active\n",
+ "requests": [
+  {
+   "crops": 1,
+   "crop_end_ticks": [
+    96865
+   ],
+   "crop_body_ms": [
+    5.045052083333333
+   ],
+   "body_ms": 5.045052083333333,
+   "cases": [
+    0
+   ],
+   "final_sha256": [
+    "fab177e8c25e21e33fe868c3f59922496b9fb07286972baafa1d914340efbe20"
+   ],
+   "host_wall_ms": 94.72752700003184
+  },
+  {
+   "crops": 2,
+   "crop_end_ticks": [
+    95291,
+    190854
+   ],
+   "crop_body_ms": [
+    4.9630729166666665,
+    4.977239583333334
+   ],
+   "body_ms": 9.9403125,
+   "cases": [
+    1,
+    2
+   ],
+   "final_sha256": [
+    "f7df44ba44b06648e4deb52f933420d99a604a4380c0148587208158f474cf74",
+    "63a62a464442b9ad7cf4da38badc36a4c0cec534af1b3d6ca7e8ac9119ecb424"
+   ],
+   "host_wall_ms": 20.70452100088005
+  },
+  {
+   "crops": 3,
+   "crop_end_ticks": [
+    95527,
+    190860,
+    286380
+   ],
+   "crop_body_ms": [
+    4.9753645833333335,
+    4.965260416666666,
+    4.975
+   ],
+   "body_ms": 14.915625,
+   "cases": [
+    2,
+    3,
+    4
+   ],
+   "final_sha256": [
+    "63a62a464442b9ad7cf4da38badc36a4c0cec534af1b3d6ca7e8ac9119ecb424",
+    "d5b58671afe42d7ebd02357a7858d0288526e5ccb7816b0857356060b0ae0d89",
+    "9074425dfb3f18a051e1a2017e7f31335f3bed503523ba43660ddbdc8efe631d"
+   ],
+   "host_wall_ms": 24.140075000104844
+  },
+  {
+   "crops": 1,
+   "crop_end_ticks": [
+    95428
+   ],
+   "crop_body_ms": [
+    4.970208333333333
+   ],
+   "body_ms": 4.970208333333333,
+   "cases": [
+    3
+   ],
+   "final_sha256": [
+    "d5b58671afe42d7ebd02357a7858d0288526e5ccb7816b0857356060b0ae0d89"
+   ],
+   "host_wall_ms": 17.414849000488175
+  },
+  {
+   "crops": 2,
+   "crop_end_ticks": [
+    95325,
+    190835
+   ],
+   "crop_body_ms": [
+    4.96484375,
+    4.974479166666667
+   ],
+   "body_ms": 9.939322916666667,
+   "cases": [
+    4,
+    5
+   ],
+   "final_sha256": [
+    "9074425dfb3f18a051e1a2017e7f31335f3bed503523ba43660ddbdc8efe631d",
+    "534b2ddb20919d3cfd193bf6ebdb304c51effe330d90cf4cf61fcab21f5dcb80"
+   ],
+   "host_wall_ms": 25.822487999903387
+  },
+  {
+   "crops": 3,
+   "crop_end_ticks": [
+    95299,
+    190991,
+    286424
+   ],
+   "crop_body_ms": [
+    4.963489583333334,
+    4.983958333333334,
+    4.97046875
+   ],
+   "body_ms": 14.917916666666667,
+   "cases": [
+    5,
+    6,
+    7
+   ],
+   "final_sha256": [
+    "534b2ddb20919d3cfd193bf6ebdb304c51effe330d90cf4cf61fcab21f5dcb80",
+    "5d3bbcd58fed5bac753672e3c8e64f14c7bc4899691087c6cc76d2745d5c2ce4",
+    "fdca3bd64706f810dd303af400e8cff3e5e14c449698915ecaa47f4460958330"
+   ],
+   "host_wall_ms": 24.78912400056288
+  },
+  {
+   "crops": 1,
+   "crop_end_ticks": [
+    94842
+   ],
+   "crop_body_ms": [
+    4.9396875
+   ],
+   "body_ms": 4.9396875,
+   "cases": [
+    6
+   ],
+   "final_sha256": [
+    "5d3bbcd58fed5bac753672e3c8e64f14c7bc4899691087c6cc76d2745d5c2ce4"
+   ],
+   "host_wall_ms": 9.220592000019678
+  },
+  {
+   "crops": 2,
+   "crop_end_ticks": [
+    94661,
+    190098
+   ],
+   "crop_body_ms": [
+    4.930260416666667,
+    4.970677083333333
+   ],
+   "body_ms": 9.9009375,
+   "cases": [
+    7,
+    8
+   ],
+   "final_sha256": [
+    "fdca3bd64706f810dd303af400e8cff3e5e14c449698915ecaa47f4460958330",
+    "186865fd662d13138d56c3af1f469012d402e05e5a94dad2d776cb07150fa7a8"
+   ],
+   "host_wall_ms": 24.290645999826666
+  },
+  {
+   "crops": 3,
+   "crop_end_ticks": [
+    94912,
+    190038,
+    285631
+   ],
+   "crop_body_ms": [
+    4.943333333333333,
+    4.954479166666666,
+    4.978802083333333
+   ],
+   "body_ms": 14.876614583333334,
+   "cases": [
+    8,
+    9,
+    10
+   ],
+   "final_sha256": [
+    "186865fd662d13138d56c3af1f469012d402e05e5a94dad2d776cb07150fa7a8",
+    "99e3351f3174961cb30df14b5d032ad859cb618a1b14620b0f651042d47d7ee1",
+    "6fde4c9fcb66769a94c9c741b7bdd91c06a4e4fc5992c39c3fa4b699b3983310"
+   ],
+   "host_wall_ms": 28.128690999437822
+  },
+  {
+   "crops": 1,
+   "crop_end_ticks": [
+    95381
+   ],
+   "crop_body_ms": [
+    4.967760416666667
+   ],
+   "body_ms": 4.967760416666667,
+   "cases": [
+    9
+   ],
+   "final_sha256": [
+    "99e3351f3174961cb30df14b5d032ad859cb618a1b14620b0f651042d47d7ee1"
+   ],
+   "host_wall_ms": 16.988503999527893
+  },
+  {
+   "crops": 2,
+   "crop_end_ticks": [
+    95633,
+    190988
+   ],
+   "crop_body_ms": [
+    4.980885416666666,
+    4.96640625
+   ],
+   "body_ms": 9.947291666666667,
+   "cases": [
+    10,
+    11
+   ],
+   "final_sha256": [
+    "6fde4c9fcb66769a94c9c741b7bdd91c06a4e4fc5992c39c3fa4b699b3983310",
+    "e51988f536fc5fa4b669f0aff1a1f030438fd3d519d0de6930c82ddb70edc459"
+   ],
+   "host_wall_ms": 25.74889700008498
+  },
+  {
+   "crops": 3,
+   "crop_end_ticks": [
+    94981,
+    190151,
+    285752
+   ],
+   "crop_body_ms": [
+    4.946927083333334,
+    4.956770833333334,
+    4.97921875
+   ],
+   "body_ms": 14.882916666666667,
+   "cases": [
+    11,
+    12,
+    13
+   ],
+   "final_sha256": [
+    "e51988f536fc5fa4b669f0aff1a1f030438fd3d519d0de6930c82ddb70edc459",
+    "b2243fa112438f8b3156ea8a6076d9e1a1e9125b044d9c76a349f0c47725862f",
+    "4747918268d0bb75d06de48c98f8a6b2da96e9728deddafddfeabf3c03cc5c52"
+   ],
+   "host_wall_ms": 23.477173000173934
+  },
+  {
+   "crops": 1,
+   "crop_end_ticks": [
+    95278
+   ],
+   "crop_body_ms": [
+    4.962395833333333
+   ],
+   "body_ms": 4.962395833333333,
+   "cases": [
+    12
+   ],
+   "final_sha256": [
+    "b2243fa112438f8b3156ea8a6076d9e1a1e9125b044d9c76a349f0c47725862f"
+   ],
+   "host_wall_ms": 9.752455000125337
+  },
+  {
+   "crops": 2,
+   "crop_end_ticks": [
+    95338,
+    190992
+   ],
+   "crop_body_ms": [
+    4.965520833333334,
+    4.981979166666667
+   ],
+   "body_ms": 9.9475,
+   "cases": [
+    13,
+    14
+   ],
+   "final_sha256": [
+    "4747918268d0bb75d06de48c98f8a6b2da96e9728deddafddfeabf3c03cc5c52",
+    "83d29b43d973566f7ce845d422e31cbe9f00ef8f25de10660988f55e12d4a700"
+   ],
+   "host_wall_ms": 18.373996999798692
+  },
+  {
+   "crops": 3,
+   "crop_end_ticks": [
+    95706,
+    191244,
+    286958
+   ],
+   "crop_body_ms": [
+    4.9846875,
+    4.9759375,
+    4.985104166666667
+   ],
+   "body_ms": 14.945729166666666,
+   "cases": [
+    14,
+    15,
+    0
+   ],
+   "final_sha256": [
+    "83d29b43d973566f7ce845d422e31cbe9f00ef8f25de10660988f55e12d4a700",
+    "4ec0e33b60ad7ab10eacf3e49c87d5d53e261bea972666314bc76147a5c64ca3",
+    "fab177e8c25e21e33fe868c3f59922496b9fb07286972baafa1d914340efbe20"
+   ],
+   "host_wall_ms": 24.884695999389805
+  },
+  {
+   "crops": 1,
+   "crop_end_ticks": [
+    95508
+   ],
+   "crop_body_ms": [
+    4.974375
+   ],
+   "body_ms": 4.974375,
+   "cases": [
+    15
+   ],
+   "final_sha256": [
+    "4ec0e33b60ad7ab10eacf3e49c87d5d53e261bea972666314bc76147a5c64ca3"
+   ],
+   "host_wall_ms": 9.800630999961868
+  }
+ ],
+ "audits": {
+  "restored_jobs": 20,
+  "restored_hmx_jobs": 18
+ },
+ "initial_health": {
+  "state": {
+   "abi": 9,
+   "control": [
+    1,
+    0,
+    1
+   ],
+   "callback": 0,
+   "poisoned": false
+  },
+  "firmware_code_prefix_bytes": 114688,
+  "firmware_code_prefix_sha256": "55679e13486357627ea22e494b25342acd9d24d73450f3f28eb1113b82c71b95",
+  "power_configuration_sha256": "2405bda200a51fd0bd699568e8415e53ba7b631cbaa9d4812c656b7240159bbd",
+  "power_restored": true
+ },
+ "arena_before_sha256": "94674964076f61f96f8eb7e5ba78b1e5defde8c1d2f320ba45fda8c3ac6c3b48",
+ "idle_release": true,
+ "arena_after_sha256": "94674964076f61f96f8eb7e5ba78b1e5defde8c1d2f320ba45fda8c3ac6c3b48",
+ "final_health": {
+  "state": {
+   "abi": 9,
+   "control": [
+    1,
+    0,
+    1
+   ],
+   "callback": 0,
+   "poisoned": false
+  },
+  "firmware_code_prefix_bytes": 114688,
+  "firmware_code_prefix_sha256": "55679e13486357627ea22e494b25342acd9d24d73450f3f28eb1113b82c71b95",
+  "power_configuration_sha256": "2405bda200a51fd0bd699568e8415e53ba7b631cbaa9d4812c656b7240159bbd",
+  "power_restored": true
+ },
+ "service_after": "MainPID=1047\nNRestarts=0\nActiveState=active\n",
+ "all_checks_passed": true
+}
