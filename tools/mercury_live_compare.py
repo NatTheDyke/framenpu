@@ -1,4 +1,7 @@
-"""Run balanced CPU/NPU/NPU/CPU tracker trials and keep aggregate timing evidence.
+"""Run balanced (ABBA) tracker trials and keep aggregate timing evidence.
+
+--order lists runs as backend[:scheduler]; scheduler is early (--merc-early,
+the default) or fresh (--merc-fresh). Default: CPU/NPU/NPU/CPU, early.
 
 Camera capture and calibration must already be ready. Raw telemetry stays in
 --directory on the Frame. The output contains timings/counts/temperatures only.
@@ -29,7 +32,18 @@ def main():
         p.add_argument("--" + name, type=Path, required=True)
     p.add_argument("--seconds", type=int, default=18)
     p.add_argument("--warmup", type=float, default=3)
+    p.add_argument("--order", default="cpu,framenpu,framenpu,cpu")
+    p.add_argument(
+        "--cooldown-c",
+        type=float,
+        help="before each run, wait (at most 300 s) until the hottest CPU/GPU zone is at or below this",
+    )
     a = p.parse_args()
+    order = [t if ":" in t else t + ":early" for t in a.order.split(",")]
+    for token in order:
+        backend, scheduler = token.split(":")
+        if backend not in ("cpu", "framenpu") or scheduler not in ("early", "fresh"):
+            p.error("--order tokens are cpu|framenpu[:early|fresh]")
     if not a.directory.is_dir():
         p.error("existing private test directory required")
     report = {
@@ -37,14 +51,15 @@ def main():
         "seconds_per_run": a.seconds,
         "warmup_s": a.warmup,
         "runs": [],
-        "order": ["cpu", "framenpu", "framenpu", "cpu"],
+        "order": order,
         "scope": "live camera pipeline, local pose only; camera detected timestamps, not motion-to-photon latency",
     }
     try:
-        for i, mode in enumerate(report["order"]):
+        for i, token in enumerate(order):
+            mode, scheduler = token.split(":")
             telemetry, log = (
-                a.directory / f"abba-{i}-{mode}.csv",
-                a.directory / f"abba-{i}-{mode}.log",
+                a.directory / f"abba-{i}-{mode}-{scheduler}.csv",
+                a.directory / f"abba-{i}-{mode}-{scheduler}.log",
             )
             command = [
                 sys.executable,
@@ -56,7 +71,7 @@ def main():
                 mode,
                 "--framenpu-jobs",
                 str(a.jobs),
-                "--merc-early",
+                "--merc-" + scheduler,
                 "--flow-v2",
                 "--no-http",
                 "--no-bridge",
@@ -67,14 +82,31 @@ def main():
             ]
             env = dict(os.environ)
             env["PYTHONPATH"] = str(a.tracker) + os.pathsep + env.get("PYTHONPATH", "")
-            samples = []
-            print(json.dumps({"run": i, "backend": mode, "phase": "starting"}), flush=True)
+            samples, waited = [], 0.0
+            if a.cooldown_c is not None:
+                begin = time.monotonic()
+                while hottest() > a.cooldown_c:
+                    if time.monotonic() - begin > 300:
+                        raise RuntimeError("device did not cool to the requested start temperature")
+                    time.sleep(2)
+                waited = time.monotonic() - begin
+            print(
+                json.dumps(
+                    {"run": i, "backend": mode, "scheduler": scheduler, "phase": "starting"}
+                ),
+                flush=True,
+            )
             with log.open("w") as output:
                 process = subprocess.Popen(
                     command, env=env, stdout=output, stderr=subprocess.STDOUT
                 )
                 try:
+                    deadline = time.monotonic() + a.seconds + 60
                     while process.poll() is None:
+                        if time.monotonic() > deadline:
+                            raise RuntimeError(
+                                "tracker did not exit; worker startup or shutdown hung"
+                            )
                         temp = hottest()
                         samples.append(temp)
                         if temp >= 92:
@@ -88,6 +120,8 @@ def main():
             row = {
                 "index": i,
                 "backend": mode,
+                "scheduler": scheduler,
+                "cooldown_s": waited,
                 "exit_code": process.returncode,
                 "temperature_c": {"start": samples[0], "end": samples[-1], "max": max(samples)},
                 "summary": summary,

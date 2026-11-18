@@ -89,6 +89,51 @@ Installing the layer required one normal SteamVR restart before the trials;
 `dsp_service` remained at the same PID with zero restarts. No existing tracker
 installation was overwritten.
 
+## Fresh-frame scheduling and idle release
+
+[Evidence](../evidence/mercury-fresh-live.json), measured on the Frame on
+2026-11-18 with FrameNPU inference throughout. The tracker now submits each
+camera capture at most once. It releases held HMX power once admission has
+been blocked for 0.2 s: camera pairs stalled for 0.1 s, no tracked or enabled
+hand, a thermal pause, or no placeable crop. `--merc-fresh` submits each frame
+right after optical flow, before MediaPipe result handling, and between frames
+only while the newest frame is under a third of a frame period old.
+
+Telemetry splits the age of a request's frame at submission (two-crop pilot
+before the reorder, 42 requests):
+
+| Stage, median (p95) | ms |
+|---|---:|
+| Camera buffer detected → pair read (ptgrab delivery) | 15.2 (19.1) |
+| Pair read → optical flow done | 5.1 (14.3) |
+| Flow done → submit (coordinator work) | 9.7 (27.3) |
+
+Moving the submit ahead of the coordinator work removes most of the last row.
+Alternating runs (early, fresh, fresh, early, fresh, early; 15 s each, 3 s
+warmup excluded, starts at or below 76 °C) pooled per scheduler:
+
+| Median (p95) | `--merc-early` | `--merc-fresh` |
+|---|---:|---:|
+| Frame age at submit | 35.5 (56.4) ms | **27.5 (45.2) ms** |
+| Flow done → submit | 15.6 (31.7) ms | **0.4 (20.3) ms** |
+| Camera detected → Mercury collect | 72.6 (101.2) ms | **62.6 (86.5) ms** |
+| Accepted observations/s | 36.5 | 37.0 |
+| Fast-path frames/s | 51.2 | 54.6 |
+
+Every fresh run beat every early run on capture-to-collect median
+(59.9 / 60.9 / 65.9 versus 70.8 / 71.3 / 74.6 ms). No run repeated a capture or
+fell back to CPU. A seventh run stopped at the 92 °C threshold before
+submitting work and is excluded. Worker wall and DSP time are unchanged; the
+gain is scheduling, not inference.
+
+An injected 3 s camera freeze (ptgrab stopped) produced no submissions and a
+power release 0.25 s after the last frame; emptying the hands selection for 4 s
+released power 0.84 s later (the file is polled once per second). Tracking
+resumed after both without recovery. The DSP arena, gate, firmware/power hashes
+and `dsp_service` matched before and after every session. These are short
+runs at 51–86 °C with uncontrolled hand motion; they are not a sustained thermal
+result, and CPU remains the default backend.
+
 ## Reproduce
 
 Use the [integration setup](MERCURY_INTEGRATION.md), private factory calibration
@@ -104,6 +149,11 @@ python /path/to/framenpu/tools/mercury_live_bench.py \
 python /path/to/framenpu/tools/mercury_live_compare.py \
   --tracker /path/to/patched-tracker --jobs /path/to/replay-jobs \
   --directory /tmp/private-live-test --seconds 18 --warmup 3 --output /tmp/abba.json
+# Scheduler comparison: --order backend[:early|fresh],...
+python /path/to/framenpu/tools/mercury_live_compare.py \
+  --tracker /path/to/patched-tracker --jobs /path/to/replay-jobs \
+  --directory /tmp/private-fresh-test --seconds 15 --warmup 3 --cooldown-c 76 \
+  --order framenpu:early,framenpu:fresh,framenpu:fresh,framenpu:early --output /tmp/fresh.json
 # Merge raw telemetry locally; output includes only aggregate metrics.
 python /path/to/framenpu/tools/mercury_live_report.py \
   /tmp/private-live-test/abba-0-cpu.csv /tmp/private-live-test/abba-3-cpu.csv \

@@ -18,10 +18,10 @@ index 8e1d009..8f85496 100644
  ![Hand Tracking panel](overlay/panel_preview.png)
 diff --git a/docs/FRAMENPU.md b/docs/FRAMENPU.md
 new file mode 100644
-index 0000000..c2cde81
+index 0000000..b65efb2
 --- /dev/null
 +++ b/docs/FRAMENPU.md
-@@ -0,0 +1,131 @@
+@@ -0,0 +1,147 @@
 +# Mercury inference backends
 +
 +Mercury tracking keeps its existing crop geometry, normalization, hint policy,
@@ -104,9 +104,25 @@ index 0000000..c2cde81
 +batch on CPU, preserving order. It logs the failure once and never retries or
 +reopens the accelerator during that worker's lifetime.
 +
-+HMX power is held between tracking requests and released when the tracker has
-+no observations or the thermal guard pauses inference. A later observation
-+resumes the same session. Shutdown waits for the active job, releases power,
++HMX power is held between tracking requests. `handtrack/mercsched.py` releases
++it once admission has been blocked for 0.2 s: no tracked hand, all hands
++disabled, the thermal guard pausing inference, no placeable crop, or camera
++pairs stalled for 0.1 s (headset standby, capture stopped). Rate-cap gaps and
++waiting for the next frame keep power, so it is never cycled per crop. Each
++capture is submitted at most once, so a frozen camera image is never
++re-inferred. A later fresh capture resumes the same session; telemetry `Z` rows
++record each release and its reason.
++
++`--merc-fresh` (off by default) submits each frame right after optical flow,
++before MediaPipe result handling, and collects finished jobs between camera frames.
++It then submits the newest frame only if it became ready less than a third of
++a frame period ago, otherwise it waits for the next frame, which minimises the
++mean age of the newest result while the worker is the bottleneck. R telemetry
++columns 21..24 record the submit path, capture sequence and the pair's read and
++optical-flow-done times; FrameNPU's `tools/mercury_live_report.py` turns them
++into per-stage request ages.
++
++Shutdown waits for the active job, releases power,
 +retires the image and restores the borrowed arena. The worker also registers a
 +multiprocessing finalizer. The stop script lets the parent perform that cleanup
 +before terminating leftover worker processes.
@@ -289,10 +305,28 @@ index 0000000..c430d2b
 +        return cpu
 +    return FallbackBackend(cpu, lambda: FrameNPUBackend(model_path, framenpu_jobs))
 diff --git a/handtrack/live.py b/handtrack/live.py
-index 80689d4..dc46d28 100644
+index 80689d4..2770fd6 100644
 --- a/handtrack/live.py
 +++ b/handtrack/live.py
-@@ -310,6 +310,10 @@ def main():
+@@ -49,6 +49,7 @@ cv2.setNumThreads(1)
+ from handtrack.calib import triangulate
+ from handtrack.detect import HandDetector, draw
+ from handtrack.fasttrack import FastTracker, plausible
++from handtrack.mercsched import Admission
+ from handtrack.palm import PALM_IDX, Bridge, OneEuro, PalmTracker
+ 
+ SHM = "/dev/shm/mrhand-pt"
+@@ -180,6 +181,9 @@ class Telemetry:
+       *_age_ms: t_send minus the capture time of the image the component was measured on
+     M rows (one per camera per MediaPipe run):
+       M,t_det_ns,t_done_ns,kind,slot,dur_ms,nhands
++    Z rows (held Mercury inference power released after admission was blocked, see mercsched.py):
++      Z,t_ns,reason   reason: stall (no new camera pair) | untracked (no tracked or enabled hand) |
++                      thermal (thermal guard paused Mercury) | unplaceable (no crop in front of a camera)
+     """
+ 
+     def __init__(self, path, max_bytes=20_000_000):
+@@ -310,6 +314,10 @@ def main():
      ap.add_argument("--idle-hz", type=float, default=5.0, help="detection rate while no hand has been seen for 1 s")
      ap.add_argument("--backend", choices=("mediapipe", "mercury"), default="mediapipe",
                      help="mercury: MediaPipe only discovers hands; Mercury keypoints track them continuously")
@@ -303,7 +337,18 @@ index 80689d4..dc46d28 100644
      ap.add_argument("--curl-source", choices=("mercury", "geometric"), default="mercury",
                      help="finger curls from Mercury's curl output (default) or from the 3D joint angles")
      ap.add_argument("--merc-hz", type=float, default=30.0, help="Mercury tracking cycles per second (one crop per hand)")
-@@ -349,12 +353,16 @@ def main():
+@@ -335,6 +343,10 @@ def main():
+                          "camera and with the current position (prevents short depth jumps)")
+     ap.add_argument("--merc-early", action="store_true",
+                     help="collect finished Mercury jobs and submit the next one between camera frames")
++    ap.add_argument("--merc-fresh", action="store_true",
++                    help="submit Mercury right after optical flow (before MediaPipe handling); collect finished jobs "
++                         "between camera frames and submit then only if the newest frame became ready less than a "
++                         "third of a frame period ago, else wait for the next frame")
+     ap.add_argument("--merc-sched", choices=("batch", "perhand"), default="batch",
+                     help="batch: all tracked hands in one Mercury job, published together (original); "
+                          "perhand: one hand per job on the newest frame, published as soon as it is done")
+@@ -349,12 +361,16 @@ def main():
                      help="rotation glides toward each new orientation with this time constant (0 = step)")
      ap.add_argument("--blend-ms", type=float, default=120.0,
                      help="ease MediaPipe re-seed corrections in over this time constant (0 = snap)")
@@ -321,7 +366,7 @@ index 80689d4..dc46d28 100644
      import handtrack.fasttrack as _ft
      _ft.MAX_SPEED = a.max_speed
      _ft.LK["maxLevel"] = a.lk_levels
-@@ -383,13 +391,15 @@ def main():
+@@ -383,13 +399,15 @@ def main():
          print("debug view: ssh -L 8765:127.0.0.1:8765 frame  ->  http://localhost:8765", file=sys.stderr)
      logf = open(a.log, "a") if a.log else None
  
@@ -339,7 +384,7 @@ index 80689d4..dc46d28 100644
          mt = MercuryTracker(palm, merc_pool, mpworker)
          mt.curl_source = a.curl_source
          mt.sched = a.merc_sched
-@@ -409,6 +419,10 @@ def main():
+@@ -409,6 +427,10 @@ def main():
      lock = threading.Lock()
      stats = new_stats()
      stop = threading.Event()
@@ -350,37 +395,157 @@ index 80689d4..dc46d28 100644
      NAME = {0: "cam0 (right)", 1: "cam1 (left)"}
  
      pool = ThreadPoolExecutor(2)
-@@ -534,9 +548,9 @@ def main():
+@@ -509,9 +531,23 @@ def main():
+         k = 0
+         frame_no = 0
+         last_hand = 0.0
+-        def merc_service():
+-            """Mercury continuous tracking: collect a finished job, then submit the next one on the
+-            newest frame (imgs / t_cap / fast_pos of the last processed camera frame)."""
++        adm = Admission(fresh=a.merc_fresh)  # capture admission + held-power release (handtrack/mercsched.py)
++        frame_t = {}                         # stage times of the newest processed pair (monotonic ns)
++        blocked = ["untracked"]              # why merc_admit last refused to submit (logged with a release)
++        def merc_service(between_frames=False, path=None):
++            merc_collect()
++            merc_admit(between_frames, path)
++            merc_power()
++
++        def merc_power():
++            """Release held inference power once admission has been blocked for a while."""
++            if mt is not None and adm.should_release(time.monotonic(), mt.busy()):
++                mt.idle()
++                if tel is not None:
++                    tel.write("Z,%d,%s" % (time.monotonic_ns(), "stall" if adm.stalled(time.monotonic()) else blocked[0]))
++
++        def merc_collect():
++            """Mercury continuous tracking: collect a finished job and publish its observations."""
+             nonlocal next_merc, next_det, last_hand
+             if mt is not None:
+                 for side, (pose_m, sl_m, px_m, t_m, img_m) in mt.collect().items():
+@@ -534,9 +570,12 @@ def main():
                      # thread CPU vs runqueue wait, hands in the job, outcome, raw (unfiltered) orientation
                      for rc in mt.records:
                          q_ = rc["rq"] if rc["rq"] is not None else (0, 0, 0, 0)
 -                        tel.write("R,%d,%s,%d,%d,%d,%d,%d,%d,%.2f,%.2f,%d,%s,%.4f,%.4f,%.4f,%.4f,%d" % (
-+                        tel.write("R,%d,%s,%d,%d,%d,%d,%d,%d,%.2f,%.2f,%d,%s,%.4f,%.4f,%.4f,%.4f,%d,%s,%d,%.3f" % (
++                        # columns 21..24 (zero-based): submit path (frame | early), capture sequence, and the
++                        # pair's read / flow-done times (ns): stage ages t_read-t_cap, t_ready-t_read, t_sub-t_ready
++                        tel.write("R,%d,%s,%d,%d,%d,%d,%d,%d,%.2f,%.2f,%d,%s,%.4f,%.4f,%.4f,%.4f,%d,%s,%d,%.3f,%s,%d,%d,%d" % (
                              rc["id"], rc["side"], rc["slot"], rc["t_cap"], rc["t_sub"], rc["t0"], rc["t1"], rc["t_col"],
 -                            rc["cpu_ns"] / 1e6, rc["wait_ns"] / 1e6, rc["njob"], rc["outcome"], *q_, rc["hint"]))
-+                            rc["cpu_ns"] / 1e6, rc["wait_ns"] / 1e6, rc["njob"], rc["outcome"], *q_, rc["hint"], rc["inference"], rc["request_crops"], rc["dsp_body_ms"]))
++                            rc["cpu_ns"] / 1e6, rc["wait_ns"] / 1e6, rc["njob"], rc["outcome"], *q_, rc["hint"], rc["inference"], rc["request_crops"], rc["dsp_body_ms"],
++                            rc["path"], rc["seq"], rc["t_read"], rc["t_ready"]))
                  mt.records.clear()
                  if mt.collapsed:
                      # both trackers ended up on one physical hand: forget the dropped one everywhere and
-@@ -547,6 +561,8 @@ def main():
+@@ -547,17 +586,44 @@ def main():
                      next_det = 0.0
                      if tel is not None:
                          tel.write("C,%d,%s" % (t_cap, mt.collapsed))
-+                if not mt.busy() and not mt.tracked():
-+                    mt.idle()
-                 if not mt.busy() and time.monotonic() >= next_merc:
-                     # perhand: one crop per job, so the same per-hand rate cap allows n jobs per period
-                     n_ = max(1, len(mt.hands)) if a.merc_sched == "perhand" else 1
-@@ -558,6 +574,8 @@ def main():
-                            if not a.flow_v2 or fast.info.get(sd, {}).get("src") == "stereo"}
-                     if iv is not None and mt.submit(imgs, t_cap, fast_pos, anchor_pos=fp_):
-                         next_merc = time.monotonic() + iv
-+                    else:
-+                        mt.idle()
+-                if not mt.busy() and time.monotonic() >= next_merc:
+-                    # perhand: one crop per job, so the same per-hand rate cap allows n jobs per period
+-                    n_ = max(1, len(mt.hands)) if a.merc_sched == "perhand" else 1
+-                    iv = thermal.interval(a.merc_hz * n_)
+-                    # v2: Mercury anchors single-view depth only to a two-camera position, never to a held
+-                    # single-camera depth (that error would otherwise propagate into the joints); the crop is
+-                    # still placed with every fast position (its image location is right)
+-                    fp_ = {sd: v for sd, v in fast_pos.items()
+-                           if not a.flow_v2 or fast.info.get(sd, {}).get("src") == "stereo"}
+-                    if iv is not None and mt.submit(imgs, t_cap, fast_pos, anchor_pos=fp_):
+-                        next_merc = time.monotonic() + iv
++
++        def merc_admit(between_frames, path=None):
++            """Submit the next job on the newest processed frame (imgs / t_cap / fast_pos) if admitted.
++            Blocked admission (no tracked hand, stalled cameras, thermal pause, no placeable crop) is
++            not marked active, so merc_power() releases held power after the grace period."""
++            nonlocal next_merc
++            if mt is None:
++                return
++            now = time.monotonic()
++            if mt.busy():
++                adm.active(now)
++                return
++            if not mt.tracked() or adm.stalled(now):
++                blocked[0] = "untracked" if not mt.tracked() else "stall"
++                return
++            if now < next_merc:
++                adm.active(now)                     # rate cap: still tracking
++                return
++            # perhand: one crop per job, so the same per-hand rate cap allows n jobs per period
++            n_ = max(1, len(mt.hands)) if a.merc_sched == "perhand" else 1
++            iv = thermal.interval(a.merc_hz * n_)
++            if iv is None:
++                blocked[0] = "thermal"
++                return
++            if not adm.admissible(now, grid_period / 1e9, between_frames):
++                adm.active(now)                     # this capture was used (or is stale): next frame
++                return
++            # v2: Mercury anchors single-view depth only to a two-camera position, never to a held
++            # single-camera depth (that error would otherwise propagate into the joints); the crop is
++            # still placed with every fast position (its image location is right)
++            fp_ = {sd: v for sd, v in fast_pos.items()
++                   if not a.flow_v2 or fast.info.get(sd, {}).get("src") == "stereo"}
++            info = dict(frame_t, path=path or ("early" if between_frames else "frame"), seq=adm.seq)
++            if mt.submit(imgs, t_cap, fast_pos, anchor_pos=fp_, info=info):
++                adm.submitted(now)
++                next_merc = now + iv
++            else:
++                blocked[0] = "unplaceable"          # no crop in front of either camera
  
  
          hands_cfg = EnabledHands()
-@@ -910,7 +928,7 @@ def main():
+@@ -597,10 +663,16 @@ def main():
+                 bridge.enabled_mask = (1 if "left" in enabled else 0) | (2 if "right" in enabled else 0)
+             r0, r1 = shm.read(0, last[0]), shm.read(1, last[1])
+             if not r0 or not r1:
+-                # --merc-early: between camera frames, collect a finished Mercury job and start the next
+-                # one right away instead of waiting up to a frame for the next loop pass
+-                if a.merc_early and have_frame and mt is not None and mt.job is not None and mt.job[0].done():
+-                    merc_service()
++                if have_frame and mt is not None:
++                    # --merc-early / --merc-fresh: between camera frames, collect a finished Mercury job and
++                    # (if admitted) start the next one instead of waiting up to a frame for the next loop pass.
++                    # On stalled cameras a finished job is always collected so held power can be released.
++                    early = a.merc_early or a.merc_fresh
++                    if mt.job is not None and mt.job[0].done() and (early or adm.stalled(time.monotonic())):
++                        merc_collect()
++                        if early:
++                            merc_admit(True)
++                    merc_power()
+                 time.sleep(0.002)
+                 continue
+             if abs(r0[1] - r1[1]) > 8e6:          # not the same capture: wait for the lagging camera
+@@ -610,6 +682,7 @@ def main():
+                     last[1] = r1[0]
+                 continue
+             last[0], last[1] = r0[0], r1[0]
++            frame_t = {"t_read": time.monotonic_ns()}
+             frame_no += 1
+             have_frame = True
+             t_raw = min(r0[1], r1[1])
+@@ -632,6 +705,11 @@ def main():
+             fast_pos = {} if skip_frame else fast.step(imgs, t_s)
+             v2_report()
+             fast_ms = (time.perf_counter() - tf) * 1e3
++            frame_t["t_ready"] = time.monotonic_ns()
++            adm.frame(frame_no, frame_t["t_ready"] / 1e9)
++            if a.merc_fresh:
++                # submit on this frame as soon as its flow positions exist, before MediaPipe handling
++                merc_service()
+ 
+             # ---- slow path: collect a finished MediaPipe run, re-seed the tracker
+             if job and job[0].done():
+@@ -771,7 +849,9 @@ def main():
+                                                                   float(np.median(e3[[0, 5, 9, 13, 17]])),
+                                                                   float(np.median(gap)) * 100))
+ 
+-            merc_service()
++            # --merc-fresh: a second chance later in the frame (a job that just finished, or a hand MediaPipe
++            # just seeded), admitted like a between-frames submit because this frame has aged meanwhile
++            merc_service(between_frames=a.merc_fresh, path="late" if a.merc_fresh else None)
+ 
+             # ---- schedule the next MediaPipe run (rate cap, thermal guard, idle mode)
+             now_m = time.monotonic()
+@@ -910,7 +990,7 @@ def main():
          t.start()
      t0 = tstat = time.monotonic()
      try:
@@ -389,7 +554,7 @@ index 80689d4..dc46d28 100644
              time.sleep(0.25)
              now = time.monotonic()
              if now - tstat > 5:
-@@ -951,9 +969,17 @@ def main():
+@@ -951,9 +1031,17 @@ def main():
                  tstat = now
      except KeyboardInterrupt:
          pass
@@ -410,31 +575,114 @@ index 80689d4..dc46d28 100644
  
  
  if __name__ == "__main__":
+diff --git a/handtrack/mercsched.py b/handtrack/mercsched.py
+new file mode 100644
+index 0000000..cee3325
+--- /dev/null
++++ b/handtrack/mercsched.py
+@@ -0,0 +1,68 @@
++"""Mercury admission: which camera capture to submit, and when to release held inference power.
++
++Pure timing policy (no I/O, no clocks of its own) so it can be unit tested; live.py feeds it.
++
++Rules
++- A capture is submitted at most once. Re-running Mercury on the same frame (for example while
++  the cameras are stalled) produces no new information and would keep a lost hand "tracked".
++- Cameras count as stalled when no new camera pair has been processed for STALL_S. Admission
++  stops; a job already in flight finishes and is collected normally.
++- Held power (FrameNPU HMX) is released once admission has been blocked for IDLE_S: no tracked
++  hand, stalled cameras, a thermal pause, or no crop that can be placed. Short gaps (rate cap,
++  waiting for the next frame, one unplaceable crop) keep it, so power is never cycled per crop.
++- fresh=True (--merc-fresh): when the worker frees up between camera frames, submit the newest
++  frame only if it became ready less than FRESH_FRACTION of a frame period ago; otherwise wait
++  for the next frame. With a busy worker, results arrive every W s and the mean age of the newest
++  result is (submit age + W + period between results / 2). Submitting a frame that has been ready
++  for x s now gives L + x + W + W/2; waiting gives L + W + (W + period - x)/2. Submitting now wins
++  only while x < period / 3.
++"""
++
++STALL_S = 0.1             # no new camera pair for this long (6 frames at 60 Hz) = cameras stalled
++IDLE_S = 0.2              # admission blocked this long -> release held power
++FRESH_FRACTION = 1.0 / 3.0
++
++
++class Admission:
++    def __init__(self, fresh=False, stall_s=STALL_S, idle_s=IDLE_S):
++        self.fresh = fresh
++        self.stall_s, self.idle_s = stall_s, idle_s
++        self.seq = 0                  # newest processed capture (0 = none yet)
++        self.t_ready = None           # monotonic s at which it was ready to submit
++        self.submitted_seq = 0
++        self.t_active = None          # last time tracking wanted (or used) the worker
++        self.released = False
++
++    def frame(self, seq, t_ready):
++        """A new camera pair has been processed (flow positions exist) and may be submitted."""
++        self.seq, self.t_ready = seq, t_ready
++
++    def stalled(self, now):
++        return self.t_ready is None or now - self.t_ready > self.stall_s
++
++    def admissible(self, now, period_s, between_frames):
++        """May the newest processed capture be submitted now?"""
++        if self.seq == 0 or self.seq <= self.submitted_seq or self.stalled(now):
++            return False
++        if between_frames and self.fresh:
++            return now - self.t_ready < FRESH_FRACTION * period_s
++        return True
++
++    def submitted(self, now):
++        self.submitted_seq = self.seq
++        self.active(now)
++
++    def active(self, now):
++        """Tracking is live (job in flight, or waiting only for the rate cap / next frame)."""
++        self.t_active = now
++        self.released = False
++
++    def should_release(self, now, busy):
++        """True once per idle period: admission has been blocked for idle_s and nothing is in flight."""
++        if busy:
++            self.active(now)
++            return False
++        if self.released or self.t_active is None or now - self.t_active < self.idle_s:
++            return False
++        self.released = True
++        return True
 diff --git a/handtrack/merctrack.py b/handtrack/merctrack.py
-index ae1ed2e..57d55ac 100644
+index ae1ed2e..94b067b 100644
 --- a/handtrack/merctrack.py
 +++ b/handtrack/merctrack.py
-@@ -46,6 +46,7 @@ class MercuryTracker:
+@@ -46,6 +46,8 @@ class MercuryTracker:
          self.worker = worker                      # module with run_mercury(jobs, imgs)
          self.hands = {}                           # side -> HandState
          self.job = None
++        self.job_info = {}                        # submit path / capture seq / stage times of self.job
 +        self.idle_future = None
          self.curl_source = "mercury"
          self.predict_roi = False
          self.stereo_ms = STEREO_MS                # max capture-time gap for triangulating two views (0 = same capture only)
-@@ -82,6 +83,11 @@ class MercuryTracker:
+@@ -82,11 +84,17 @@ class MercuryTracker:
      def busy(self):
          return self.job is not None
  
+-    def submit(self, imgs, t_cap_ns, fast_pos, anchor_pos=None):
 +    def idle(self):
 +        """Queue one power release after the current observations finish."""
 +        if self.job is None and self.idle_future is None:
 +            self.idle_future = self.pool.submit(self.worker.idle_mercury)
 +
-     def submit(self, imgs, t_cap_ns, fast_pos, anchor_pos=None):
++    def submit(self, imgs, t_cap_ns, fast_pos, anchor_pos=None, info=None):
          """One Mercury crop per tracked hand on this frame (alternating cameras); in "perhand" mode
          only the least recently serviced hand.  fast_pos places the crop (its image location is right
-@@ -127,6 +133,7 @@ class MercuryTracker:
+         even when its depth is held); anchor_pos (default fast_pos) is the depth anchor for single-view
+-        joints and should only contain trustworthy (two-camera) positions."""
++        joints and should only contain trustworthy (two-camera) positions.  info (path, seq, t_read,
++        t_ready) is copied into this job's telemetry records."""
+         if self.job is not None or not self.hands:
+             return False
+         jobs = []
+@@ -127,11 +135,13 @@ class MercuryTracker:
              jobs.append((slot, side, jc, expand, hint))
          if not jobs:
              return False
@@ -442,13 +690,31 @@ index ae1ed2e..57d55ac 100644
          used = sorted({j[0] for j in jobs})
          self.job = (self.pool.submit(self.worker.run_mercury, jobs, {s: imgs[s] for s in used}), t_cap_ns, fast_pos,
                      {s: imgs[s] for s in used}, time.monotonic_ns(), len(jobs))
-@@ -155,7 +162,8 @@ class MercuryTracker:
+         if anchor_pos is not None:
+             self.job = self.job[:2] + (anchor_pos,) + self.job[3:]
++        self.job_info = dict(info or {})
+         return True
+ 
+     def collect(self):
+@@ -140,7 +150,8 @@ class MercuryTracker:
+         if self.job is None or not self.job[0].done():
+             return {}
+         fut, t_ns, fast_pos, job_imgs, t_sub_ns, njob = self.job
+-        self.job = None
++        info = self.job_info
++        self.job, self.job_info = None, {}
+         t = t_ns / 1e9
+         t_col_ns = time.monotonic_ns()
+         try:
+@@ -155,7 +166,10 @@ class MercuryTracker:
              rec = {"id": self.next_id, "side": side, "slot": slot, "t_cap": t_ns, "t_sub": t_sub_ns,
                     "t0": tim.get("t0", 0), "t1": tim.get("t1", 0), "cpu_ns": tim.get("cpu_ns", 0),
                     "wait_ns": tim.get("wait_ns", 0), "t_col": t_col_ns, "njob": njob, "outcome": "rej", "rq": None,
 -                   "hint": int(tim.get("hint", True))}
 +                   "hint": int(tim.get("hint", True)), "inference": tim.get("inference", "unknown"),
-+                   "request_crops": tim.get("request_crops", 0), "dsp_body_ms": tim.get("dsp_body_ms", 0.0)}
++                   "request_crops": tim.get("request_crops", 0), "dsp_body_ms": tim.get("dsp_body_ms", 0.0),
++                   "path": info.get("path", "frame"), "seq": info.get("seq", 0),
++                   "t_read": info.get("t_read", 0), "t_ready": info.get("t_ready", 0)}
              self.next_id += 1
              self.records.append(rec)
              hs = self.hands.get(side)
@@ -645,10 +911,10 @@ index 22e55ce..bf824b6 100644
  for n in $names; do f=$R/$n.pid; [ -f $f ] && kill "$(cat $f)" 2>/dev/null; rm -f $f; done
 diff --git a/tests/test_inference.py b/tests/test_inference.py
 new file mode 100644
-index 0000000..3a6c283
+index 0000000..c87fd1e
 --- /dev/null
 +++ b/tests/test_inference.py
-@@ -0,0 +1,211 @@
+@@ -0,0 +1,306 @@
 +import os
 +from pathlib import Path
 +import sys
@@ -834,6 +1100,101 @@ index 0000000..3a6c283
 +        tracker.idle()
 +        self.assertEqual(pool.submit.call_count, 2)
 +        self.assertIs(pool.submit.call_args.args[0], worker.idle_mercury)
++
++    def test_records_carry_submit_path_sequence_and_stage_times(self):
++        from concurrent.futures import Future
++        from types import SimpleNamespace
++        from handtrack.merctrack import MercuryTracker, HandState
++
++        pool, done = Mock(), Future()
++        pool.submit.return_value = done
++        palm = SimpleNamespace(pose={0: (np.eye(3), np.zeros(3)), 1: (np.eye(3), np.zeros(3))})
++        tracker = MercuryTracker(palm, pool, Mock())
++        joints = np.random.default_rng(3).normal(0, .01, (21, 3)) + [0, 0, .5]
++        tracker.hands["left"] = HandState("left", joints, 1.0)
++        info = {"path": "early", "seq": 41, "t_read": 5, "t_ready": 7}
++        self.assertTrue(tracker.submit({0: np.zeros(1), 1: np.zeros(1)}, 10**9, {}, info=info))
++        done.set_result([(1, "left", None, 0.01, {})])
++        tracker.collect()
++        rec = tracker.records[0]
++        self.assertEqual((rec["path"], rec["seq"], rec["t_read"], rec["t_ready"]), ("early", 41, 5, 7))
++        self.assertEqual(tracker.job_info, {})
++
++
++class AdmissionTests(unittest.TestCase):
++    PERIOD = 1 / 60
++
++    def test_a_capture_is_submitted_at_most_once(self):
++        from handtrack.mercsched import Admission
++        adm = Admission()
++        self.assertFalse(adm.admissible(0.0, self.PERIOD, False))          # no frame yet
++        adm.frame(1, 0.0)
++        self.assertTrue(adm.admissible(0.001, self.PERIOD, False))
++        adm.submitted(0.001)
++        for between in (False, True):
++            self.assertFalse(adm.admissible(0.002, self.PERIOD, between))
++        adm.frame(2, 0.017)
++        self.assertTrue(adm.admissible(0.018, self.PERIOD, True))
++
++    def test_stalled_cameras_stop_admission_and_resume_on_a_new_frame(self):
++        from handtrack.mercsched import Admission, STALL_S
++        adm = Admission()
++        adm.frame(1, 0.0)
++        self.assertFalse(adm.stalled(STALL_S))
++        self.assertTrue(adm.stalled(STALL_S + 0.001))
++        self.assertFalse(adm.admissible(STALL_S + 0.001, self.PERIOD, False))
++        adm.frame(2, 5.0)
++        self.assertTrue(adm.admissible(5.001, self.PERIOD, False))
++
++    def test_fresh_submits_between_frames_only_within_a_third_of_a_period(self):
++        from handtrack.mercsched import Admission
++        fresh, legacy = Admission(fresh=True), Admission()
++        for adm in (fresh, legacy):
++            adm.frame(1, 1.0)
++        self.assertTrue(fresh.admissible(1.005, self.PERIOD, True))
++        self.assertFalse(fresh.admissible(1.006, self.PERIOD, True))       # wait for the next frame
++        self.assertTrue(fresh.admissible(1.012, self.PERIOD, False))       # the frame path is unaffected
++        self.assertTrue(legacy.admissible(1.012, self.PERIOD, True))       # --merc-early behaviour kept
++
++    def test_power_is_released_once_after_the_grace_period_not_per_gap(self):
++        from handtrack.mercsched import Admission, IDLE_S
++        adm = Admission()
++        self.assertFalse(adm.should_release(10.0, False))                  # nothing ever held
++        self.assertFalse(adm.should_release(0.0, True))                    # in flight counts as active
++        self.assertFalse(adm.should_release(IDLE_S * 0.9, False))          # short gap keeps power
++        adm.active(IDLE_S * 0.9)
++        self.assertFalse(adm.should_release(IDLE_S * 1.5, False))
++        self.assertTrue(adm.should_release(IDLE_S * 2, False))
++        self.assertFalse(adm.should_release(IDLE_S * 3, False))            # once per idle period
++        adm.submitted(5.0)
++        self.assertTrue(adm.should_release(5.0 + IDLE_S, False))           # resume, then idle again
++
++    def test_frozen_cameras_release_power_without_reinferring_the_last_frame(self):
++        """Simulated 60 Hz capture that freezes: the coordinator's admit/power sequence."""
++        from handtrack.mercsched import Admission, IDLE_S, STALL_S
++        adm, submits, releases, busy_until = Admission(), [], [], -1.0
++        t, seq = 0.0, 0
++        while t < 1.0:
++            if t < 0.3 and t >= seq * self.PERIOD:                         # cameras freeze at 0.3 s
++                seq += 1
++                adm.frame(seq, t)
++            busy = t < busy_until
++            if busy:
++                adm.active(t)
++            elif not adm.stalled(t):
++                if adm.admissible(t, self.PERIOD, True):
++                    submits.append(adm.seq)
++                    adm.submitted(t)
++                    busy_until = t + 0.028
++                else:
++                    adm.active(t)
++            if adm.should_release(t, t < busy_until):
++                releases.append(t)
++            t += 0.002
++        self.assertEqual(len(submits), len(set(submits)))
++        self.assertEqual(len(releases), 1)
++        self.assertGreater(releases[0], 0.3 + STALL_S)
++        self.assertLess(releases[0], 0.3 + STALL_S + IDLE_S + 0.01)
 +
 +
 +@unittest.skipUnless(os.environ.get("FNPU_MERCURY_MODEL"), "pinned local model required")

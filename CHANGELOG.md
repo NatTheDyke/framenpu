@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Added [fresh-frame scheduling and camera-idle power release](docs/MERCURY_LIVE.md#fresh-frame-scheduling-and-idle-release)
+  to the tracker integration. Each capture is submitted at most once, held
+  HMX power is released after 0.2 s of blocked admission (camera stall, no
+  tracked hand, thermal pause, unplaceable crop), and `--merc-fresh` submits
+  right after optical flow. In alternating live runs (3 per scheduler),
+  median frame age at submit fell 35.5 → 27.5 ms and capture-to-collect
+  72.6 → 62.6 ms (p95 101.2 → 86.5 ms) at an unchanged accepted rate.
+  Telemetry now splits request age by stage; the live report and comparison
+  tools gained scheduler variants, start-temperature cooldown and a run
+  deadline.
+
 - Ran a [live stereo-camera comparison](docs/MERCURY_LIVE.md) of the integrated
   tracker. Two-crop processing wall time falls 34.09 → 31.23 ms (8.4%), and
   Mercury worker thread CPU time falls 29.66 → 17.76 ms (40.1%). Single-crop
