@@ -6,6 +6,10 @@ both 56x56 tail inputs: blob 8 from the convolution branch and blob 10 from
 the max-pool skip branch. The second runs the existing tail, global-average
 pool and FP32 heads. Only the final **512 bytes** return to the host.
 
+The camera/reference inputs are replicated grayscale. The optional
+[single-plane grayscale path](TEACHER_GRAYSCALE.md) removes that input
+duplication, preserving the original weights and all checked output bytes.
+
 Four corpus crops and twenty timed frames pass the existing accuracy
 ceilings. [Hardware evidence](../evidence/teacher-stem-banded.json) contains
 statistics and source/build hashes, with no private images or activations.

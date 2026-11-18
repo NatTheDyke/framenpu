@@ -133,7 +133,7 @@ static __attribute__((noinline)) fnpu_u32 tp_run(const fnpu_context *c, const fn
         if (dt>TP_LOG[15]) TP_LOG[15]=dt;
     }
     fnpu_u32 begin=rs_ticks(),a=begin,b;
-    rs_copy(FR(TS_RGB),(const volatile HVX_Vector *)(RS_DDR+r[5]),2352);
+    rs_copy(FR(TS_RGB),(const volatile HVX_Vector *)(RS_DDR+r[5]),TS_INPUT_VECTORS);
     b=rs_ticks();TP_LOG[7]=b-a;a=b;
     rs_zero(FR(TS_OUT8),3616);rs_zero(FR(TS_OUT10),904);
     b=rs_ticks();TP_LOG[8]=b-a;

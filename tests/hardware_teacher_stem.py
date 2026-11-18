@@ -60,7 +60,7 @@ class StemRunner(HH.HeadsRunner):
             for stage, name in enumerate(S.NAMES, 1):
                 row = list(struct.unpack("<32I", self.prefix.table))
                 row[1:3], row[16:18] = [band, band + 1], [stage, DEBUG]
-                if not S.native_ok(row):
+                if not S.native_ok(row, grayscale=getattr(self, "grayscale", False)):
                     raise ValueError("invalid diagnostic prefix descriptor")
                 self.put(self.prefix.table_at, struct.pack("<32I", *row))
                 job = self.submit(self.prefix, self.prefix.jobs[0], linked=True)

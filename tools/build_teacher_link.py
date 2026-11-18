@@ -93,7 +93,10 @@ def build(
     stem=False,
     stem_profile=False,
     stem_vector=False,
+    stem_gray=False,
 ):
+    if stem_gray and (not stem or stem_profile):
+        raise ValueError("grayscale requires the stem build without profiling")
     if stem_vector and not stem:
         raise ValueError("vector stitching requires the stem linked build")
     if stem_profile and not stem:
@@ -177,6 +180,7 @@ def build(
             *(["-DRS_STEM"] if stem else []),
             *(["-DRS_STEM_PROFILE"] if stem_profile else []),
             *(["-DRS_STEM_VECTOR"] if stem_vector else []),
+            *(["-DRS_STEM_GRAY"] if stem_gray else []),
         ),
         compile_(folder, 2, TESTS / "teacher_dw_probe.c", "-Dframe_job=tl_dw"),
         compile_(folder, 3, SDK / "hmx.S"),
@@ -198,6 +202,7 @@ def build(
         "stem": stem,
         "stem_profile": stem_profile,
         "stem_vector": stem_vector,
+        "stem_gray": stem_gray,
         "loader": {"bytes": len(loader.code), "sha256": _sha(loader.code), "name": LOADER_NAME},
         "linked": {"bytes": len(image), "sha256": _sha(image)},
         "reservation": {"code": f"{CODE:#x}", "bytes": CODE_BYTES, "seal_vector": f"{SEAL_AT:#x}"},
@@ -223,6 +228,7 @@ def main():
     p.add_argument("--stem", action="store_true")
     p.add_argument("--stem-profile", action="store_true")
     p.add_argument("--stem-vector", action="store_true")
+    p.add_argument("--stem-gray", action="store_true")
     args = p.parse_args()
     r = build(
         args.output,
@@ -232,6 +238,7 @@ def main():
         stem=args.stem,
         stem_profile=args.stem_profile,
         stem_vector=args.stem_vector,
+        stem_gray=args.stem_gray,
     )
     print(
         json.dumps(

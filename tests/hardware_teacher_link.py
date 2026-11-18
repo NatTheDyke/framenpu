@@ -519,6 +519,12 @@ def main():
     p.add_argument("--stem", action="store_true")
     p.add_argument("--stem-profile", action="store_true")
     p.add_argument("--stem-vector", action="store_true")
+    p.add_argument("--stem-gray", action="store_true")
+    p.add_argument(
+        "--gray-baseline-jobs",
+        type=Path,
+        help="qualified RGB vector image for paired grayscale frames",
+    )
     p.add_argument(
         "--profile-baseline-jobs", type=Path, help="unmodified banded image for profiler comparison"
     )
@@ -548,6 +554,33 @@ def main():
         p.error("--stem requires --heads and a matching linked build")
     if args.stem_vector != link_record.get("stem_vector", False):
         p.error("--stem-vector must agree with the linked build")
+    if args.stem_gray != link_record.get("stem_gray", False):
+        p.error("--stem-gray must agree with the linked build")
+    if args.stem_gray:
+        if (
+            not args.stem
+            or not args.stem_vector
+            or args.stem_profile
+            or args.cpu_prefix_library
+            or not args.gray_baseline_jobs
+        ):
+            p.error(
+                "grayscale qualification requires vector stem, --gray-baseline-jobs, no profiling or CPU comparison"
+            )
+        import hardware_teacher_gray as HG
+
+        _, gray_baseline_image, gray_baseline_record = load_link(args.gray_baseline_jobs)
+        if (
+            gray_baseline_record["linked"]["sha256"]
+            != "ee1d8256c89cdd40caeb51c67b4c668d664a6c7219bb2e73fdd79c3d1523a214"
+            or gray_baseline_record["loader"] != link_record["loader"]
+            or any(
+                gray_baseline_record[k] != link_record[k] for k in ("stride2", "heads", "dw_blocks")
+            )
+        ):
+            p.error("grayscale baseline must be the qualified RGB vector image")
+    elif args.gray_baseline_jobs:
+        p.error("--gray-baseline-jobs requires --stem-gray")
     if args.stem_profile != link_record.get("stem_profile", False):
         p.error("--stem-profile must agree with the linked build")
     if args.stem_profile and (
@@ -606,7 +639,9 @@ def main():
     ):
         p.error("corpus/model mismatch")
     report = {
-        "format": "framenpu-teacher-stem-profile"
+        "format": "framenpu-teacher-grayscale"
+        if args.stem_gray
+        else "framenpu-teacher-stem-profile"
         if args.stem_profile
         else "framenpu-teacher-prefix-comparison"
         if comparison
@@ -618,6 +653,7 @@ def main():
         "stem": args.stem,
         "stem_profile": args.stem_profile,
         "stem_vector": args.stem_vector,
+        "stem_gray": args.stem_gray,
         "heads": args.heads,
         "stride2": args.stride2,
         "dw_blocks": args.dw_blocks,
@@ -658,8 +694,14 @@ def main():
             n: digest(ROOT / n)
             for n in ("tests/hardware_teacher_stem_profile.py", "tests/teacher_stem_profile.py")
         }
+    if args.stem_gray:
+        report["gray_baseline_build"] = gray_baseline_record
+        report["grayscale_weight_analysis"] = HG.weight_analysis(graph, specs)
+        report["source_sha256"]["tests/hardware_teacher_gray.py"] = digest(
+            ROOT / "tests/hardware_teacher_gray.py"
+        )
     affinity = os.sched_getaffinity(0)
-    if comparison or args.stem_profile:
+    if comparison or args.stem_profile or args.stem_gray:
         report["cpu_core"] = args.cpu_core
         report["initial_host_affinity"] = sorted(affinity)
         os.sched_setaffinity(0, {args.cpu_core})
@@ -692,7 +734,9 @@ def main():
                 try:
                     with audited_device(power, report["audits"])(dispatch="direct") as dev:
                         runner = (
-                            HS.StemRunner
+                            HG.GrayRunner
+                            if args.stem_gray
+                            else HS.StemRunner
                             if args.stem
                             else HH.HeadsRunner
                             if args.heads
@@ -718,9 +762,13 @@ def main():
                             runner.profile_baseline_image = baseline_image
                             if args.profile_vector_jobs:
                                 runner.profile_vector_image = vector_image
+                        if args.stem_gray:
+                            runner.gray_baseline_image = gray_baseline_image
                         try:
                             report["crops"], report["seal_wrapper_ms"] = (
-                                HP.run
+                                HG.run
+                                if args.stem_gray
+                                else HP.run
                                 if args.stem_profile
                                 else HC.run
                                 if comparison
@@ -747,7 +795,9 @@ def main():
                         )  # unsealed: loader refuses
                         report["unsealed_request_refused"] = True
                         report["summary"] = (
-                            HP.summarize(report["crops"])
+                            HG.summarize(report["crops"])
+                            if args.stem_gray
+                            else HP.summarize(report["crops"])
                             if args.stem_profile
                             else HC.summarize(report["crops"])
                             if comparison
@@ -785,7 +835,7 @@ def main():
                 report["interpretation"] = "stopped without retry/recovery/restart"
     finally:
         lease.close()
-        if comparison or args.stem_profile:
+        if comparison or args.stem_profile or args.stem_gray:
             os.sched_setaffinity(0, affinity)
         args.output.write_text(json.dumps(report, indent=1) + "\n")
     print(

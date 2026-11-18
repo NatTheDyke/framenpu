@@ -32,6 +32,11 @@ static inline __attribute__((always_inline)) HVX_Vector ts_feature(int y, int x,
     HVX_Vector zero = Q6_V_vzero();
     if (k >= 27 || y < 0 || y >= 112) return zero;
     fnpu_u32 ch = k/9, tap = k%9, iy = 2*y + tap/3;
+#ifdef RS_STEM_GRAY
+    /* Alias the three logical channels to one physical plane. Keep every
+     * original weight and K position, preserving HMX accumulation order. */
+    ch = 0;
+#endif
     if (iy >= 224) return zero;
     int ix = 2*x + (int)(tap%3);
     const fnpu_u16 *p = (const fnpu_u16 *)FR(TS_RGB) + ch*50176 + iy*224 + ix;
@@ -148,7 +153,7 @@ static __attribute__((noinline)) void ts_dw(const rs_op *d) {
 }
 static __attribute__((noinline)) fnpu_u32 ts_run(const fnpu_context *c, const fnpu_u32 *r, fnpu_u32 start) {
     rs_op d;
-    rs_copy(FR(TS_RGB),(const volatile HVX_Vector *)(RS_DDR+r[5]),2352);
+    rs_copy(FR(TS_RGB),(const volatile HVX_Vector *)(RS_DDR+r[5]),TS_INPUT_VECTORS);
     rs_zero(FR(TS_OUT8),3616); rs_zero(FR(TS_OUT10),904);
 #pragma clang loop unroll(disable)
     for (fnpu_u32 band = r[1]; band < r[2]; band++) {

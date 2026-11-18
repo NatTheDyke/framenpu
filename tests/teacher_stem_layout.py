@@ -65,7 +65,7 @@ def parameters(graph, specs):
     return bytes(result)
 
 
-def build_plan(graph, specs):
+def build_plan(graph, specs, *, grayscale=False):
     """RGB reuses the tail's unused final-map slot; prefix writes tail inputs."""
     tail = H.build_plan(graph, specs)
     at = tail.table_at + len(tail.table)
@@ -73,7 +73,7 @@ def build_plan(graph, specs):
     if end > T.WIN_HI or at + 128 > min(tail.fixed):
         raise ValueError("prefix exceeds owned DDR window")
     words = [
-        KIND,
+        8 if grayscale else KIND,
         0,
         7,
         8,
@@ -101,20 +101,20 @@ def build_plan(graph, specs):
         where=tail.where | {"in0": words[5]},
         end=end,
     )
-    if not native_ok(words + [0] * 17):
+    if not native_ok(words + [0] * 17, grayscale=grayscale):
         raise ValueError("invalid prefix layout")
     return prefix, tail
 
 
-def native_ok(row):
+def native_ok(row, *, grayscale=False):
     r = [int(x) for x in row]
-    if len(r) != 32 or r[0] != KIND or not 0 <= r[1] < r[2] <= 7:
+    if len(r) != 32 or r[0] != (8 if grayscale else KIND) or not 0 <= r[1] < r[2] <= 7:
         return False
     if r[3:5] != [8, 20] or r[7:9] != [PARAMS, BLOCK] or r[11:15] != [RGB, OUT8, OUT10, A]:
         return False
     if not 0 <= r[15] <= 6 or not 0 <= r[16] <= 5 or any(r[18:]):
         return False
-    spans = [(r[5], 2352), (r[6], PARAMS), (r[9], 3616), (r[10], 904)]
+    spans = [(r[5], 784 if grayscale else 2352), (r[6], PARAMS), (r[9], 3616), (r[10], 904)]
     if r[16]:
         spans.append((r[17], CHANNELS[r[16] - 1] // 2 * BAND.nbin))
     elif r[17]:

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Added optional [single-plane 224x224 grayscale input](docs/TEACHER_GRAYSCALE.md)
+  via `--stem-gray`. Input transfer falls from 301,056 to 100,352 bytes with
+  byte-identical prefix outputs and heads. Paired DSP prefix time falls from
+  10.574 to 10.419 ms; host-wall medians remain effectively unchanged at
+  41.81 ms. All 677 restoration audits pass. Original weights and RGB vector
+  machine code remain unchanged; filter-folding limits are documented.
 - Vectorized the banded prefix's max-pool and stride-2 output stitching
   behind `--stem-vector` ([results](docs/TEACHER_STEM_VECTOR.md)). Their combined
   time falls from 5.215 to 0.056 ms. Paired full-frame prefix time falls from

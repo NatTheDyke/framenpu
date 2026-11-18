@@ -62,4 +62,5 @@ include evidence/teacher-stem-banded.json
 include evidence/teacher-prefix-comparison.json
 include evidence/teacher-stem-profile.json
 include evidence/teacher-stem-vector.json
+include evidence/teacher-grayscale.json
 include evidence/ncnn-cpu-baseline.json
