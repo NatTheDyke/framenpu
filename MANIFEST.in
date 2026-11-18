@@ -59,4 +59,7 @@ include evidence/teacher-stride2-fp16.json
 include evidence/teacher-dw4-fp16.json
 include evidence/teacher-heads-fp32.json
 include evidence/teacher-stem-banded.json
+include evidence/teacher-prefix-comparison.json
+include evidence/teacher-stem-profile.json
+include evidence/teacher-stem-vector.json
 include evidence/ncnn-cpu-baseline.json

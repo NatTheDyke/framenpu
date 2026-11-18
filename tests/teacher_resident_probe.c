@@ -277,6 +277,9 @@ static __attribute__((noinline)) void rs_s2(rs_op *d) {
 #ifdef RS_STEM
 #include "teacher_stem_impl.h"
 #endif
+#ifdef RS_STEM_PROFILE
+#include "teacher_stem_profile.h"
+#endif
 
 fnpu_u32 frame_job(const fnpu_context *c) {
     const volatile fnpu_u32 *in = fnpu_input(c);
@@ -302,6 +305,11 @@ fnpu_u32 frame_job(const fnpu_context *c) {
         if (rs_get(tab, i, d)) return FNPU_BAD_ARGUMENT;
 #ifdef RS_STEM
         if (d->kind == TS_KIND) {
+#ifdef RS_STEM_PROFILE
+            if (((const volatile fnpu_u32 *)RS_DESC)[19]) {
+                if (!tp_run(c,(const fnpu_u32 *)RS_DESC,t0)) break;
+            } else
+#endif
             if (!ts_run(c, (const fnpu_u32 *)RS_DESC, t0)) break;
         } else {
 #endif

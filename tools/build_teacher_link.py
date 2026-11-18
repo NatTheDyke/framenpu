@@ -50,7 +50,10 @@ SOURCES = (
     TESTS / "teacher_heads_layout.py",
     TESTS / "teacher_stem_check.h",
     TESTS / "teacher_stem_impl.h",
+    TESTS / "teacher_stem_vector.h",
     TESTS / "teacher_stem_layout.py",
+    TESTS / "teacher_stem_profile.h",
+    TESTS / "teacher_stem_profile.py",
     TESTS / "landmark_common.h",
     TESTS / "teacher_tail_layout.py",
     TESTS / "teacher_resident_layout.py",
@@ -81,7 +84,20 @@ def verify_loader(text, symbols):
         raise ValueError("loader must not publish or clean the code slot")
 
 
-def build(output, *, stride2=False, dw_blocks=2, heads=False, stem=False):
+def build(
+    output,
+    *,
+    stride2=False,
+    dw_blocks=2,
+    heads=False,
+    stem=False,
+    stem_profile=False,
+    stem_vector=False,
+):
+    if stem_vector and not stem:
+        raise ValueError("vector stitching requires the stem linked build")
+    if stem_profile and not stem:
+        raise ValueError("stem profiling requires the stem linked build")
     if stem and not heads:
         raise ValueError("resident stem requires the heads linked build")
     if heads and not stride2:
@@ -159,6 +175,8 @@ def build(output, *, stride2=False, dw_blocks=2, heads=False, stem=False):
             *(["-DRS_DW_BLOCKS=4"] if dw_blocks == 4 else []),
             *(["-DRS_HEADS"] if heads else []),
             *(["-DRS_STEM"] if stem else []),
+            *(["-DRS_STEM_PROFILE"] if stem_profile else []),
+            *(["-DRS_STEM_VECTOR"] if stem_vector else []),
         ),
         compile_(folder, 2, TESTS / "teacher_dw_probe.c", "-Dframe_job=tl_dw"),
         compile_(folder, 3, SDK / "hmx.S"),
@@ -178,6 +196,8 @@ def build(output, *, stride2=False, dw_blocks=2, heads=False, stem=False):
         "dw_blocks": dw_blocks,
         "heads": heads,
         "stem": stem,
+        "stem_profile": stem_profile,
+        "stem_vector": stem_vector,
         "loader": {"bytes": len(loader.code), "sha256": _sha(loader.code), "name": LOADER_NAME},
         "linked": {"bytes": len(image), "sha256": _sha(image)},
         "reservation": {"code": f"{CODE:#x}", "bytes": CODE_BYTES, "seal_vector": f"{SEAL_AT:#x}"},
@@ -201,6 +221,8 @@ def main():
     p.add_argument("--dw-blocks", type=int, choices=(2, 4), default=2)
     p.add_argument("--heads", action="store_true")
     p.add_argument("--stem", action="store_true")
+    p.add_argument("--stem-profile", action="store_true")
+    p.add_argument("--stem-vector", action="store_true")
     args = p.parse_args()
     r = build(
         args.output,
@@ -208,6 +230,8 @@ def main():
         dw_blocks=args.dw_blocks,
         heads=args.heads,
         stem=args.stem,
+        stem_profile=args.stem_profile,
+        stem_vector=args.stem_vector,
     )
     print(
         json.dumps(

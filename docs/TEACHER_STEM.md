@@ -12,6 +12,11 @@ statistics and source/build hashes, with no private images or activations.
 
 ## Measured timing
 
+The table below records the original scalar pooling/stitching build.
+The subsequent optional [vector implementation](TEACHER_STEM_VECTOR.md)
+reduces paired prefix time from 15.676 to 10.559 ms and host wall from
+47.942 to 42.201 ms, with byte-identical outputs on all four crops.
+
 | Work | Median DSP time including wrapper | Observed range |
 |---|---:|---:|
 | Banded prefix | 15.710 ms | 15.562–15.799 ms |
@@ -31,6 +36,17 @@ dispatch harness; it is not a production native-host latency result.
 The previous 29.256 ms [heads result](TEACHER_HEADS.md) starts from ncnn
 blobs 8 and 10. It excludes the prefix and has a different input boundary,
 so it is not an equivalent full-model baseline or a speedup comparison.
+
+A subsequent [paired RGB-to-head comparison](TEACHER_PREFIX_COMPARISON.md)
+measures CPU FP32 prefix + DSP tail at 29.025 ms versus 47.508 ms for this
+DSP-prefix path under the same pinned-host conditions. The DSP prefix is
+currently the slower latency choice; its correctness result does not establish
+a speedup from moving the prefix off the CPU.
+
+The subsequent [per-operator DSP profile](TEACHER_STEM_PROFILE.md) attributes
+5.21 ms to scalar max-pool stitching and decimation, versus 2.06 ms for the
+two complete depthwise operators. It also separates HMX transactions from
+pre-HMX memory-fence wait and counts duplicated halo work.
 
 ## Bands, halos and memory
 

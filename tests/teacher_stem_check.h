@@ -24,13 +24,24 @@ static __attribute__((noinline)) fnpu_u32 ts_bad(const fnpu_u32 *r) {
                    r[7] != TS_PARAMS || r[8] != TS_BLOCK || r[11] != TS_RGB ||
                    r[12] != TS_OUT8 || r[13] != TS_OUT10 || r[14] != TS_A ||
                    r[15] > 6 || r[16] > 5;
+#ifdef RS_STEM_PROFILE
+    for (fnpu_u32 i = 21; i < 32; i++) bad |= r[i] != 0;
+    if (!r[19]) bad |= r[18] != 0 || r[20] != 0;
+    else bad |= r[19] > 3 || r[20] > 7 || (r[19] == 3 && r[20]) || r[16] || r[15] || !ts_window(r[18],128) ||
+                (r[19] >= 2 && r[2] != r[1]+1);
+#else
     for (fnpu_u32 i = 18; i < 32; i++) bad |= r[i] != 0;
+#endif
     bad |= !ts_window(r[5],2352) || !ts_window(r[6],TS_PARAMS) ||
            !ts_window(r[9],3616) || !ts_window(r[10],904);
     if (bad) return bad;
     bad |= TS_OVER(r[5],2352,r[6],TS_PARAMS) || TS_OVER(r[5],2352,r[9],3616) ||
            TS_OVER(r[5],2352,r[10],904) || TS_OVER(r[6],TS_PARAMS,r[9],3616) ||
            TS_OVER(r[6],TS_PARAMS,r[10],904) || TS_OVER(r[9],3616,r[10],904);
+#ifdef RS_STEM_PROFILE
+    if (r[19]) bad |= TS_OVER(r[18],128,r[5],2352) || TS_OVER(r[18],128,r[6],TS_PARAMS) ||
+                     TS_OVER(r[18],128,r[9],3616) || TS_OVER(r[18],128,r[10],904);
+#endif
     if (!r[16]) return bad | (r[17] != 0);
     fnpu_u32 debug_n = r[16] < 3 ? 1068u : r[16] == 3 ? 712u : 2848u;
     if (!ts_window(r[17],debug_n)) return 1;

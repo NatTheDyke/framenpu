@@ -517,6 +517,20 @@ def main():
     p.add_argument("--stride2", action="store_true")
     p.add_argument("--heads", action="store_true")
     p.add_argument("--stem", action="store_true")
+    p.add_argument("--stem-profile", action="store_true")
+    p.add_argument("--stem-vector", action="store_true")
+    p.add_argument(
+        "--profile-baseline-jobs", type=Path, help="unmodified banded image for profiler comparison"
+    )
+    p.add_argument(
+        "--profile-vector-jobs", type=Path, help="uninstrumented vector image for paired frames"
+    )
+    p.add_argument(
+        "--cpu-prefix-library", type=Path, help="paired RGB comparison with native CPU prefixes"
+    )
+    p.add_argument(
+        "--cpu-core", type=int, default=2, help="pin comparison and CPU prefix to this core"
+    )
     p.add_argument("--dw-blocks", type=int, choices=(2, 4), default=2)
     p.add_argument("--split-after", help="split merged execution after this layer (two requests)")
     args = p.parse_args()
@@ -532,12 +546,55 @@ def main():
         p.error("--heads must agree with the linked build")
     if args.stem != link_record.get("stem", False) or (args.stem and not args.heads):
         p.error("--stem requires --heads and a matching linked build")
+    if args.stem_vector != link_record.get("stem_vector", False):
+        p.error("--stem-vector must agree with the linked build")
+    if args.stem_profile != link_record.get("stem_profile", False):
+        p.error("--stem-profile must agree with the linked build")
+    if args.stem_profile and (
+        not args.stem or not args.profile_baseline_jobs or args.cpu_prefix_library
+    ):
+        p.error("stem profiling requires --stem, --profile-baseline-jobs and no CPU comparison")
+    if args.stem_profile:
+        import hardware_teacher_stem_profile as HP
+
+        baseline_loader, baseline_image, baseline_record = load_link(args.profile_baseline_jobs)
+        if (
+            baseline_record.get("stem_profile", False)
+            or not baseline_record.get("stem")
+            or baseline_record["loader"] != link_record["loader"]
+            or baseline_record["linked"]["sha256"]
+            != "8c36451dd0e91b8122d867d66cbb6cdd419b312fe1125ab40fc9608c5cf327b9"
+        ):
+            p.error("profile baseline must be the unmodified qualified banded image")
+    if args.profile_vector_jobs:
+        if not args.stem_profile or not args.stem_vector:
+            p.error("--profile-vector-jobs requires --stem-profile and --stem-vector")
+        _, vector_image, vector_record = load_link(args.profile_vector_jobs)
+        if (
+            not vector_record.get("stem_vector")
+            or vector_record.get("stem_profile")
+            or not vector_record.get("stem")
+            or vector_record["loader"] != link_record["loader"]
+            or any(vector_record[k] != link_record[k] for k in ("stride2", "heads", "dw_blocks"))
+        ):
+            p.error("paired vector image must match the uninstrumented vector build")
     if args.heads and (not args.stride2 or args.split_after):
         p.error("heads currently require one merged stride-2 request")
     if args.heads:
         import hardware_teacher_heads as HH
     if args.stem:
         import hardware_teacher_stem as HS
+    if args.cpu_prefix_library and not args.stem:
+        p.error("--cpu-prefix-library requires --stem")
+    comparison = bool(args.cpu_prefix_library)
+    if comparison:
+        import hardware_teacher_compare as HC
+
+        if args.cpu_core not in os.sched_getaffinity(0):
+            p.error("requested comparison core is unavailable")
+        args.cpu_prefix_library = args.cpu_prefix_library.resolve()
+        if not args.cpu_prefix_library.is_file():
+            p.error("CPU prefix library missing")
     if args.split_after and not args.stride2:
         p.error("--split-after requires --stride2")
     graph = load_landmark_graph(args.model / "hand.ncnn.param", args.model / "hand.ncnn.bin")
@@ -549,12 +606,18 @@ def main():
     ):
         p.error("corpus/model mismatch")
     report = {
-        "format": "framenpu-teacher-stem-run"
+        "format": "framenpu-teacher-stem-profile"
+        if args.stem_profile
+        else "framenpu-teacher-prefix-comparison"
+        if comparison
+        else "framenpu-teacher-stem-run"
         if args.stem
         else "framenpu-teacher-heads-run"
         if args.heads
         else "framenpu-teacher-link-run",
         "stem": args.stem,
+        "stem_profile": args.stem_profile,
+        "stem_vector": args.stem_vector,
         "heads": args.heads,
         "stride2": args.stride2,
         "dw_blocks": args.dw_blocks,
@@ -586,6 +649,29 @@ def main():
         report["source_sha256"] |= {
             n: digest(ROOT / n)
             for n in ("tests/hardware_teacher_stem.py", "tests/teacher_stem_layout.py")
+        }
+    if args.stem_profile:
+        report["profile_baseline_build"] = baseline_record
+        if args.profile_vector_jobs:
+            report["profile_vector_build"] = vector_record
+        report["source_sha256"] |= {
+            n: digest(ROOT / n)
+            for n in ("tests/hardware_teacher_stem_profile.py", "tests/teacher_stem_profile.py")
+        }
+    affinity = os.sched_getaffinity(0)
+    if comparison or args.stem_profile:
+        report["cpu_core"] = args.cpu_core
+        report["initial_host_affinity"] = sorted(affinity)
+        os.sched_setaffinity(0, {args.cpu_core})
+    if comparison:
+        report["source_sha256"] |= {
+            n: digest(ROOT / n)
+            for n in (
+                "tests/hardware_teacher_compare.py",
+                "tests/teacher_cpu_prefix.py",
+                "tools/ncnn_prefix_bridge.cpp",
+                "tools/build_ncnn_prefix.py",
+            )
         }
     lease = _lease()
     try:
@@ -623,9 +709,26 @@ def main():
                             split_after=args.split_after,
                             dw_blocks=args.dw_blocks,
                         )
+                        if comparison:
+                            runner.cpu_library, runner.cpu_model = (
+                                args.cpu_prefix_library,
+                                args.model,
+                            )
+                        if args.stem_profile:
+                            runner.profile_baseline_image = baseline_image
+                            if args.profile_vector_jobs:
+                                runner.profile_vector_image = vector_image
                         try:
                             report["crops"], report["seal_wrapper_ms"] = (
-                                HS.run if args.stem else HH.run if args.heads else run
+                                HP.run
+                                if args.stem_profile
+                                else HC.run
+                                if comparison
+                                else HS.run
+                                if args.stem
+                                else HH.run
+                                if args.heads
+                                else run
                             )(runner, args.corpus, manifest, args.rounds)
                         except RecoveryRequired:
                             unsafe = True
@@ -644,7 +747,11 @@ def main():
                         )  # unsealed: loader refuses
                         report["unsealed_request_refused"] = True
                         report["summary"] = (
-                            HS.summarize(report["crops"])
+                            HP.summarize(report["crops"])
+                            if args.stem_profile
+                            else HC.summarize(report["crops"])
+                            if comparison
+                            else HS.summarize(report["crops"])
                             if args.stem
                             else HH.summarize(report["crops"])
                             if args.heads
@@ -678,6 +785,8 @@ def main():
                 report["interpretation"] = "stopped without retry/recovery/restart"
     finally:
         lease.close()
+        if comparison or args.stem_profile:
+            os.sched_setaffinity(0, affinity)
         args.output.write_text(json.dumps(report, indent=1) + "\n")
     print(
         json.dumps(

@@ -73,6 +73,9 @@ static __attribute__((noinline)) void ts_stem(const rs_op *d, fnpu_u32 band) {
         for (fnpu_u32 pr = 0; pr < 12; pr++) rs_post(d,LV(0)[pr],pr,j);
     }
 }
+#ifdef RS_STEM_VECTOR
+#include "teacher_stem_vector.h"
+#endif
 /* Finite half maximum, selecting the second operand on equal signed zeros,
  * matching the contract model's ordered maximum operations. */
 static inline fnpu_u32 ts_hmax(fnpu_u32 a, fnpu_u32 b) {
@@ -86,6 +89,9 @@ static inline fnpu_u32 ts_maxpair(fnpu_u32 a, fnpu_u32 b) {
     return ts_hmax(a,b) | (ts_hmax(a >> 16,b >> 16) << 16);
 }
 static __attribute__((noinline)) void ts_skip(fnpu_u32 band) {
+#ifdef RS_STEM_VECTOR
+    tsv_skip(band);
+#else
     const volatile fnpu_u32 *src = (const volatile fnpu_u32 *)FR(TS_A);
     volatile fnpu_u32 *dst = (volatile fnpu_u32 *)FR(TS_OUT10);
 #pragma clang loop unroll(disable)
@@ -96,8 +102,12 @@ static __attribute__((noinline)) void ts_skip(fnpu_u32 band) {
                 fnpu_u32 v = ts_maxpair(ts_maxpair(src[i],src[i+1]),src[i+114]);
                 dst[cp*3616 + 130 + (8*band+y)*58 + x] = ts_maxpair(v,src[i+115]);
             }
+#endif
 }
 static __attribute__((noinline)) void ts_downsample(fnpu_u32 band) {
+#ifdef RS_STEM_VECTOR
+    tsv_downsample(band);
+#else
     const volatile fnpu_u32 *src = (const volatile fnpu_u32 *)FR(TS_A);
     volatile fnpu_u32 *dst = (volatile fnpu_u32 *)FR(TS_OUT8);
 #pragma clang loop unroll(disable)
@@ -105,6 +115,7 @@ static __attribute__((noinline)) void ts_downsample(fnpu_u32 band) {
         for (fnpu_u32 y = 0; y < 8; y++)
             for (fnpu_u32 x = 0; x < 56; x++)
                 dst[cp*3616 + 130 + (8*band+y)*58+x] = src[cp*2848 + 259 + (2*y+2)*114 + 2*x];
+#endif
 }
 static void ts_observe(const fnpu_u32 *r, fnpu_u32 stage, fnpu_u32 src, fnpu_u32 n) {
     if (r[16] == stage) rs_copy((volatile HVX_Vector *)(RS_DDR+r[17]),FR(src),n);

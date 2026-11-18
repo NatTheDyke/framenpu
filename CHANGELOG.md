@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- Vectorized the banded prefix's max-pool and stride-2 output stitching
+  behind `--stem-vector` ([results](docs/TEACHER_STEM_VECTOR.md)). Their combined
+  time falls from 5.215 to 0.056 ms. Paired full-frame prefix time falls from
+  15.676 to 10.559 ms, and host wall from 47.942 to 42.201 ms. Outputs remain
+  byte-identical; all 992 restoration audits pass. The scalar image remains
+  byte-identical, and the vector image fits the same 10,800-byte footprint.
+- Added an optional [DSP prefix profiler](docs/TEACHER_STEM_PROFILE.md) with
+  per-operator, HMX/fence, depthwise, halo and movement measurements. Scalar
+  pooling/stitching and decimation consume 5.21 ms; the two depthwise
+  operators consume 2.06 ms. Baseline machine code and all profiled outputs
+  remain unchanged; 800 restoration audits pass.
+- Added a paired [RGB-to-head prefix comparison](docs/TEACHER_PREFIX_COMPARISON.md).
+  A native ncnn FP32 CPU prefix plus DSP tail measures 29.02 ms host wall versus
+  47.51 ms for the two-request DSP path on the same pinned host core. Both
+  pass the existing four-crop accuracy ceilings; the CPU FP16 hybrid fails
+  one crop's RMS ceiling. Kernel code is unchanged.
 - Added a qualified [banded RGB prefix](docs/TEACHER_STEM.md), including the
   max-pool skip branch, feeding the resident tail and heads in two requests.
   Prefix depthwise reductions and original biases use QFloat32 arithmetic
