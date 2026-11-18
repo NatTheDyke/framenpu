@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Added a [grouped 1x1](docs/MERCURY.md#grouped-1x1)
+  (`build_teacher_link.py --pw-group 8`, new image; existing images
+  byte-identical). It runs the HMX tiles of 8 column blocks before posting
+  them. The unexplained 1x1 post-loop wait turned out to be HMX execution
+  (about 0.21 µs per tile load), now paid once per group. Mercury 1x1 drops
+  from 3.55 to 3.18 ms and the request from 5.30 to 4.92 ms per crop,
+  bit-identical on all 16 cases.
 - Added a [fast depthwise](docs/MERCURY.md#fast-depthwise)
   (`build_teacher_link.py --dw-fast`, new image; existing images
   byte-identical and frozen in tests). It unrolls the 3x3 taps, inlines the

@@ -90,4 +90,6 @@ include evidence/mercury-host-ab-b2-r2.json
 include evidence/mercury-host-ab-b2-r3.json
 include evidence/mercury-dw-fast-pilot.json
 include evidence/mercury-dw-fast-device.json
+include evidence/mercury-pw-group-pilot.json
+include evidence/mercury-pw-group-device.json
 include evidence/ncnn-cpu-baseline.json

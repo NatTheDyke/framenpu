@@ -81,7 +81,7 @@ class TeacherLinkBuild(unittest.TestCase):
     def test_mercury_images_frozen(self):
         # Device-qualified Mercury images (evidence/mercury-*.json): even-phase
         # stride 2, direct stride 2, direct stride 2 with the fast 1x1 post, and that plus
-        # the fast depthwise.
+        # the fast depthwise, and that plus 1x1 groups of 8 column blocks.
         frozen = {
             (): "d0427fb0137f4d34d4a1046c1a4bced7af582e618c279b8468c171cfb6b39e0b",
             ("s2_direct",): "58c5ec58ac5df03982d416e1f08640c929fcc36c517ffdb848005b1e0e987916",
@@ -91,11 +91,13 @@ class TeacherLinkBuild(unittest.TestCase):
             ("s2_direct", "pw_fast", "dw_fast"): (
                 "89511c1854be82a553e0bb5f8dc2b402a655bc711c6e678a339cab9844b00c67"
             ),
+            ("s2_direct", "pw_fast", "dw_fast", ("pw_group", 8)): (
+                "a2377f9cf86850138368181d44142225da491059679723dde24e3316a44c0a9d"
+            ),
         }
         for i, (flags, digest) in enumerate(frozen.items()):
-            r = self.BL.build(
-                self.out / f"merc{i}", stride2=True, s2_even=True, **dict.fromkeys(flags, True)
-            )
+            kw = dict(f if isinstance(f, tuple) else (f, True) for f in flags)
+            r = self.BL.build(self.out / f"merc{i}", stride2=True, s2_even=True, **kw)
             self.assertEqual(r["linked"]["sha256"], digest, flags)
             self.assertLessEqual(r["linked"]["bytes"], 0x3F80)
             self.assertEqual(r["loader"], self.record["loader"])
@@ -104,6 +106,11 @@ class TeacherLinkBuild(unittest.TestCase):
         for flag in ("pw_fast", "pw_profile", "dw_fast"):
             with self.assertRaises(ValueError):
                 self.BL.build(self.out / f"bad-{flag}", **{flag: True})
+        for group, fast in ((8, False), (3, True), (16, True)):
+            with self.assertRaises(ValueError):
+                self.BL.build(
+                    self.out / f"bad-g{group}", stride2=True, pw_fast=fast, pw_group=group
+                )
 
     def test_loader_checks_reject_a_wrong_seal_constant(self):
         text = (self.out / "link/loader/disassembly.txt").read_text()

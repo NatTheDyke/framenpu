@@ -179,7 +179,9 @@ def device_ops(model, stop_after=LAST, start=None, prefix=False):
 # ---------------------------------------------------------------- parameter images
 
 
-def pw_image(op, gin):
+def pw_image(op, gin, group=1):
+    """Parameter image and VTCM scratch (vectors) of a 1x1 op; an RS_PW_GROUP build
+    (group > 1) needs group * (nk + no) * 16 scratch vectors."""
     import numpy as np
 
     w = op.params["weight"]
@@ -195,7 +197,7 @@ def pw_image(op, gin):
     )
     image = tiles + RL._splat_pairs(op.params["bias"], cout // 2) + gin.mask_bytes()[: gin.nj * 128]
     image += bytes(-len(image) % 2048)
-    return image, nk * 16
+    return image, (group * (nk + no) if group > 1 else nk) * 16
 
 
 def dw_image(op, gin):
@@ -246,10 +248,13 @@ class MercuryPlan:
         return HINT in self.host_parts
 
 
-def build_plan(model, mode="merged", stop_after=LAST, start=None, prefix=False, batch=1):
+def build_plan(
+    model, mode="merged", stop_after=LAST, start=None, prefix=False, batch=1, pw_group=1
+):
     """batch > 1 (merged only): one request runs the merged sequence once per crop,
     each crop with its own input and final-tensor slots; parameter images are
-    shared, and VTCM is reused from crop to crop."""
+    shared, and VTCM is reused from crop to crop. pw_group must match the build's
+    RS_PW_GROUP (it sizes the 1x1 scratch the kernel checks)."""
     if mode not in ("merged", "qualify"):
         raise ValueError(mode)
     if batch < 1 or (batch > 1 and mode != "merged"):
@@ -289,7 +294,9 @@ def build_plan(model, mode="merged", stop_after=LAST, start=None, prefix=False, 
     images = {}
     for op in ops:
         gin = grid(shape[op.inputs[0]])
-        images[op.name] = pw_image(op, gin) if op.conv_class == "pointwise" else dw_image(op, gin)
+        images[op.name] = (
+            pw_image(op, gin, pw_group) if op.conv_class == "pointwise" else dw_image(op, gin)
+        )
 
     # window: table | parameter images | tensors (each 4 KiB aligned, never reused)
     table_at = T.WIN_LO
@@ -493,7 +500,7 @@ def _merged_crop(
         raise ValueError(f"crop leaves VTCM blocks held: {sorted(at)}")
 
 
-def qualify_segments(model, stop_after=LAST, prefix=False):
+def qualify_segments(model, stop_after=LAST, prefix=False, pw_group=1):
     """Greedy split of the request range into qualify plans that each fit the window.
     A segment never both produces a part of a composite and consumes the composite:
     the host stages the composite whole from the device's part bytes."""
@@ -508,7 +515,7 @@ def qualify_segments(model, stop_after=LAST, prefix=False):
             if any(b in parts and parts[b] & made for b in ops[j].inputs):
                 break
             try:
-                best = build_plan(model, "qualify", names[j], names[i], prefix)
+                best = build_plan(model, "qualify", names[j], names[i], prefix, pw_group=pw_group)
             except ValueError as exc:
                 if "window plan" not in str(exc) or best is None:
                     raise

@@ -1,0 +1,487 @@
+{
+ "format": "framenpu-mercury-backbone-run",
+ "scope": "Conv_0 .. Conv_18 on the DSP; host im2col stem columns, host hint and heads",
+ "prefix": true,
+ "s2_direct": true,
+ "pw_profile": false,
+ "pw_fast": true,
+ "held_power": true,
+ "batch": 1,
+ "pw_group": 8,
+ "stop_after": "Conv_18",
+ "builds": {
+  "loader": {
+   "bytes": 1960,
+   "sha256": "72280ad93eb4ffcf49e7de26908fa2d8f9056e0d9e1e8618f75eba867a7ba3f0",
+   "name": "teacher_link_loader_v1"
+  },
+  "linked": {
+   "bytes": 6672,
+   "sha256": "a2377f9cf86850138368181d44142225da491059679723dde24e3316a44c0a9d"
+  }
+ },
+ "model_sha256": "40c0daa598cedb993b54fff17685231b7465d6db342656c401b01c2029efd1d5",
+ "source_sha256": {
+  "tests/hardware_mercury.py": "0851c103496dcc28b7083ff77547b70bd1c02b13d6c6a1f34bc4c04599b5b1e9",
+  "tests/hardware_teacher_link.py": "4b3f399caf2aa03548746702c0de1bb124cf2469a1d58db1a50be31b200beacb",
+  "tests/mercury_layout.py": "60029f0745e7b1c506c2e25d741a3a0741d010c33beacd3cdd9092e32a0ea4b1",
+  "tests/teacher_resident_layout.py": "8c6b85ea0a8e6877f3fe19296abbc28ba937d5d4fd28c8814d8e1d02dbbc8f34",
+  "tests/teacher_tail_layout.py": "db128c94cdd75382768992ccd277b995fb5f740747a7c56ea9e266375bdbe08f",
+  "src/framenpu/mercury.py": "c47823c9fb79ac22ca59ceddc748a02c2d6cf441c4ac74e19883bccbe2aa13fa"
+ },
+ "cases_manifest_sha256": "6d26ad1c96c62c7119bef70330f66aad2fe7be72edd05e6f51dc9b7a93895918",
+ "window": [
+  "0x1a40000",
+  "0x1f00000"
+ ],
+ "reservation": [
+  "0x1ff0000",
+  "0x1ff4000"
+ ],
+ "audits": {
+  "restored_jobs": 83,
+  "restored_hmx_jobs": 81
+ },
+ "service_before": "MainPID=1047\nNRestarts=0\nActiveState=active\n",
+ "initial_health": {
+  "state": {
+   "abi": 9,
+   "control": [
+    1,
+    0,
+    1
+   ],
+   "callback": 0,
+   "poisoned": false
+  },
+  "firmware_code_prefix_bytes": 114688,
+  "firmware_code_prefix_sha256": "55679e13486357627ea22e494b25342acd9d24d73450f3f28eb1113b82c71b95",
+  "power_configuration_sha256": "2405bda200a51fd0bd699568e8415e53ba7b631cbaa9d4812c656b7240159bbd",
+  "power_restored": true
+ },
+ "arena_before_sha256": "94674964076f61f96f8eb7e5ba78b1e5defde8c1d2f320ba45fda8c3ac6c3b48",
+ "seal_wrapper_ms": 1.665625,
+ "cases": {
+  "case00": {
+   "split": "calibration",
+   "hinted": false,
+   "qualify": {
+    "max_bound_ratio": 0.3253069570996037,
+    "bound_ratio": {
+     "Conv_0": 0.2872746472564098,
+     "Conv_4": 0.31608349171379646,
+     "Conv_8": 0.3253069570996037,
+     "Conv_10.g0": 0.20981681152141335,
+     "Conv_14.g0": 0.2237838046754996,
+     "Conv_10.g1": 0.13916654543625376,
+     "Conv_14.g1": 0.1807809155099386,
+     "Conv_10.g2": 0.2689607780529098,
+     "Conv_14.g2": 0.21935616821542142,
+     "Conv_10.g3": 0.1711982268725558,
+     "Conv_14.g3": 0.18680190656616072,
+     "Conv_10.g4": 0.1490782195616077,
+     "Conv_14.g4": 0.18325613265522703,
+     "Conv_10.g5": 0.1337691176239278,
+     "Conv_14.g5": 0.15315576429395195,
+     "Conv_18": 0.10760274696487208
+    },
+    "requests": 16,
+    "matches_host_emulator": null
+   },
+   "final_sha256": "1224eadc760004401f231ed50852775e1d40474eead341727dd9a6057f85b4be",
+   "frames": [
+    {
+     "kind": "rs",
+     "wall_ms": 4.268075000027238,
+     "wrapper_ms": 2.480625,
+     "body_ms": 2.44875,
+     "op_us": [
+      76.97916666666667,
+      217.60416666666669,
+      96.04166666666667,
+      221.71875,
+      217.86458333333334,
+      62.8125,
+      216.40625,
+      62.60416666666667,
+      215.67708333333334,
+      62.65625,
+      217.8125,
+      62.76041666666667,
+      214.47916666666669,
+      62.8125,
+      215.625,
+      62.552083333333336,
+      88.69791666666667,
+      73.64583333333334
+     ],
+     "host_ms": {
+      "stage": 0.22738699999536038,
+      "request": 4.297604999919713,
+      "readback": 0.04182199995739211,
+      "claim_ms": 0.229003,
+      "backup_ms": 0.013124,
+      "prepare_ms": 0.013958,
+      "job_upload_ms": 0.007083,
+      "power_start_ms": 0.134631,
+      "publish_wait_ms": 3.423626,
+      "read_validate_ms": 0.035623,
+      "power_close_ms": 0.002344,
+      "restore_ms": 0.003021,
+      "ack_ms": 0.389673,
+      "submit_total_ms": 4.264428999931624
+     },
+     "host_wall_ms": 4.5668139998724655
+    },
+    {
+     "kind": "rs",
+     "wall_ms": 4.845918999990317,
+     "wrapper_ms": 2.4935416666666668,
+     "body_ms": 2.4642708333333334,
+     "op_us": [
+      76.66666666666667,
+      217.5,
+      95.9375,
+      222.76041666666669,
+      217.03125,
+      62.91666666666667,
+      218.85416666666669,
+      62.60416666666667,
+      216.40625,
+      62.76041666666667,
+      219.0625,
+      62.76041666666667,
+      218.38541666666669,
+      63.22916666666667,
+      221.19791666666669,
+      63.020833333333336,
+      88.48958333333334,
+      74.6875
+     ],
+     "host_ms": {
+      "stage": 0.21478400003616116,
+      "request": 4.867375999992873,
+      "readback": 0.05817500004923204,
+      "claim_ms": 0.21468,
+      "backup_ms": 0.010781,
+      "prepare_ms": 0.011406,
+      "job_upload_ms": 0.006874,
+      "power_start_ms": 0.131871,
+      "publish_wait_ms": 3.321807,
+      "read_validate_ms": 0.149578,
+      "power_close_ms": 0.001666,
+      "restore_ms": 0.00224,
+      "ack_ms": 0.983297,
+      "submit_total_ms": 4.843315000016446
+     },
+     "host_wall_ms": 5.140335000078267
+    },
+    {
+     "kind": "rs",
+     "wall_ms": 5.9153070001229935,
+     "wrapper_ms": 2.4735416666666667,
+     "body_ms": 2.4444270833333333,
+     "op_us": [
+      76.66666666666667,
+      215.05208333333334,
+      95.98958333333334,
+      220.26041666666669,
+      218.4375,
+      62.91666666666667,
+      217.1875,
+      62.44791666666667,
+      215.625,
+      63.020833333333336,
+      216.51041666666669,
+      62.8125,
+      214.27083333333334,
+      62.708333333333336,
+      215.26041666666669,
+      62.5,
+      89.11458333333334,
+      73.64583333333334
+     ],
+     "host_ms": {
+      "stage": 0.14879699983794126,
+      "request": 5.9703050001189695,
+      "readback": 0.6768499999907363,
+      "claim_ms": 0.228221,
+      "backup_ms": 0.011458,
+      "prepare_ms": 0.013437,
+      "job_upload_ms": 0.003333,
+      "power_start_ms": 0.125672,
+      "publish_wait_ms": 3.670128,
+      "read_validate_ms": 0.225148,
+      "power_close_ms": 0.007552,
+      "restore_ms": 0.008333,
+      "ack_ms": 1.605411,
+      "submit_total_ms": 5.9118700000908575
+     },
+     "host_wall_ms": 6.795951999947647
+    }
+   ],
+   "controls": {
+    "guarded_fault_linked": 1,
+    "descriptor_rejection_linked": 1,
+    "stride2_descriptor_rejections": 36,
+    "second_seal_refused": 1,
+    "clean_after_controls": true
+   }
+  },
+  "case01": {
+   "split": "calibration",
+   "hinted": true,
+   "qualify": {
+    "max_bound_ratio": 0.3253069570996037,
+    "bound_ratio": {
+     "Conv_0": 0.2872746472564098,
+     "Conv_4": 0.31608349171379646,
+     "Conv_8": 0.3253069570996037,
+     "Conv_10.g0": 0.20981681152141335,
+     "Conv_14.g0": 0.2237838046754996,
+     "Conv_10.g1": 0.13916654543625376,
+     "Conv_14.g1": 0.1807809155099386,
+     "Conv_10.g2": 0.2689607780529098,
+     "Conv_14.g2": 0.21935616821542142,
+     "Conv_10.g3": 0.1711982268725558,
+     "Conv_14.g3": 0.18680190656616072,
+     "Conv_10.g4": 0.1490782195616077,
+     "Conv_14.g4": 0.18325613265522703,
+     "Conv_10.g5": 0.1337691176239278,
+     "Conv_14.g5": 0.15315576429395195,
+     "Conv_18": 0.10760274696487208
+    },
+    "requests": 16,
+    "matches_host_emulator": null
+   },
+   "final_sha256": "1224eadc760004401f231ed50852775e1d40474eead341727dd9a6057f85b4be",
+   "frames": [
+    {
+     "kind": "rs",
+     "wall_ms": 4.2399500000556145,
+     "wrapper_ms": 2.4757291666666665,
+     "body_ms": 2.4463541666666666,
+     "op_us": [
+      76.71875,
+      214.84375,
+      96.04166666666667,
+      221.97916666666669,
+      217.86458333333334,
+      62.91666666666667,
+      216.09375,
+      62.5,
+      216.30208333333334,
+      63.22916666666667,
+      215.83333333333334,
+      62.65625,
+      217.5,
+      62.76041666666667,
+      213.90625,
+      62.60416666666667,
+      89.21875,
+      73.38541666666667
+     ],
+     "host_ms": {
+      "stage": 0.1954099998329184,
+      "request": 4.266148000169778,
+      "readback": 0.062080999896352296,
+      "claim_ms": 0.23869,
+      "backup_ms": 0.01203,
+      "prepare_ms": 0.014583,
+      "job_upload_ms": 0.003125,
+      "power_start_ms": 0.143901,
+      "publish_wait_ms": 3.330348,
+      "read_validate_ms": 0.032447,
+      "power_close_ms": 0.002292,
+      "restore_ms": 0.00276,
+      "ack_ms": 0.451755,
+      "submit_total_ms": 4.238076000092406
+     },
+     "host_wall_ms": 4.523638999899049
+    },
+    {
+     "kind": "rs",
+     "wall_ms": 4.318646000001536,
+     "wrapper_ms": 2.4844270833333333,
+     "body_ms": 2.454375,
+     "op_us": [
+      76.66666666666667,
+      216.875,
+      96.04166666666667,
+      221.71875,
+      218.38541666666669,
+      62.76041666666667,
+      217.86458333333334,
+      62.552083333333336,
+      215.83333333333334,
+      62.8125,
+      216.97916666666669,
+      62.864583333333336,
+      218.64583333333334,
+      62.91666666666667,
+      218.125,
+      62.864583333333336,
+      88.90625,
+      71.5625
+     ],
+     "host_ms": {
+      "stage": 0.3404560000035417,
+      "request": 4.346717999851535,
+      "readback": 0.06567500008713978,
+      "claim_ms": 0.286969,
+      "backup_ms": 0.015207,
+      "prepare_ms": 0.017916,
+      "job_upload_ms": 0.005677,
+      "power_start_ms": 0.163796,
+      "publish_wait_ms": 3.330817,
+      "read_validate_ms": 0.031406,
+      "power_close_ms": 0.002291,
+      "restore_ms": 0.002813,
+      "ack_ms": 0.450869,
+      "submit_total_ms": 4.316302000006544
+     },
+     "host_wall_ms": 4.752848999942216
+    },
+    {
+     "kind": "rs",
+     "wall_ms": 4.291615000056481,
+     "wrapper_ms": 2.4944270833333335,
+     "body_ms": 2.4657291666666667,
+     "op_us": [
+      76.92708333333334,
+      217.29166666666669,
+      96.09375,
+      221.45833333333334,
+      219.42708333333334,
+      63.177083333333336,
+      220.9375,
+      63.07291666666667,
+      217.55208333333334,
+      62.708333333333336,
+      216.61458333333334,
+      62.76041666666667,
+      219.73958333333334,
+      63.28125,
+      219.21875,
+      63.020833333333336,
+      89.0625,
+      73.38541666666667
+     ],
+     "host_ms": {
+      "stage": 0.334988000076919,
+      "request": 4.31041699994239,
+      "readback": 0.059477000149854575,
+      "claim_ms": 0.281084,
+      "backup_ms": 0.014478,
+      "prepare_ms": 0.017916,
+      "job_upload_ms": 0.005521,
+      "power_start_ms": 0.143745,
+      "publish_wait_ms": 3.353785,
+      "read_validate_ms": 0.025988,
+      "power_close_ms": 0.002084,
+      "restore_ms": 0.001823,
+      "ack_ms": 0.436442,
+      "submit_total_ms": 4.289845000130299
+     },
+     "host_wall_ms": 4.704882000169164
+    }
+   ]
+  }
+ },
+ "plans": {
+  "merged": {
+   "batch": 1,
+   "descriptors": 18,
+   "vtcm_peak_vectors": 11289,
+   "window_end": "0x1ac4800",
+   "ops": 16
+  },
+  "qualify_segments": [
+   {
+    "first": "Conv_0",
+    "last": "Conv_14.g5",
+    "requests": 15,
+    "window_end": "0x1dfb800"
+   },
+   {
+    "first": "Conv_18",
+    "last": "Conv_18",
+    "requests": 1,
+    "window_end": "0x1ae0800"
+   }
+  ]
+ },
+ "retire_wrapper_ms": 1.6816145833333334,
+ "unsealed_request_refused": true,
+ "summary": {
+  "host_ms_median": {
+   "stage": 0.27488600005654007,
+   "request": 4.607046999922204,
+   "readback": 0.06257600011849718,
+   "claim_ms": 0.2546525,
+   "backup_ms": 0.012968,
+   "prepare_ms": 0.0156765,
+   "job_upload_ms": 0.005599,
+   "power_start_ms": 0.13780799999999999,
+   "publish_wait_ms": 3.342301,
+   "read_validate_ms": 0.09049199999999999,
+   "power_close_ms": 0.0021875,
+   "restore_ms": 0.0025265,
+   "ack_ms": 0.717083,
+   "submit_total_ms": 4.579808500011495
+  },
+  "pw_profile_us_median": null,
+  "cases": 2,
+  "max_bound_ratio": 0.3253069570996037,
+  "merged_bit_identical_to_qualify": true,
+  "matches_host_emulator": 0,
+  "body_ms_median": 2.459322916666667,
+  "wrapper_ms_median": 2.4889843750000002,
+  "host_wall_ms_median": 4.9465920000102415,
+  "batch": 1,
+  "body_ms_per_crop_median": 2.459322916666667,
+  "host_wall_ms_per_crop_median": 4.9465920000102415,
+  "descriptor_us_median": [
+   76.67,
+   217.08,
+   96.02,
+   221.59,
+   218.41,
+   62.92,
+   218.36,
+   62.58,
+   216.12,
+   62.79,
+   216.8,
+   62.79,
+   218.52,
+   63.07,
+   218.67,
+   62.94,
+   88.98,
+   73.52
+  ],
+  "ops": 16
+ },
+ "window_restored": true,
+ "arena_after_sha256": "94674964076f61f96f8eb7e5ba78b1e5defde8c1d2f320ba45fda8c3ac6c3b48",
+ "reservation_restored": true,
+ "final_health": {
+  "state": {
+   "abi": 9,
+   "control": [
+    1,
+    0,
+    1
+   ],
+   "callback": 0,
+   "poisoned": false
+  },
+  "firmware_code_prefix_bytes": 114688,
+  "firmware_code_prefix_sha256": "55679e13486357627ea22e494b25342acd9d24d73450f3f28eb1113b82c71b95",
+  "power_configuration_sha256": "2405bda200a51fd0bd699568e8415e53ba7b631cbaa9d4812c656b7240159bbd",
+  "power_restored": true
+ },
+ "service_after": "MainPID=1047\nNRestarts=0\nActiveState=active\n",
+ "all_checks_passed": true
+}

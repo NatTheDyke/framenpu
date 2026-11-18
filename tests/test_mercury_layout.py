@@ -266,6 +266,31 @@ class MercuryLayoutTest(unittest.TestCase):
             self.assertEqual(stray, 0)
             np.testing.assert_array_equal(a, b)
 
+    def test_pw_group_scratch(self):
+        """An RS_PW_GROUP build's 1x1 scratch (B tiles + output tiles per block of the
+        group) fits every op of the plan, and the mirrored native check rejects a
+        scratch that would run past the span."""
+        import mercury_layout as ML
+        import teacher_resident_layout as RL
+
+        for group in (1, 8):
+            for batch in (1, 2):
+                mp = ML.build_plan(self.model, prefix=True, batch=batch, pw_group=group)
+                for n in range(mp.descriptors):
+                    row = struct.unpack_from("<32I", mp.plan.table, 128 * n)
+                    self.assertTrue(RL.native_ok(row, s2_direct=0, pw_group=group))
+        op = next(o for o in ML.device_ops(self.model, prefix=True) if o.conv_class == "pointwise")
+        gin = ML.grid(ML.shapes(self.model, True)[op.inputs[0]])
+        img, one = ML.pw_image(op, gin)
+        img8, eight = ML.pw_image(op, gin, 8)
+        self.assertEqual(img, img8)
+        self.assertGreater(eight, 8 * one)
+        rows = [
+            struct.unpack_from("<32I", ML.build_plan(self.model, prefix=True).plan.table, 128 * n)
+            for n in range(ML.build_plan(self.model, prefix=True).descriptors)
+        ]
+        self.assertFalse(all(RL.native_ok(r, s2_direct=0, pw_group=1024) for r in rows))
+
     def test_batch_plan_crops_independent(self):
         """Two crops in one request: shared parameter images, own slots, and each
         crop bit-identical to its batch-1 result (different inputs, so crop 1

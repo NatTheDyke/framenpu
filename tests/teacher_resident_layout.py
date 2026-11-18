@@ -604,10 +604,11 @@ def simulate(plan, window, *, s2_phase=1, s2_direct=False):
 # ---------------------------------------------------------------- native check mirror
 
 
-def native_ok(row, *, dw_blocks=2, s2_direct=None):
+def native_ok(row, *, dw_blocks=2, s2_direct=None, pw_group=1):
     """Mirror of rs_get in tests/teacher_resident_probe.c (True = accepted).
     s2_direct: the decimation phase (0 even, 1 odd) of an RS_S2_DIRECT build, which
-    adds bounds on the direct kernel's reads and zero-lane store spill."""
+    adds bounds on the direct kernel's reads and zero-lane store spill. pw_group: an
+    RS_PW_GROUP build's 1x1 scratch, pw_group * (nk + no) * 16 vectors."""
     if dw_blocks not in (2, 4):
         raise ValueError("dw_blocks must be 2 or 4")
     m = 0xFFFFFFFF
@@ -667,7 +668,7 @@ def native_ok(row, *, dw_blocks=2, s2_direct=None):
         or vout + cpo * out_nb > SPAN
         or vres + cpo * nb > SPAN
         or bias + cpo + nj > scr
-        or scr + (k * 16 if pw else cpi * kk) > SPAN
+        or scr + ((pw_group * (k + no) if pw_group > 1 else k) * 16 if pw else cpi * kk) > SPAN
     )
     if pw:
         bad = bad or k != (cpi + 15) >> 4

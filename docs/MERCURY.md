@@ -527,14 +527,57 @@ was reverted, and their reports are not kept as evidence.
   HMX). But the barrier after the post got slower (1.32 → 1.74 ms). Its
   cause is open.
 
+## Grouped 1x1
+
+The 1x1 profile showed a wait of about 0.65 µs per HMX tile after the post
+loop (about 1.3 ms per crop), which the [fast depthwise](#fast-depthwise)
+round could not explain. `--pw-group N` (`RS_PW_GROUP`, with `--pw-fast`)
+runs a 1x1 op over groups of N column blocks. Each group:
+
+1. gathers every block's B tile;
+2. takes one barrier;
+3. runs every HMX tile of the group into its own output buffer;
+4. then posts them all.
+
+Each tile gets the same HMX loads and the same `rs_pw_post` as before, so
+outputs are bit-identical. The 1x1 scratch grows to N × (nk + no) × 16
+vectors (at most 2,384 for N = 8). The native check and its Python mirror
+(`native_ok(pw_group=)`) bound it, and the planner sizes it
+(`build_plan(pw_group=)`, read from `link.json` by the harness). Plans and
+descriptor tables are unchanged.
+
+**What the wait was.** With the posts moved out of the way, the profile's
+HMX phase alone takes 1.48 ms. Before, HMX plus its barrier plus the
+post-loop wait came to about 1.6 ms. So the wait was HMX still working:
+`hmx_store` returns before the tile is written, and the next barrier or the
+post's loads pay for it. At about 0.21 µs per 32×32 HMX load (6,900 loads
+per crop) this is the HMX cost on this thread, and issuing it stalls the
+thread. Grouping removes the per-tile post → HMX transitions, not the HMX
+work. A flag-free post (an instrument) changed nothing, which also rules out
+the flags update.
+
+Device (held power, 16 cases × 5 rounds, after a pilot through `Conv_18`):
+
+| | Fast depthwise (`89511c18`) | Group 4 (`36083a22`) | **Group 8** (`a2377f9c`) |
+|---|---:|---:|---:|
+| 1x1, 29 ops | 3.55 ms | | 3.18 ms |
+| **DSP request body, median** | 5.30 ms | 5.06 ms | **4.92 ms** |
+| Final tensor vs fast depthwise | | 16/16 identical | **16/16 identical** |
+
+Group 8 is the qualified image ([full run](../evidence/mercury-pw-group-device.json),
+[pilot](../evidence/mercury-pw-group-pilot.json)). The group-4 run was a
+step on the way, and its report isn't kept. Bounds (worst 0.394), keypoint
+drift, the 969 restoration audits and the arena hash are unchanged.
+
 ## Next steps
 
-- **Remaining DSP time** (5.30 ms per crop): 1x1 3.55 ms (parameter copy
-  ~0.72, post ~0.9, the unexplained post-loop wait ~1.3, HMX ~0.23, gather
-  ~0.21), depthwise 0.98, stride 2 0.59, activation load/store 0.17.
-- **Batch of 4.** It needs about 5.0 ms per crop or less (20 ms budget), and
-  either fewer descriptors per crop (55 now, cap 160) or a request that
-  replays one crop's descriptors with per-crop address offsets.
+- **Remaining DSP time** (4.92 ms per crop): 1x1 3.18 ms, of which HMX
+  itself is about 1.45 and parameter copies about 0.72; depthwise 0.98;
+  stride 2 0.59; activation load/store 0.17. Hiding the posts and gathers
+  behind HMX would need a second hardware thread for the HVX work.
+- **Batch of 4.** 4 × 4.92 ms fits the 20 ms budget with little margin.
+  It still needs either fewer descriptors per crop (55 now, cap 160) or a
+  request that replays one crop's descriptors with per-crop address offsets.
 - **Host overhead** is now about 1.8 ms per crop at batch 2 with held power.
   The remaining pieces are the dispatch wake and completion poll (about 0.9 ms
   per request), the staging in NumPy (about 0.55 ms per crop) and the gate
@@ -580,4 +623,5 @@ sudo python tests/hardware_mercury.py --run-on-device --jobs /tmp/mercury/jobs \
 # fast 1x1 post: add --pw-fast (timing breakdown: also --pw-profile, 1 case x 3 rounds)
 # host time: --held-power [--batch 2]; compare per-crop wall over alternating short runs
 # fast depthwise: add --dw-fast to the build
+# grouped 1x1: add --pw-group 8 to the build
 ~~~

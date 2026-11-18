@@ -339,15 +339,28 @@ def controls(runner, merged, case, expect):
     }
 
 
-def run(runner, model, cases, manifest, rounds, stop_after, prefix=False, dump=None, batch=1):
+def run(
+    runner,
+    model,
+    cases,
+    manifest,
+    rounds,
+    stop_after,
+    prefix=False,
+    dump=None,
+    batch=1,
+    pw_group=1,
+):
     """Phase A qualifies every case; phase B then runs the merged frames. With
     batch > 1, case i's frames put cases i, i+1, ... (cyclic) into the crops of one
     request, and every crop's final must equal its own case's qualify result."""
     import numpy as np
     from framenpu import mercury
 
-    segments = ML.qualify_segments(model, stop_after, prefix)
-    merged = ML.build_plan(model, "merged", stop_after, prefix=prefix, batch=batch)
+    segments = ML.qualify_segments(model, stop_after, prefix, pw_group=pw_group)
+    merged = ML.build_plan(
+        model, "merged", stop_after, prefix=prefix, batch=batch, pw_group=pw_group
+    )
     full = merged.final == ML.OUTPUT
     contract = "full" if prefix else ""  # FP16 contract with / without the FP32 host prefix
     entries = manifest["cases"]
@@ -510,6 +523,7 @@ def main():
         p.error("--jobs must be a --stride2 --s2-even linked build without heads/stem")
     s2_direct = bool(link_record.get("s2_direct"))
     profile = bool(link_record.get("pw_profile"))
+    pw_group = int(link_record.get("pw_group", 1))  # the build's 1x1 scratch layout
     model = mercury.load_keypoint(args.model)
     manifest = json.loads((args.cases / "manifest.json").read_text())
     if manifest["model_sha256"] != model.sha256 or manifest["host_prefix"] != ML.HOST_PREFIX:
@@ -518,11 +532,20 @@ def main():
         manifest["cases"] = manifest["cases"][: args.max_cases]
     # validate first, against the checks of the build actually loaded
     for mp in [
-        ML.build_plan(model, "merged", args.stop_after, prefix=args.prefix, batch=args.batch)
-    ] + list(ML.qualify_segments(model, args.stop_after, args.prefix)):
+        ML.build_plan(
+            model,
+            "merged",
+            args.stop_after,
+            prefix=args.prefix,
+            batch=args.batch,
+            pw_group=pw_group,
+        )
+    ] + list(ML.qualify_segments(model, args.stop_after, args.prefix, pw_group=pw_group)):
         for n in range(len(mp.plan.table) // 128):
             row = struct.unpack_from("<32I", mp.plan.table, 128 * n)
-            if not RL.native_ok(row, s2_direct=ML.S2_PHASE if s2_direct else None):
+            if not RL.native_ok(
+                row, s2_direct=ML.S2_PHASE if s2_direct else None, pw_group=pw_group
+            ):
                 p.error(f"plan descriptor {n} would be rejected by this build")
     if args.prefix and "image" not in load_case(args.cases, manifest["cases"][0]):
         p.error("cases lack the FP16 image; regenerate with tools/mercury_device_cases.py")
@@ -537,6 +560,7 @@ def main():
         "pw_fast": bool(link_record.get("pw_fast")),
         "held_power": args.held_power,
         "batch": args.batch,
+        "pw_group": pw_group,
         "stop_after": args.stop_after,
         "builds": {"loader": link_record["loader"], "linked": link_record["linked"]},
         "model_sha256": model.sha256,
@@ -582,6 +606,7 @@ def main():
                                 args.prefix,
                                 args.dump,
                                 args.batch,
+                                pw_group,
                             )
                         except RecoveryRequired:
                             unsafe = True
@@ -599,7 +624,12 @@ def main():
                                     report["retire_wrapper_ms"] = runner.admin(8)
                                     retired = True
                         merged = ML.build_plan(
-                            model, "merged", args.stop_after, prefix=args.prefix, batch=args.batch
+                            model,
+                            "merged",
+                            args.stop_after,
+                            prefix=args.prefix,
+                            batch=args.batch,
+                            pw_group=pw_group,
                         )
                         runner.install(merged)
                         runner.request(merged, merged.plan.jobs[0], refused=True)

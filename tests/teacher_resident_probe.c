@@ -94,6 +94,11 @@ void fnpu_hmx_store(fnpu_u16 *, const void *);
 #define RS_ACC(i) LV(24 + (i)) /* 2 accumulators, qf16 zero at 4 */
 #define RS_DESC LV(32)
 #define FR(i) ((volatile HVX_Vector *)(0x31002000u + 128u * (i)))
+#ifdef RS_PW_GROUP
+#define RS_PW_SCR(k, no) (RS_PW_GROUP * ((k) + (no)) * 16) /* B tiles + output tiles */
+#else
+#define RS_PW_SCR(k, no) ((k) * 16)
+#endif
 
 typedef long rs_uv __attribute__((__vector_size__(128), __aligned__(4)));
 
@@ -188,7 +193,7 @@ static __attribute__((noinline)) fnpu_u32 rs_get(fnpu_u32 tab, fnpu_u32 i, rs_op
     d->scr = d->vpar + d->npar;
     bad |= (cpi == 0) | (nj == 0) | (d->vin == 0) | (d->vout == 0) | (d->clip > 1) |
            (d->blk0 + nj > nb) | (d->vin + cpi * nb > SPAN) | (d->vout + cpo * out_nb > SPAN) |
-           (d->vres + cpo * nb > SPAN) | (d->bias + cpo + nj > d->scr) | (d->scr + (pw ? k * 16 : cpi * kk) > SPAN);
+           (d->vres + cpo * nb > SPAN) | (d->bias + cpo + nj > d->scr) | (d->scr + (pw ? RS_PW_SCR(k, no) : cpi * kk) > SPAN);
     bad |= pw ? (k != (cpi + 15) >> 4)
               : (cpi != cpo) | ((k != 3) & (k != 5)) | (nj & (RS_DW_BLOCKS - 1)) | (32 * d->blk0 < reach) |
                     (32 * (d->blk0 + nj) + reach > 32 * nb);
@@ -237,7 +242,14 @@ static __attribute__((noinline)) void rs_post(const rs_op *d, HVX_Vector v, fnpu
  * read-modify-write per vector (a per-op update would spill the vector).
  * Measured with RS_PW_PROFILE: the per-vector update left about 2.7 us of
  * stores to drain per tile, paid by the next barrier or HMX op. */
+#ifdef RS_PW_GROUP
+static __attribute__((noinline)) void rs_pw_post(const rs_op *d, fnpu_u32 o, fnpu_u32 j,
+                                                 const volatile HVX_Vector *tile) {
+#define RS_TILE(rr) tile[rr]
+#else
 static __attribute__((noinline)) void rs_pw_post(const rs_op *d, fnpu_u32 o, fnpu_u32 j) {
+#define RS_TILE(rr) LV(0)[rr]
+#endif
     fnpu_u32 n = d->cpo - 16 * o, nb = d->nbin, at = 16 * o * nb + d->blk0 + j;
     if (n > 16) n = 16;
     const volatile HVX_Vector *bias = P(bias) + 16 * o, *res = d->vres ? P(vres) + at : 0;
@@ -246,7 +258,7 @@ static __attribute__((noinline)) void rs_pw_post(const rs_op *d, fnpu_u32 o, fnp
     fnpu_u32 clip = d->clip;
 #pragma clang loop unroll(disable)
     for (fnpu_u32 rr = 0; rr < n; rr++) {
-        HVX_Vector v = LV(0)[rr];
+        HVX_Vector v = RS_TILE(rr);
         fl = Q6_V_vor_VV(fl, Q6_V_vand_QR(Q6_Q_vcmp_eq_VhVh(Q6_V_vand_VV(v, exp), exp), -1));
         v = Q6_Vhf_equals_Vqf16(Q6_Vqf16_vadd_VhfVhf(v, bias[rr]));
         if (clip) v = Q6_Vhf_vmin_VhfVhf(Q6_Vhf_vmax_VhfVhf(v, Q6_V_vzero()), Q6_V_vsplat_R(0x46004600u));
@@ -256,7 +268,69 @@ static __attribute__((noinline)) void rs_pw_post(const rs_op *d, fnpu_u32 o, fnp
     }
     RS_FLAGS[0] = Q6_V_vor_VV(RS_FLAGS[0], fl);
 }
+#undef RS_TILE
 #endif
+#ifdef RS_PW_GROUP
+#ifndef RS_PW_FAST
+#error "RS_PW_GROUP builds on RS_PW_FAST"
+#endif
+/* 1x1 over groups of RS_PW_GROUP column blocks: gather every block's B tile,
+ * one barrier, every HMX tile of the group into its own output buffer, then
+ * every post. Per tile the same HMX loads and the same rs_pw_post as rs_pw
+ * below, so outputs are bit-identical. The group pays one post -> barrier/HMX
+ * transition instead of one per tile (that wait is fixed per transition, about
+ * 0.65 us), and a tile's post no longer waits for its own HMX writes to land.
+ * Scratch: RS_PW_GROUP * (nk + no) * 16 vectors (B tiles, then output tiles;
+ * each 2 KiB aligned since scr is). */
+static __attribute__((noinline)) void rs_pw(const rs_op *d) {
+    const fnpu_u32 nk = d->nk, no = (d->cpo + 15) >> 4, nj = d->nj;
+    volatile HVX_Vector *bt = P(scr), *ot = bt + RS_PW_GROUP * nk * 16;
+#pragma clang loop unroll(disable)
+    for (fnpu_u32 j0 = 0; j0 < nj; j0 += RS_PW_GROUP) {
+        const fnpu_u32 g = nj - j0 < RS_PW_GROUP ? nj - j0 : RS_PW_GROUP;
+#ifdef RS_PW_PROFILE
+        {   /* instrument: drain the previous group's post stores separately */
+            RS_PT(tq);
+            __asm__ volatile("barrier" ::: "memory");
+            RS_PADD(6, tq);
+        }
+#endif
+        RS_PT(tg);
+#pragma clang loop unroll(disable)
+        for (fnpu_u32 jj = 0; jj < g; jj++) {
+            const volatile HVX_Vector *src = P(vin) + d->blk0 + j0 + jj;
+            volatile HVX_Vector *b = bt + jj * nk * 16;
+#pragma clang loop unroll(disable)
+            for (fnpu_u32 p = 0; p < nk * 16; p++) b[p] = p < d->cpi ? src[p * d->nbin] : LV(57)[0]; /* zero */
+        }
+        RS_PADD(2, tg);
+        RS_PT(tb);
+        __asm__ volatile("barrier" ::: "memory");
+        RS_PADD(5, tb);
+        RS_PT(th);
+#pragma clang loop unroll(disable)
+        for (fnpu_u32 jj = 0; jj < g; jj++) {
+#pragma clang loop unroll(disable)
+            for (fnpu_u32 o = 0; o < no; o++) {
+                fnpu_hmx_clear();
+#pragma clang loop unroll(disable)
+                for (fnpu_u32 t = 0; t < nk; t++)
+                    fnpu_hmx_load((const fnpu_u16 *)FR(d->vpar + (o * nk + t) * 16),
+                                  (const fnpu_u16 *)(bt + jj * nk * 16 + 16 * t));
+                fnpu_hmx_store((fnpu_u16 *)(ot + (jj * no + o) * 16), (const void *)RS_SCALE);
+            }
+        }
+        RS_PADD(3, th);
+        RS_PT(tp);
+#pragma clang loop unroll(disable)
+        for (fnpu_u32 jj = 0; jj < g; jj++) {
+#pragma clang loop unroll(disable)
+            for (fnpu_u32 o = 0; o < no; o++) rs_pw_post(d, o, j0 + jj, ot + (jj * no + o) * 16);
+        }
+        RS_PADD(4, tp);
+    }
+}
+#else
 static __attribute__((noinline)) void rs_pw(const rs_op *d) {
     volatile HVX_Vector *bt = P(scr);
     fnpu_u32 nk = d->nk;
@@ -311,6 +385,7 @@ static __attribute__((noinline)) void rs_pw(const rs_op *d) {
         }
     }
 }
+#endif
 
 #ifdef RS_DW_FAST
 #if RS_DW_BLOCKS != 2 || defined(RS_STEM)

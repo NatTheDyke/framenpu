@@ -11,6 +11,8 @@ in tl_rs only; --dw-blocks 4 restores four-block coefficient sharing there.
 --s2-even (Mercury, with --stride2 only) keeps the even stride-2 phase.
 --dw-fast (stride2, 2 dw blocks) unrolls the 3x3 depthwise taps, inlines the
 post and holds the overflow flags in a register per op (same arithmetic).
+--pw-group N (with --pw-fast) runs the 1x1 HMX tiles of N column blocks
+before their posts; 1x1 scratch grows to N * (nk + no) * 16 vectors.
 --pw-fast (stride2 only) posts each 1x1 HMX tile with hoisted fields and
 register-held overflow flags (same arithmetic).
 --pw-profile adds 1x1 phase tick totals in meta words 3..11 (timing only).
@@ -106,10 +108,13 @@ def build(
     s2_direct=False,
     pw_profile=False,
     pw_fast=False,
+    pw_group=1,
     dw_fast=False,
 ):
     if dw_fast and (not stride2 or heads or stem or dw_blocks != 2):
         raise ValueError("the fast depthwise is the stride2, 2-block build")
+    if pw_group != 1 and (not pw_fast or pw_group not in (2, 4, 8)):
+        raise ValueError("--pw-group is 2, 4 or 8, on a --pw-fast build")
     if pw_fast and (not stride2 or heads or stem):
         raise ValueError("the fast 1x1 post is stride2-only")
     if pw_profile and (not stride2 or heads or stem):
@@ -208,6 +213,7 @@ def build(
             *(["-DRS_S2_DIRECT"] if s2_direct else []),
             *(["-DRS_PW_PROFILE"] if pw_profile else []),
             *(["-DRS_PW_FAST"] if pw_fast else []),
+            *([f"-DRS_PW_GROUP={pw_group}"] if pw_group > 1 else []),
             *(["-DRS_DW_FAST"] if dw_fast else []),
         ),
         compile_(folder, 2, TESTS / "teacher_dw_probe.c", "-Dframe_job=tl_dw"),
@@ -235,6 +241,7 @@ def build(
         "s2_direct": s2_direct,
         "pw_profile": pw_profile,
         "pw_fast": pw_fast,
+        "pw_group": pw_group,
         "dw_fast": dw_fast,
         "loader": {"bytes": len(loader.code), "sha256": _sha(loader.code), "name": LOADER_NAME},
         "linked": {"bytes": len(image), "sha256": _sha(image)},
@@ -266,6 +273,7 @@ def main():
     p.add_argument("--s2-direct", action="store_true", help="direct stride-2 depthwise")
     p.add_argument("--pw-profile", action="store_true", help="timing instrument: 1x1 phase ticks")
     p.add_argument("--pw-fast", action="store_true", help="1x1 post with register-held flags")
+    p.add_argument("--pw-group", type=int, default=1, help="1x1 column blocks per HMX group")
     p.add_argument("--dw-fast", action="store_true", help="unrolled depthwise, inlined post")
     args = p.parse_args()
     r = build(
@@ -281,6 +289,7 @@ def main():
         s2_direct=args.s2_direct,
         pw_profile=args.pw_profile,
         pw_fast=args.pw_fast,
+        pw_group=args.pw_group,
         dw_fast=args.dw_fast,
     )
     print(
