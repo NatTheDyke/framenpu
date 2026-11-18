@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- The tracker fork now [defaults to cores 5–6](docs/MERCURY_LIVE.md#heat-and-cpu-placement).
+  A follow-up session showed the frequency cap adds little on those cores
+  (about 0.2 W saved, 2–3 ms slower), and a 5-minute run stayed steady.
+  Compositor frame timing under the new placement is not measured yet.
+
 - Traced live thermal peaks to [shared CPU cores](docs/MERCURY_LIVE.md#heat-and-cpu-placement):
   Valve's XRService, vrserver and compositor run on the same cores 0–4 as the
   tracker and keep that cluster at 3.15 GHz. The tracker gained an opt-in

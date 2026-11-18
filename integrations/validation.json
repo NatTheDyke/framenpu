@@ -2,7 +2,7 @@
   "format": "framenpu-tracker-integration-validation",
   "upstream": "https://github.com/spyjacob/steam-frame-hand-tracking",
   "base_commit": "8852ec9bdd4f81fb5a359e5bf88ed25f0e6fc89e",
-  "patch_sha256": "53550b41e69f06ba9867eeedce2a9d08994ba3f02cc6d8b4ce283eed07a59c81",
+  "patch_sha256": "e28f90536cabd8cd49818e8250f9dec84d9ff10b86078f07507b248005ef543c",
   "cpu_default": true,
   "accelerator_failure_latched_to_cpu": true,
   "request_crop_counts": [
@@ -23,7 +23,7 @@
   "sustained_thermal_and_pc_rendering_validated": false,
   "live_evidence": "evidence/mercury-live-validation.json",
   "live_evidence_sha256": "cc43b9e5482304b3908d48f0a6b3e7e538b72439df08304ee1480654c98ed390",
-  "tracker_commit": "b62bb5dbf4f0934ca4676dd4fe763aecba36cef9",
+  "tracker_commit": "17c8fa9be1dff61efdcf540d061b5b7472687b80",
   "tracker_fork": "https://github.com/NatTheDyke/steam-frame-hand-tracking",
   "tracker_branch": "framenpu-inference",
   "capture_submitted_at_most_once": true,
@@ -32,5 +32,7 @@
   "fresh_live_evidence": "evidence/mercury-fresh-live.json",
   "fresh_live_evidence_sha256": "fe139aca2c03b17888c2fcad2fe504af7e255e87eb35925a053d1c31df1dbe74",
   "thermal_placement_evidence": "evidence/mercury-thermal-placement.json",
-  "thermal_placement_evidence_sha256": "e72c8c4aa4d2ce81262780e8cffc5e9a83522d71c5d200a0b49f948b1f618fa1"
+  "thermal_placement_evidence_sha256": "e72c8c4aa4d2ce81262780e8cffc5e9a83522d71c5d200a0b49f948b1f618fa1",
+  "thermal_session_evidence": "evidence/mercury-thermal-session.json",
+  "thermal_session_evidence_sha256": "3e496dcb67ca993b2f7db92a8df25fd4edc82edb08910644985b3c167bd25545"
 }

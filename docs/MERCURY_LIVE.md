@@ -163,7 +163,22 @@ cap cut energy per cycle by a third (0.27 vs 0.40 W/GHz).
 Total CPU power is about the same; the heat is spread over two clusters and
 the tracker no longer competes with Valve's processes. Placement and the cap
 changed together, runs were short, and compositor frame timing was not
-measured, so this is not yet the default.
+measured.
+
+A [follow-up session](../evidence/mercury-thermal-session.json) separated the
+two. On cores 5–6 the cap only saved about 0.2 W (1.75 → 1.54 W) and added
+2–3 ms to the capture-to-collect median, so placement is the fix and the cap
+stays opt-in. A 5-minute run on cores 5–6 held 38 accepted crops/s and a
+56 ms median every minute, with the tracker's cores near 75–82 °C; the
+heatsink was still warming (52 → 56 °C). The run was cut about 5 s early by
+the comparison harness, which stops on any single 1 Hz sample of 92 °C:
+cores 0–4 spiked together while cores 5–6 stayed near 75 °C. The tracker's own
+thermal policy and watchdog (≥ 93 °C for 3 s) would not have stopped.
+
+The tracker's `headset/start.sh` now defaults to `HANDTRACK_CPUS=5-6`. The
+compositor's real-time render thread is allowed on cores 4–6 (head tracking
+is pinned to 2–3), so its frame timing under the new placement is still to be
+measured; `HANDTRACK_CPUS=0-4` restores the old placement.
 
 ## Reproduce
 

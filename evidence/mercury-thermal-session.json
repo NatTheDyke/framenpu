@@ -1,0 +1,658 @@
+{
+ "format": "framenpu-mercury-thermal-session",
+ "date": "2026-11-18",
+ "scope": "Frame, headset worn, live cameras, FrameNPU Mercury --merc-fresh --flow-v2, HANDTRACK_CPUS 5-6",
+ "tracker_commit": "b62bb5dbf4f0934ca4676dd4fe763aecba36cef9",
+ "clamp_ccbbc": {
+  "C": "no clamp",
+  "B": "--uclamp-max 512",
+  "runs": [
+   {
+    "name": "0-C",
+    "handtrack_cpus": "5-6",
+    "uclamp_max": null,
+    "seconds": 45,
+    "temperature_c": {
+     "start": 62.7,
+     "end": 73.8,
+     "max": 76.1
+    },
+    "physical": {
+     "samples": 75,
+     "hottest_c": {
+      "median": 71.0,
+      "p95": 75.82,
+      "max": 76.1
+     },
+     "hottest_zone_mode": "cpu5-bottom-thermal",
+     "zone_max_c": {
+      "cpu0-thermal": 61.6,
+      "cpu1-thermal": 63.6,
+      "cpu2-bottom-thermal": 72.6,
+      "cpu2-top-thermal": 69.8,
+      "cpu3-bottom-thermal": 75.3,
+      "cpu3-top-thermal": 72.2,
+      "cpu4-bottom-thermal": 67.8,
+      "cpu4-top-thermal": 64.7,
+      "cpu5-bottom-thermal": 76.1,
+      "cpu5-top-thermal": 76.1,
+      "cpu6-bottom-thermal": 76.1,
+      "cpu6-top-thermal": 73.8,
+      "cpu7-bottom-thermal": 63.6,
+      "cpu7-middle-thermal": 66.3,
+      "cpu7-top-thermal": 65.9,
+      "cpuss0-thermal": 65.5,
+      "cpuss1-thermal": 64.7,
+      "cpuss2-thermal": 64.7,
+      "cpuss3-thermal": 67.8,
+      "gpuss-0-thermal": 57.7,
+      "gpuss-1-thermal": 56.1,
+      "gpuss-2-thermal": 58.5,
+      "gpuss-3-thermal": 56.9,
+      "gpuss-4-thermal": 60.1,
+      "nsphmx0-thermal": 58.1,
+      "nsphmx1-thermal": 54.6,
+      "nsphmx2-thermal": 52.6,
+      "nsphmx3-thermal": 52.6,
+      "nsphvx0-thermal": 58.9,
+      "nsphvx1-thermal": 58.5
+     },
+     "rail_mean": {
+      "apc0": 0.7278055866666668,
+      "apc1": 1.75427264,
+      "apc2": 0.8783899466666666,
+      "bob": 0.4740865866666667,
+      "fan_rpm": 7010.1466666666665,
+      "gfx": 1.3912832000000002,
+      "nsp1": 0.21301018666666666,
+      "nsp2": 0.08018429333333335,
+      "s1c": 0.4845513466666666,
+      "s3c": 0.2606916933333334,
+      "s6c": 0.9097714933333333,
+      "vph": 13.590501653333334
+     }
+    },
+    "summary": {
+     "observations": 1691,
+     "accepted_per_s": 40.441799999243585,
+     "fast_frames_per_s": 59.0172379735797,
+     "capture_to_collect_ms": {
+      "median": 53.066106,
+      "p95": 66.6918
+     },
+     "request_stage_ms": {
+      "frame_age_at_submit": {
+       "median": 22.2406295,
+       "p95": 30.78874875
+      },
+      "submit_to_worker_start": {
+       "median": 1.130992,
+       "p95": 2.831191
+      },
+      "worker_wall": {
+       "median": 25.720533000000003,
+       "p95": 30.70193975
+      },
+      "completion_to_collect": {
+       "median": 2.3697945000000002,
+       "p95": 7.59063625
+      },
+      "capture_to_read": {
+       "median": 13.9269035,
+       "p95": 20.64885725
+      },
+      "read_to_flow_done": {
+       "median": 5.0514835,
+       "p95": 6.7744555
+      },
+      "flow_done_to_submit": {
+       "median": 0.1425235,
+       "p95": 11.5071295
+      },
+      "submit_paths": {
+       "frame": 925,
+       "late": 1
+      },
+      "repeated_capture_requests": 0,
+      "frame_age_at_submit_frame": {
+       "median": 22.252749,
+       "p95": 30.791993999999995
+      },
+      "frame_age_at_submit_late": {
+       "median": 21.180058,
+       "p95": 21.180058
+      }
+     },
+     "backend_observations": {
+      "framenpu": 1691
+     }
+    },
+    "core_busy_pct": {
+     "cpu0": 36.3,
+     "cpu1": 27.5,
+     "cpu2": 33.8,
+     "cpu3": 35.0,
+     "cpu4": 24.7,
+     "cpu5": 62.8,
+     "cpu6": 62.9,
+     "cpu7": 11.6
+    },
+    "cluster_mean_mhz": {
+     "policy0": 2266,
+     "policy2": 3074,
+     "policy5": 2933,
+     "policy7": 1114
+    },
+    "valve_runqueue_wait_ms_per_s": {
+     "XRServiceLoopTh": 67.55,
+     "gamescope-wl": 9.13,
+     "vrcompositor": 4.12,
+     "vrserver": 8.27
+    }
+   },
+   {
+    "name": "1-B",
+    "handtrack_cpus": "5-6",
+    "uclamp_max": 512,
+    "seconds": 45,
+    "temperature_c": {
+     "start": 66.3,
+     "end": 70.2,
+     "max": 81.7
+    },
+    "physical": {
+     "samples": 75,
+     "hottest_c": {
+      "median": 73.4,
+      "p95": 78.62,
+      "max": 81.7
+     },
+     "hottest_zone_mode": "cpu5-bottom-thermal",
+     "zone_max_c": {
+      "cpu0-thermal": 65.1,
+      "cpu1-thermal": 67.4,
+      "cpu2-bottom-thermal": 76.1,
+      "cpu2-top-thermal": 74.6,
+      "cpu3-bottom-thermal": 81.7,
+      "cpu3-top-thermal": 79.3,
+      "cpu4-bottom-thermal": 73.0,
+      "cpu4-top-thermal": 71.8,
+      "cpu5-bottom-thermal": 81.7,
+      "cpu5-top-thermal": 78.9,
+      "cpu6-bottom-thermal": 80.1,
+      "cpu6-top-thermal": 75.7,
+      "cpu7-bottom-thermal": 71.7,
+      "cpu7-middle-thermal": 78.3,
+      "cpu7-top-thermal": 73.6,
+      "cpuss0-thermal": 69.0,
+      "cpuss1-thermal": 68.2,
+      "cpuss2-thermal": 68.2,
+      "cpuss3-thermal": 71.0,
+      "gpuss-0-thermal": 62.8,
+      "gpuss-1-thermal": 60.5,
+      "gpuss-2-thermal": 62.4,
+      "gpuss-3-thermal": 61.3,
+      "gpuss-4-thermal": 64.4,
+      "nsphmx0-thermal": 62.0,
+      "nsphmx1-thermal": 58.1,
+      "nsphmx2-thermal": 55.8,
+      "nsphmx3-thermal": 56.1,
+      "nsphvx0-thermal": 62.8,
+      "nsphvx1-thermal": 62.8
+     },
+     "rail_mean": {
+      "apc0": 0.7600097066666666,
+      "apc1": 1.5422585066666668,
+      "apc2": 0.93023572,
+      "bob": 0.47552355999999996,
+      "fan_rpm": 7664.133333333333,
+      "gfx": 1.4876838933333332,
+      "nsp1": 0.21126547999999998,
+      "nsp2": 0.09099465333333333,
+      "s1c": 0.48692402666666673,
+      "s3c": 0.26376625333333326,
+      "s6c": 0.9151407333333335,
+      "vph": 13.7731852
+     }
+    },
+    "summary": {
+     "observations": 1580,
+     "accepted_per_s": 36.291421796984736,
+     "fast_frames_per_s": 57.26898175063365,
+     "capture_to_collect_ms": {
+      "median": 56.1907085,
+      "p95": 73.24553094999997
+     },
+     "request_stage_ms": {
+      "frame_age_at_submit": {
+       "median": 23.661483,
+       "p95": 33.9405302
+      },
+      "submit_to_worker_start": {
+       "median": 1.235703,
+       "p95": 4.259953199999999
+      },
+      "worker_wall": {
+       "median": 27.431824,
+       "p95": 34.6533606
+      },
+      "completion_to_collect": {
+       "median": 2.405314,
+       "p95": 7.979667
+      },
+      "capture_to_read": {
+       "median": 14.660398,
+       "p95": 22.050605999999995
+      },
+      "read_to_flow_done": {
+       "median": 5.271505,
+       "p95": 7.5734254
+      },
+      "flow_done_to_submit": {
+       "median": 0.166403,
+       "p95": 13.640028199999998
+      },
+      "submit_paths": {
+       "frame": 871,
+       "late": 2
+      },
+      "repeated_capture_requests": 0,
+      "frame_age_at_submit_frame": {
+       "median": 23.682529,
+       "p95": 33.953635000000006
+      },
+      "frame_age_at_submit_late": {
+       "median": 20.729733500000002,
+       "p95": 21.13176665
+      }
+     },
+     "backend_observations": {
+      "framenpu": 1580
+     }
+    },
+    "core_busy_pct": {
+     "cpu0": 37.1,
+     "cpu1": 28.9,
+     "cpu2": 34.2,
+     "cpu3": 35.5,
+     "cpu4": 25.7,
+     "cpu5": 66.0,
+     "cpu6": 69.0,
+     "cpu7": 8.7
+    },
+    "cluster_mean_mhz": {
+     "policy0": 2266,
+     "policy2": 3034,
+     "policy5": 2683,
+     "policy7": 1159
+    },
+    "valve_runqueue_wait_ms_per_s": {
+     "XRServiceLoopTh": 84.84,
+     "gamescope-wl": 8.93,
+     "vrcompositor": 5.81,
+     "vrserver": 9.65
+    }
+   },
+   {
+    "name": "2-B",
+    "handtrack_cpus": "5-6",
+    "uclamp_max": 512,
+    "seconds": 45,
+    "temperature_c": {
+     "start": 71.7,
+     "end": 71.4,
+     "max": 85.7
+    },
+    "physical": {
+     "samples": 75,
+     "hottest_c": {
+      "median": 74.6,
+      "p95": 80.22,
+      "max": 82.2
+     },
+     "hottest_zone_mode": "cpu5-bottom-thermal",
+     "zone_max_c": {
+      "cpu0-thermal": 67.8,
+      "cpu1-thermal": 68.2,
+      "cpu2-bottom-thermal": 76.5,
+      "cpu2-top-thermal": 75.3,
+      "cpu3-bottom-thermal": 78.9,
+      "cpu3-top-thermal": 76.1,
+      "cpu4-bottom-thermal": 72.2,
+      "cpu4-top-thermal": 69.0,
+      "cpu5-bottom-thermal": 81.7,
+      "cpu5-top-thermal": 80.1,
+      "cpu6-bottom-thermal": 80.1,
+      "cpu6-top-thermal": 77.7,
+      "cpu7-bottom-thermal": 74.0,
+      "cpu7-middle-thermal": 82.2,
+      "cpu7-top-thermal": 77.5,
+      "cpuss0-thermal": 70.2,
+      "cpuss1-thermal": 69.8,
+      "cpuss2-thermal": 69.4,
+      "cpuss3-thermal": 71.8,
+      "gpuss-0-thermal": 64.0,
+      "gpuss-1-thermal": 62.0,
+      "gpuss-2-thermal": 64.0,
+      "gpuss-3-thermal": 62.8,
+      "gpuss-4-thermal": 65.6,
+      "nsphmx0-thermal": 63.6,
+      "nsphmx1-thermal": 60.1,
+      "nsphmx2-thermal": 57.3,
+      "nsphmx3-thermal": 57.7,
+      "nsphvx0-thermal": 64.0,
+      "nsphvx1-thermal": 64.8
+     },
+     "rail_mean": {
+      "apc0": 0.7557593066666667,
+      "apc1": 1.5284962133333333,
+      "apc2": 0.9650441466666666,
+      "bob": 0.4760674933333333,
+      "fan_rpm": 8342.226666666667,
+      "gfx": 1.507901546666667,
+      "nsp1": 0.201002,
+      "nsp2": 0.09721014666666666,
+      "s1c": 0.4851550666666665,
+      "s3c": 0.26493602666666666,
+      "s6c": 0.9251575866666665,
+      "vph": 13.927307306666668
+     }
+    },
+    "summary": {
+     "observations": 1406,
+     "accepted_per_s": 33.709154529469416,
+     "fast_frames_per_s": 58.84488247340904,
+     "capture_to_collect_ms": {
+      "median": 54.095791500000004,
+      "p95": 72.287682
+     },
+     "request_stage_ms": {
+      "frame_age_at_submit": {
+       "median": 20.540860000000002,
+       "p95": 32.65656559999999
+      },
+      "submit_to_worker_start": {
+       "median": 1.1510955,
+       "p95": 3.076971799999996
+      },
+      "worker_wall": {
+       "median": 26.1020585,
+       "p95": 33.20176955
+      },
+      "completion_to_collect": {
+       "median": 2.2831035,
+       "p95": 7.262923949999999
+      },
+      "capture_to_read": {
+       "median": 13.49998,
+       "p95": 20.1032138
+      },
+      "read_to_flow_done": {
+       "median": 5.149032999999999,
+       "p95": 7.1934957
+      },
+      "flow_done_to_submit": {
+       "median": 0.13603900000000002,
+       "p95": 13.243889999999999
+      },
+      "submit_paths": {
+       "frame": 901,
+       "late": 1
+      },
+      "repeated_capture_requests": 0,
+      "frame_age_at_submit_frame": {
+       "median": 20.540736,
+       "p95": 32.658848
+      },
+      "frame_age_at_submit_late": {
+       "median": 26.026799,
+       "p95": 26.026799
+      }
+     },
+     "backend_observations": {
+      "framenpu": 1406
+     }
+    },
+    "core_busy_pct": {
+     "cpu0": 36.1,
+     "cpu1": 28.9,
+     "cpu2": 34.6,
+     "cpu3": 36.0,
+     "cpu4": 25.1,
+     "cpu5": 63.4,
+     "cpu6": 65.6,
+     "cpu7": 8.4
+    },
+    "cluster_mean_mhz": {
+     "policy0": 2266,
+     "policy2": 3053,
+     "policy5": 2702,
+     "policy7": 1246
+    },
+    "valve_runqueue_wait_ms_per_s": {
+     "XRServiceLoopTh": 104.37,
+     "gamescope-wl": 9.77,
+     "vrcompositor": 5.89,
+     "vrserver": 11.26
+    }
+   },
+   {
+    "name": "3-C",
+    "handtrack_cpus": "5-6",
+    "uclamp_max": null,
+    "seconds": 45,
+    "temperature_c": {
+     "start": 74.6,
+     "end": 74.9,
+     "max": 86.8
+    },
+    "physical": {
+     "samples": 75,
+     "hottest_c": {
+      "median": 78.1,
+      "p95": 84.92,
+      "max": 86.8
+     },
+     "hottest_zone_mode": "cpu5-bottom-thermal",
+     "zone_max_c": {
+      "cpu0-thermal": 71.3,
+      "cpu1-thermal": 73.6,
+      "cpu2-bottom-thermal": 85.6,
+      "cpu2-top-thermal": 82.8,
+      "cpu3-bottom-thermal": 85.2,
+      "cpu3-top-thermal": 86.8,
+      "cpu4-bottom-thermal": 79.7,
+      "cpu4-top-thermal": 75.3,
+      "cpu5-bottom-thermal": 84.0,
+      "cpu5-top-thermal": 85.2,
+      "cpu6-bottom-thermal": 85.2,
+      "cpu6-top-thermal": 82.1,
+      "cpu7-bottom-thermal": 72.1,
+      "cpu7-middle-thermal": 76.0,
+      "cpu7-top-thermal": 74.0,
+      "cpuss0-thermal": 73.4,
+      "cpuss1-thermal": 73.4,
+      "cpuss2-thermal": 73.0,
+      "cpuss3-thermal": 75.7,
+      "gpuss-0-thermal": 65.2,
+      "gpuss-1-thermal": 63.6,
+      "gpuss-2-thermal": 65.6,
+      "gpuss-3-thermal": 64.0,
+      "gpuss-4-thermal": 67.1,
+      "nsphmx0-thermal": 65.2,
+      "nsphmx1-thermal": 61.3,
+      "nsphmx2-thermal": 59.3,
+      "nsphmx3-thermal": 58.9,
+      "nsphvx0-thermal": 66.4,
+      "nsphvx1-thermal": 66.0
+     },
+     "rail_mean": {
+      "apc0": 0.7630345466666666,
+      "apc1": 1.7577443733333338,
+      "apc2": 1.0113538533333333,
+      "bob": 0.47866797333333333,
+      "fan_rpm": 8945.32,
+      "gfx": 1.5172586,
+      "nsp1": 0.20217572000000003,
+      "nsp2": 0.10172969333333334,
+      "s1c": 0.49228926666666667,
+      "s3c": 0.2676324666666666,
+      "s6c": 0.9214212933333332,
+      "vph": 14.148895639999997
+     }
+    },
+    "summary": {
+     "observations": 1373,
+     "accepted_per_s": 28.847088791125536,
+     "fast_frames_per_s": 54.09740492758672,
+     "capture_to_collect_ms": {
+      "median": 52.44117,
+      "p95": 69.817049
+     },
+     "request_stage_ms": {
+      "frame_age_at_submit": {
+       "median": 19.4705085,
+       "p95": 31.8613686
+      },
+      "submit_to_worker_start": {
+       "median": 0.9965930000000001,
+       "p95": 2.7229194999999975
+      },
+      "worker_wall": {
+       "median": 25.083381000000003,
+       "p95": 30.93746255
+      },
+      "completion_to_collect": {
+       "median": 2.234667,
+       "p95": 6.727447999999998
+      },
+      "capture_to_read": {
+       "median": 13.349363,
+       "p95": 20.550535149999998
+      },
+      "read_to_flow_done": {
+       "median": 5.0268735,
+       "p95": 6.99527775
+      },
+      "flow_done_to_submit": {
+       "median": 0.129997,
+       "p95": 12.674068599999998
+      },
+      "submit_paths": {
+       "frame": 870,
+       "early": 2,
+       "late": 8
+      },
+      "repeated_capture_requests": 0,
+      "frame_age_at_submit_early": {
+       "median": 24.0819645,
+       "p95": 24.16591785
+      },
+      "frame_age_at_submit_frame": {
+       "median": 19.4979675,
+       "p95": 31.8682846
+      },
+      "frame_age_at_submit_late": {
+       "median": 17.8059675,
+       "p95": 19.74987565
+      }
+     },
+     "backend_observations": {
+      "framenpu": 1373
+     }
+    },
+    "core_busy_pct": {
+     "cpu0": 38.9,
+     "cpu1": 30.9,
+     "cpu2": 37.2,
+     "cpu3": 38.2,
+     "cpu4": 25.7,
+     "cpu5": 59.0,
+     "cpu6": 60.5,
+     "cpu7": 10.7
+    },
+    "cluster_mean_mhz": {
+     "policy0": 2266,
+     "policy2": 3058,
+     "policy5": 2874,
+     "policy7": 1264
+    },
+    "valve_runqueue_wait_ms_per_s": {
+     "XRServiceLoopTh": 121.27,
+     "gamescope-wl": 8.39,
+     "vrcompositor": 4.34,
+     "vrserver": 11.95
+    }
+   }
+  ],
+  "finding": "clamp lowers cores 5-6 power ~0.2 W (1.75 -> 1.54 W) and adds 2-3 ms capture-to-collect median; hottest-core differences follow the session's warm-up, not the arm"
+ },
+ "soak_b_300s": {
+  "uclamp_max": 512,
+  "tracking_s": 279.2,
+  "observations": 10918,
+  "accepted_per_s": 38.2,
+  "fast_frames_per_s": 57.2,
+  "capture_to_collect_ms": {
+   "median": 56.3,
+   "p95": 74.8
+  },
+  "per_minute": [
+   {
+    "minute": 0,
+    "accepted_per_s": 32.5,
+    "capture_to_collect_median_ms": 57.2
+   },
+   {
+    "minute": 1,
+    "accepted_per_s": 40.6,
+    "capture_to_collect_median_ms": 56.3
+   },
+   {
+    "minute": 2,
+    "accepted_per_s": 39.7,
+    "capture_to_collect_median_ms": 55.9
+   },
+   {
+    "minute": 3,
+    "accepted_per_s": 37.9,
+    "capture_to_collect_median_ms": 56.5
+   },
+   {
+    "minute": 4,
+    "accepted_per_s": 28.0,
+    "capture_to_collect_median_ms": 55.8,
+    "partial": true
+   }
+  ],
+  "fan_log": {
+   "heatsink_c": [
+    52,
+    56
+   ],
+   "fan_target": 44,
+   "fan_target_max": 55,
+   "tracker_cores_c_typical": [
+    75,
+    82
+   ]
+  },
+  "ended": "comparison harness stop on one 1 Hz sample >= 92 C about 5 s before the planned end: cores 0-4 spiked together (core 3 92 C) while cores 5-6 stayed near 75 C. The tracker's own policy pauses MediaPipe at 92 C and the watchdog needs >= 93 C held 3 s; neither would have stopped."
+ },
+ "thread_affinity": {
+  "vrcompositor RenderThread": "cores 4-6, SCHED_RR 80",
+  "vrcompositor display thread": "cores 4-7, SCHED_RR 80",
+  "XRService head tracking (HmdTrackerQ, PreprocessorWor RR 20, FeatureNNProc_0-6)": "cores 2-3",
+  "other vrserver / vrcompositor / XRService threads": "cores 0-4"
+ },
+ "device_health": {
+  "before_equals_after": true,
+  "boot_id": "7bb9f454-9f84-48bd-9ed3-2d6a7e7af701",
+  "arena_sha256": "94674964076f61f96f8eb7e5ba78b1e5defde8c1d2f320ba45fda8c3ac6c3b48"
+ },
+ "limitations": [
+  "Compositor frame timing and passthrough banding were not measured under the 5-6 placement.",
+  "Valve run-queue wait has no matching 0-4 baseline.",
+  "Heatsink still rising at the end; no thermal equilibrium reached."
+ ]
+}
