@@ -64,4 +64,6 @@ include evidence/teacher-stem-profile.json
 include evidence/teacher-stem-vector.json
 include evidence/teacher-grayscale.json
 include evidence/teacher-resolution-drift.json
+include evidence/mercury-keypoint-reference.json
+include evidence/mercury-keypoint-forecast.json
 include evidence/ncnn-cpu-baseline.json

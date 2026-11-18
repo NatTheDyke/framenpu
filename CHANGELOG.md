@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Started the [Mercury keypoint](docs/MERCURY.md) port (offline step 1): a
+  dependency-free ONNX reader, a validated lowering of Monado's pinned
+  `grayscale_keypoint_jan18.onnx` (FP32 matches ONNX Runtime within 7.6e-6),
+  an FP16 HMX/HVX contract model (keypoint p95 0.46 px of a 128 px crop, no
+  `is_hand` acceptance flips) and a teacher-calibrated DSP forecast (about
+  19 ms per crop with heads on the host). No weights are redistributed; no
+  DSP code or device run.
 - Evaluated [128/160/192 crop inputs](docs/TEACHER_RESOLUTION.md) against the
   unchanged strict FP32 224 teacher. On the only presence-positive crop,
   128 input lowers presence from 0.999938 to 0.255875 and shifts landmarks

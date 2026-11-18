@@ -1,0 +1,1787 @@
+{
+ "format": "framenpu-mercury-keypoint-forecast",
+ "version": 1,
+ "measured": false,
+ "model_sha256": "40c0daa598cedb993b54fff17685231b7465d6db342656c401b01c2029efd1d5",
+ "teacher_fit": {
+  "pointwise": {
+   "features": [
+    "padded_hmx_macs",
+    "output_values",
+    "residual",
+    "constant"
+   ],
+   "coefficients_us": [
+    7.504234101506274e-06,
+    0.00288157404728746,
+    30.147227581890725,
+    0.0
+   ],
+   "max_relative_error": 1.1690978121025808,
+   "sum_ratio": 1.0132365835550121,
+   "samples": 28
+  },
+  "depthwise": {
+   "features": [
+    "taps*stride1_values",
+    "stride1_values",
+    "stride2_outputs",
+    "constant"
+   ],
+   "coefficients_us": [
+    7.055664929421573e-05,
+    0.0,
+    0.012045958383710751,
+    72.11398022865325
+   ],
+   "max_relative_error": 0.44598054060099834,
+   "sum_ratio": 1.0000000000000007,
+   "samples": 14
+  },
+  "teacher_tail_compute_ms": 10.116927083333334,
+  "fp32_us_per_weight_value": 0.014371285289747399,
+  "teacher_tail_request_dsp_ms": 16.739947916666665,
+  "request_over_compute_ratio": 1.5322783083219644
+ },
+ "forecast": {
+  "compute_ms": 15.881715523704166,
+  "compute_by_resolution_ms": {
+   "64x64": 3.4588,
+   "32x32": 4.6777999999999995,
+   "16x16": 3.4343999999999997,
+   "8x8": 0.5855999999999999,
+   "1x1": 1.0713,
+   "2x2": 0.0184,
+   "": 2.3914999999999993,
+   "10x10": 0.1067,
+   "20x20": 0.060200000000000004,
+   "22x22": 0.0765
+  },
+  "one_request_dsp_ms": 24.335208195912102,
+  "host_wall_ms_one_crop_per_request": 33.732919322236825,
+  "host_overhead_ms_per_request": 9.39771112632472,
+  "hint_branch_on_dsp_fp32_ms_if_not_on_host": 5.062371471025259,
+  "two_crops_per_request_host_wall_ms_per_crop": 29.034063759074463
+ },
+ "scenarios": {
+  "all_on_dsp_hint_on_host": {
+   "dsp_ms_per_crop": 24.334418270122796,
+   "host_wall_ms_one_crop_per_request": 33.73212939644752,
+   "host_wall_ms_per_crop_two_per_request": 29.033273833285158,
+   "dsp_bound_crops_per_second": 41.094058173059985,
+   "fits_20ms_native_budget_one_crop": false
+  },
+  "conv_on_dsp_heads_and_hint_on_host": {
+   "dsp_ms_per_crop": 19.000251023192373,
+   "host_wall_ms_one_crop_per_request": 28.39796214951709,
+   "host_wall_ms_per_crop_two_per_request": 23.699106586354734,
+   "dsp_bound_crops_per_second": 52.63088360145163,
+   "fits_20ms_native_budget_one_crop": true
+  },
+  "conv_on_dsp_heads_on_host_direct_stride2": {
+   "dsp_ms_per_crop": 13.615523894291616,
+   "host_wall_ms_one_crop_per_request": 23.013235020616335,
+   "host_wall_ms_per_crop_two_per_request": 18.314379457453978,
+   "dsp_bound_crops_per_second": 73.4455763703118,
+   "fits_20ms_native_budget_one_crop": true
+  }
+ },
+ "host_side_fp32_macs_if_heads_and_hint_on_host": 584128,
+ "activations_over_quarter_vtcm": [
+  {
+   "op": "Conv_10",
+   "fp16_bytes": 1572864,
+   "vtcm_vectors": 12288
+  }
+ ],
+ "weights": {
+  "fp16_device_bytes": 784176,
+  "fp32_bytes": 963200
+ },
+ "ops": [
+  {
+   "name": "Conv_0",
+   "kind": "conv",
+   "unit": "hmx",
+   "output_shape": [
+    32,
+    64,
+    64
+   ],
+   "conv_class": "dense",
+   "kernel": [
+    3,
+    3
+   ],
+   "stride": [
+    2,
+    2
+   ],
+   "pads": [
+    1,
+    1,
+    1,
+    1
+   ],
+   "act": "relu6",
+   "residual": false,
+   "macs": 1179648,
+   "weight_values": 320,
+   "padded_hmx_macs": 4194304,
+   "output_values": 131072,
+   "forecast_us": 409.2,
+   "basis": "fitted HMX pointwise on K=cin*kh*kw + im2col pass, by analogy"
+  },
+  {
+   "name": "Conv_4",
+   "kind": "conv",
+   "unit": "hvx",
+   "output_shape": [
+    32,
+    64,
+    64
+   ],
+   "conv_class": "depthwise",
+   "kernel": [
+    3,
+    3
+   ],
+   "stride": [
+    1,
+    1
+   ],
+   "pads": [
+    1,
+    1,
+    1,
+    1
+   ],
+   "act": "relu6",
+   "residual": false,
+   "macs": 1179648,
+   "weight_values": 320,
+   "output_values": 131072,
+   "forecast_us": 155.3,
+   "basis": "fitted HVX depthwise"
+  },
+  {
+   "name": "Conv_8",
+   "kind": "conv",
+   "unit": "hmx",
+   "output_shape": [
+    32,
+    64,
+    64
+   ],
+   "conv_class": "pointwise",
+   "kernel": [
+    1,
+    1
+   ],
+   "stride": [
+    1,
+    1
+   ],
+   "pads": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "act": null,
+   "residual": true,
+   "macs": 4194304,
+   "weight_values": 1056,
+   "padded_hmx_macs": 4194304,
+   "output_values": 131072,
+   "forecast_us": 439.3,
+   "basis": "fitted HMX pointwise"
+  },
+  {
+   "name": "Conv_10",
+   "kind": "conv",
+   "unit": "hmx",
+   "output_shape": [
+    192,
+    64,
+    64
+   ],
+   "conv_class": "pointwise",
+   "kernel": [
+    1,
+    1
+   ],
+   "stride": [
+    1,
+    1
+   ],
+   "pads": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "act": "relu6",
+   "residual": false,
+   "macs": 25165824,
+   "weight_values": 6336,
+   "padded_hmx_macs": 25165824,
+   "output_values": 786432,
+   "forecast_us": 2455.0,
+   "basis": "fitted HMX pointwise"
+  },
+  {
+   "name": "Conv_14",
+   "kind": "conv",
+   "unit": "hvx",
+   "output_shape": [
+    192,
+    32,
+    32
+   ],
+   "conv_class": "depthwise",
+   "kernel": [
+    3,
+    3
+   ],
+   "stride": [
+    2,
+    2
+   ],
+   "pads": [
+    1,
+    1,
+    1,
+    1
+   ],
+   "act": "relu6",
+   "residual": false,
+   "macs": 1769472,
+   "weight_values": 1920,
+   "output_values": 196608,
+   "forecast_us": 2939.8,
+   "basis": "fitted HVX depthwise"
+  },
+  {
+   "name": "Conv_18",
+   "kind": "conv",
+   "unit": "hmx",
+   "output_shape": [
+    32,
+    32,
+    32
+   ],
+   "conv_class": "pointwise",
+   "kernel": [
+    1,
+    1
+   ],
+   "stride": [
+    1,
+    1
+   ],
+   "pads": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "act": null,
+   "residual": false,
+   "macs": 6291456,
+   "weight_values": 6176,
+   "padded_hmx_macs": 6291456,
+   "output_values": 32768,
+   "forecast_us": 141.6,
+   "basis": "fitted HMX pointwise"
+  },
+  {
+   "name": "Conv_19",
+   "kind": "conv",
+   "unit": "hmx",
+   "output_shape": [
+    192,
+    32,
+    32
+   ],
+   "conv_class": "pointwise",
+   "kernel": [
+    1,
+    1
+   ],
+   "stride": [
+    1,
+    1
+   ],
+   "pads": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "act": "relu6",
+   "residual": false,
+   "macs": 6291456,
+   "weight_values": 6336,
+   "padded_hmx_macs": 6291456,
+   "output_values": 196608,
+   "forecast_us": 613.8,
+   "basis": "fitted HMX pointwise"
+  },
+  {
+   "name": "Conv_23",
+   "kind": "conv",
+   "unit": "hvx",
+   "output_shape": [
+    192,
+    32,
+    32
+   ],
+   "conv_class": "depthwise",
+   "kernel": [
+    3,
+    3
+   ],
+   "stride": [
+    1,
+    1
+   ],
+   "pads": [
+    1,
+    1,
+    1,
+    1
+   ],
+   "act": "relu6",
+   "residual": false,
+   "macs": 1769472,
+   "weight_values": 1920,
+   "output_values": 196608,
+   "forecast_us": 197.0,
+   "basis": "fitted HVX depthwise"
+  },
+  {
+   "name": "Conv_27",
+   "kind": "conv",
+   "unit": "hmx",
+   "output_shape": [
+    32,
+    32,
+    32
+   ],
+   "conv_class": "pointwise",
+   "kernel": [
+    1,
+    1
+   ],
+   "stride": [
+    1,
+    1
+   ],
+   "pads": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "act": null,
+   "residual": true,
+   "macs": 6291456,
+   "weight_values": 6176,
+   "padded_hmx_macs": 6291456,
+   "output_values": 32768,
+   "forecast_us": 171.8,
+   "basis": "fitted HMX pointwise"
+  },
+  {
+   "name": "Conv_29",
+   "kind": "conv",
+   "unit": "hmx",
+   "output_shape": [
+    192,
+    32,
+    32
+   ],
+   "conv_class": "pointwise",
+   "kernel": [
+    1,
+    1
+   ],
+   "stride": [
+    1,
+    1
+   ],
+   "pads": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "act": "relu6",
+   "residual": false,
+   "macs": 6291456,
+   "weight_values": 6336,
+   "padded_hmx_macs": 6291456,
+   "output_values": 196608,
+   "forecast_us": 613.8,
+   "basis": "fitted HMX pointwise"
+  },
+  {
+   "name": "Conv_33",
+   "kind": "conv",
+   "unit": "hvx",
+   "output_shape": [
+    192,
+    16,
+    16
+   ],
+   "conv_class": "depthwise",
+   "kernel": [
+    3,
+    3
+   ],
+   "stride": [
+    2,
+    2
+   ],
+   "pads": [
+    1,
+    1,
+    1,
+    1
+   ],
+   "act": "relu6",
+   "residual": false,
+   "macs": 442368,
+   "weight_values": 1920,
+   "output_values": 49152,
+   "forecast_us": 789.0,
+   "basis": "fitted HVX depthwise"
+  },
+  {
+   "name": "Conv_37",
+   "kind": "conv",
+   "unit": "hmx",
+   "output_shape": [
+    64,
+    16,
+    16
+   ],
+   "conv_class": "pointwise",
+   "kernel": [
+    1,
+    1
+   ],
+   "stride": [
+    1,
+    1
+   ],
+   "pads": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "act": null,
+   "residual": false,
+   "macs": 3145728,
+   "weight_values": 12352,
+   "padded_hmx_macs": 3145728,
+   "output_values": 16384,
+   "forecast_us": 70.8,
+   "basis": "fitted HMX pointwise"
+  },
+  {
+   "name": "Conv_38",
+   "kind": "conv",
+   "unit": "hmx",
+   "output_shape": [
+    384,
+    16,
+    16
+   ],
+   "conv_class": "pointwise",
+   "kernel": [
+    1,
+    1
+   ],
+   "stride": [
+    1,
+    1
+   ],
+   "pads": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "act": "relu6",
+   "residual": false,
+   "macs": 6291456,
+   "weight_values": 24960,
+   "padded_hmx_macs": 6291456,
+   "output_values": 98304,
+   "forecast_us": 330.5,
+   "basis": "fitted HMX pointwise"
+  },
+  {
+   "name": "Conv_42",
+   "kind": "conv",
+   "unit": "hvx",
+   "output_shape": [
+    384,
+    16,
+    16
+   ],
+   "conv_class": "depthwise",
+   "kernel": [
+    3,
+    3
+   ],
+   "stride": [
+    1,
+    1
+   ],
+   "pads": [
+    1,
+    1,
+    1,
+    1
+   ],
+   "act": "relu6",
+   "residual": false,
+   "macs": 884736,
+   "weight_values": 3840,
+   "output_values": 98304,
+   "forecast_us": 134.5,
+   "basis": "fitted HVX depthwise"
+  },
+  {
+   "name": "Conv_46",
+   "kind": "conv",
+   "unit": "hmx",
+   "output_shape": [
+    64,
+    16,
+    16
+   ],
+   "conv_class": "pointwise",
+   "kernel": [
+    1,
+    1
+   ],
+   "stride": [
+    1,
+    1
+   ],
+   "pads": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "act": null,
+   "residual": true,
+   "macs": 6291456,
+   "weight_values": 24640,
+   "padded_hmx_macs": 6291456,
+   "output_values": 16384,
+   "forecast_us": 124.6,
+   "basis": "fitted HMX pointwise"
+  },
+  {
+   "name": "Conv_48",
+   "kind": "conv",
+   "unit": "hmx",
+   "output_shape": [
+    384,
+    16,
+    16
+   ],
+   "conv_class": "pointwise",
+   "kernel": [
+    1,
+    1
+   ],
+   "stride": [
+    1,
+    1
+   ],
+   "pads": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "act": "relu6",
+   "residual": false,
+   "macs": 6291456,
+   "weight_values": 24960,
+   "padded_hmx_macs": 6291456,
+   "output_values": 98304,
+   "forecast_us": 330.5,
+   "basis": "fitted HMX pointwise"
+  },
+  {
+   "name": "Conv_52",
+   "kind": "conv",
+   "unit": "hvx",
+   "output_shape": [
+    384,
+    16,
+    16
+   ],
+   "conv_class": "depthwise",
+   "kernel": [
+    3,
+    3
+   ],
+   "stride": [
+    1,
+    1
+   ],
+   "pads": [
+    1,
+    1,
+    1,
+    1
+   ],
+   "act": "relu6",
+   "residual": false,
+   "macs": 884736,
+   "weight_values": 3840,
+   "output_values": 98304,
+   "forecast_us": 134.5,
+   "basis": "fitted HVX depthwise"
+  },
+  {
+   "name": "Conv_56",
+   "kind": "conv",
+   "unit": "hmx",
+   "output_shape": [
+    64,
+    16,
+    16
+   ],
+   "conv_class": "pointwise",
+   "kernel": [
+    1,
+    1
+   ],
+   "stride": [
+    1,
+    1
+   ],
+   "pads": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "act": null,
+   "residual": true,
+   "macs": 6291456,
+   "weight_values": 24640,
+   "padded_hmx_macs": 6291456,
+   "output_values": 16384,
+   "forecast_us": 124.6,
+   "basis": "fitted HMX pointwise"
+  },
+  {
+   "name": "Gemm_58",
+   "kind": "dense",
+   "unit": "host",
+   "output_shape": [
+    8192
+   ],
+   "macs": 344064,
+   "weight_values": 352256,
+   "act": "relu6",
+   "output_values": 8192,
+   "dsp_alternative_us": 5062.4,
+   "forecast_us": 0.0,
+   "basis": "host CPU (proposed); DSP FP32 cost shown for comparison"
+  },
+  {
+   "name": "Reshape_63",
+   "kind": "reshape",
+   "unit": "layout",
+   "output_shape": [
+    32,
+    16,
+    16
+   ],
+   "output_values": 8192,
+   "forecast_us": 0.0,
+   "basis": "layout (no compute)"
+  },
+  {
+   "name": "Mul_70",
+   "kind": "scale",
+   "unit": "layout",
+   "output_shape": [
+    32,
+    16,
+    16
+   ],
+   "output_values": 8192,
+   "forecast_us": 0.0,
+   "basis": "layout (no compute)"
+  },
+  {
+   "name": "Concat_71",
+   "kind": "concat",
+   "unit": "layout",
+   "output_shape": [
+    96,
+    16,
+    16
+   ],
+   "output_values": 24576,
+   "forecast_us": 0.0,
+   "basis": "layout (no compute)"
+  },
+  {
+   "name": "Conv_72",
+   "kind": "conv",
+   "unit": "hvx",
+   "output_shape": [
+    96,
+    16,
+    16
+   ],
+   "conv_class": "depthwise",
+   "kernel": [
+    3,
+    3
+   ],
+   "stride": [
+    1,
+    1
+   ],
+   "pads": [
+    1,
+    1,
+    1,
+    1
+   ],
+   "act": "relu6",
+   "residual": false,
+   "macs": 221184,
+   "weight_values": 960,
+   "output_values": 24576,
+   "forecast_us": 87.7,
+   "basis": "fitted HVX depthwise"
+  },
+  {
+   "name": "Conv_76",
+   "kind": "conv",
+   "unit": "hmx",
+   "output_shape": [
+    64,
+    16,
+    16
+   ],
+   "conv_class": "pointwise",
+   "kernel": [
+    1,
+    1
+   ],
+   "stride": [
+    1,
+    1
+   ],
+   "pads": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "act": null,
+   "residual": false,
+   "macs": 1572864,
+   "weight_values": 6208,
+   "padded_hmx_macs": 1572864,
+   "output_values": 16384,
+   "forecast_us": 59.0,
+   "basis": "fitted HMX pointwise"
+  },
+  {
+   "name": "Conv_77",
+   "kind": "conv",
+   "unit": "hvx",
+   "output_shape": [
+    64,
+    16,
+    16
+   ],
+   "conv_class": "depthwise",
+   "kernel": [
+    3,
+    3
+   ],
+   "stride": [
+    1,
+    1
+   ],
+   "pads": [
+    1,
+    1,
+    1,
+    1
+   ],
+   "act": "relu6",
+   "residual": false,
+   "macs": 147456,
+   "weight_values": 640,
+   "output_values": 16384,
+   "forecast_us": 82.5,
+   "basis": "fitted HVX depthwise"
+  },
+  {
+   "name": "Conv_81",
+   "kind": "conv",
+   "unit": "hmx",
+   "output_shape": [
+    64,
+    16,
+    16
+   ],
+   "conv_class": "pointwise",
+   "kernel": [
+    1,
+    1
+   ],
+   "stride": [
+    1,
+    1
+   ],
+   "pads": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "act": null,
+   "residual": true,
+   "macs": 1048576,
+   "weight_values": 4160,
+   "padded_hmx_macs": 1048576,
+   "output_values": 16384,
+   "forecast_us": 85.2,
+   "basis": "fitted HMX pointwise"
+  },
+  {
+   "name": "Conv_83",
+   "kind": "conv",
+   "unit": "hvx",
+   "output_shape": [
+    64,
+    16,
+    16
+   ],
+   "conv_class": "depthwise",
+   "kernel": [
+    3,
+    3
+   ],
+   "stride": [
+    1,
+    1
+   ],
+   "pads": [
+    1,
+    1,
+    1,
+    1
+   ],
+   "act": "relu6",
+   "residual": false,
+   "macs": 147456,
+   "weight_values": 640,
+   "output_values": 16384,
+   "forecast_us": 82.5,
+   "basis": "fitted HVX depthwise"
+  },
+  {
+   "name": "Conv_87",
+   "kind": "conv",
+   "unit": "hmx",
+   "output_shape": [
+    64,
+    16,
+    16
+   ],
+   "conv_class": "pointwise",
+   "kernel": [
+    1,
+    1
+   ],
+   "stride": [
+    1,
+    1
+   ],
+   "pads": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "act": null,
+   "residual": true,
+   "macs": 1048576,
+   "weight_values": 4160,
+   "padded_hmx_macs": 1048576,
+   "output_values": 16384,
+   "forecast_us": 85.2,
+   "basis": "fitted HMX pointwise"
+  },
+  {
+   "name": "Conv_89",
+   "kind": "conv",
+   "unit": "hvx",
+   "output_shape": [
+    64,
+    16,
+    16
+   ],
+   "conv_class": "depthwise",
+   "kernel": [
+    3,
+    3
+   ],
+   "stride": [
+    1,
+    1
+   ],
+   "pads": [
+    1,
+    1,
+    1,
+    1
+   ],
+   "act": "relu6",
+   "residual": false,
+   "macs": 147456,
+   "weight_values": 640,
+   "output_values": 16384,
+   "forecast_us": 82.5,
+   "basis": "fitted HVX depthwise"
+  },
+  {
+   "name": "Conv_93",
+   "kind": "conv",
+   "unit": "hmx",
+   "output_shape": [
+    64,
+    16,
+    16
+   ],
+   "conv_class": "pointwise",
+   "kernel": [
+    1,
+    1
+   ],
+   "stride": [
+    1,
+    1
+   ],
+   "pads": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "act": null,
+   "residual": true,
+   "macs": 1048576,
+   "weight_values": 4160,
+   "padded_hmx_macs": 1048576,
+   "output_values": 16384,
+   "forecast_us": 85.2,
+   "basis": "fitted HMX pointwise"
+  },
+  {
+   "name": "Conv_95",
+   "kind": "conv",
+   "unit": "hvx",
+   "output_shape": [
+    64,
+    16,
+    16
+   ],
+   "conv_class": "depthwise",
+   "kernel": [
+    3,
+    3
+   ],
+   "stride": [
+    1,
+    1
+   ],
+   "pads": [
+    1,
+    1,
+    1,
+    1
+   ],
+   "act": "relu6",
+   "residual": false,
+   "macs": 147456,
+   "weight_values": 640,
+   "output_values": 16384,
+   "forecast_us": 82.5,
+   "basis": "fitted HVX depthwise"
+  },
+  {
+   "name": "Conv_99",
+   "kind": "conv",
+   "unit": "hmx",
+   "output_shape": [
+    64,
+    16,
+    16
+   ],
+   "conv_class": "pointwise",
+   "kernel": [
+    1,
+    1
+   ],
+   "stride": [
+    1,
+    1
+   ],
+   "pads": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "act": null,
+   "residual": true,
+   "macs": 1048576,
+   "weight_values": 4160,
+   "padded_hmx_macs": 1048576,
+   "output_values": 16384,
+   "forecast_us": 85.2,
+   "basis": "fitted HMX pointwise"
+  },
+  {
+   "name": "Conv_101",
+   "kind": "conv",
+   "unit": "hvx",
+   "output_shape": [
+    64,
+    16,
+    16
+   ],
+   "conv_class": "depthwise",
+   "kernel": [
+    3,
+    3
+   ],
+   "stride": [
+    1,
+    1
+   ],
+   "pads": [
+    1,
+    1,
+    1,
+    1
+   ],
+   "act": "relu6",
+   "residual": false,
+   "macs": 147456,
+   "weight_values": 640,
+   "output_values": 16384,
+   "forecast_us": 82.5,
+   "basis": "fitted HVX depthwise"
+  },
+  {
+   "name": "Conv_105",
+   "kind": "conv",
+   "unit": "hmx",
+   "output_shape": [
+    96,
+    16,
+    16
+   ],
+   "conv_class": "pointwise",
+   "kernel": [
+    1,
+    1
+   ],
+   "stride": [
+    1,
+    1
+   ],
+   "pads": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "act": null,
+   "residual": false,
+   "macs": 1572864,
+   "weight_values": 6240,
+   "padded_hmx_macs": 1572864,
+   "output_values": 24576,
+   "forecast_us": 82.6,
+   "basis": "fitted HMX pointwise"
+  },
+  {
+   "name": "Conv_106",
+   "kind": "conv",
+   "unit": "hvx",
+   "output_shape": [
+    96,
+    16,
+    16
+   ],
+   "conv_class": "depthwise",
+   "kernel": [
+    3,
+    3
+   ],
+   "stride": [
+    1,
+    1
+   ],
+   "pads": [
+    1,
+    1,
+    1,
+    1
+   ],
+   "act": "relu6",
+   "residual": false,
+   "macs": 221184,
+   "weight_values": 960,
+   "output_values": 24576,
+   "forecast_us": 87.7,
+   "basis": "fitted HVX depthwise"
+  },
+  {
+   "name": "Conv_110",
+   "kind": "conv",
+   "unit": "hmx",
+   "output_shape": [
+    96,
+    16,
+    16
+   ],
+   "conv_class": "pointwise",
+   "kernel": [
+    1,
+    1
+   ],
+   "stride": [
+    1,
+    1
+   ],
+   "pads": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "act": null,
+   "residual": true,
+   "macs": 2359296,
+   "weight_values": 9312,
+   "padded_hmx_macs": 2359296,
+   "output_values": 24576,
+   "forecast_us": 118.7,
+   "basis": "fitted HMX pointwise"
+  },
+  {
+   "name": "Conv_112",
+   "kind": "conv",
+   "unit": "hvx",
+   "output_shape": [
+    96,
+    16,
+    16
+   ],
+   "conv_class": "depthwise",
+   "kernel": [
+    3,
+    3
+   ],
+   "stride": [
+    1,
+    1
+   ],
+   "pads": [
+    1,
+    1,
+    1,
+    1
+   ],
+   "act": "relu6",
+   "residual": false,
+   "macs": 221184,
+   "weight_values": 960,
+   "output_values": 24576,
+   "forecast_us": 87.7,
+   "basis": "fitted HVX depthwise"
+  },
+  {
+   "name": "Conv_116",
+   "kind": "conv",
+   "unit": "hmx",
+   "output_shape": [
+    96,
+    16,
+    16
+   ],
+   "conv_class": "pointwise",
+   "kernel": [
+    1,
+    1
+   ],
+   "stride": [
+    1,
+    1
+   ],
+   "pads": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "act": null,
+   "residual": true,
+   "macs": 2359296,
+   "weight_values": 9312,
+   "padded_hmx_macs": 2359296,
+   "output_values": 24576,
+   "forecast_us": 118.7,
+   "basis": "fitted HMX pointwise"
+  },
+  {
+   "name": "Conv_118",
+   "kind": "conv",
+   "unit": "hvx",
+   "output_shape": [
+    96,
+    8,
+    8
+   ],
+   "conv_class": "depthwise",
+   "kernel": [
+    3,
+    3
+   ],
+   "stride": [
+    2,
+    2
+   ],
+   "pads": [
+    1,
+    1,
+    1,
+    1
+   ],
+   "act": "relu6",
+   "residual": false,
+   "macs": 55296,
+   "weight_values": 960,
+   "output_values": 6144,
+   "forecast_us": 161.7,
+   "basis": "fitted HVX depthwise"
+  },
+  {
+   "name": "Conv_122",
+   "kind": "conv",
+   "unit": "hmx",
+   "output_shape": [
+    128,
+    8,
+    8
+   ],
+   "conv_class": "pointwise",
+   "kernel": [
+    1,
+    1
+   ],
+   "stride": [
+    1,
+    1
+   ],
+   "pads": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "act": null,
+   "residual": false,
+   "macs": 786432,
+   "weight_values": 12416,
+   "padded_hmx_macs": 786432,
+   "output_values": 8192,
+   "forecast_us": 29.5,
+   "basis": "fitted HMX pointwise"
+  },
+  {
+   "name": "Conv_123",
+   "kind": "conv",
+   "unit": "hvx",
+   "output_shape": [
+    128,
+    8,
+    8
+   ],
+   "conv_class": "depthwise",
+   "kernel": [
+    3,
+    3
+   ],
+   "stride": [
+    1,
+    1
+   ],
+   "pads": [
+    1,
+    1,
+    1,
+    1
+   ],
+   "act": "relu6",
+   "residual": false,
+   "macs": 73728,
+   "weight_values": 1280,
+   "output_values": 8192,
+   "forecast_us": 77.3,
+   "basis": "fitted HVX depthwise"
+  },
+  {
+   "name": "Conv_127",
+   "kind": "conv",
+   "unit": "hmx",
+   "output_shape": [
+    128,
+    8,
+    8
+   ],
+   "conv_class": "pointwise",
+   "kernel": [
+    1,
+    1
+   ],
+   "stride": [
+    1,
+    1
+   ],
+   "pads": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "act": null,
+   "residual": true,
+   "macs": 1048576,
+   "weight_values": 16512,
+   "padded_hmx_macs": 1048576,
+   "output_values": 8192,
+   "forecast_us": 61.6,
+   "basis": "fitted HMX pointwise"
+  },
+  {
+   "name": "Conv_129",
+   "kind": "conv",
+   "unit": "hvx",
+   "output_shape": [
+    128,
+    8,
+    8
+   ],
+   "conv_class": "depthwise",
+   "kernel": [
+    3,
+    3
+   ],
+   "stride": [
+    1,
+    1
+   ],
+   "pads": [
+    1,
+    1,
+    1,
+    1
+   ],
+   "act": "relu6",
+   "residual": false,
+   "macs": 73728,
+   "weight_values": 1280,
+   "output_values": 8192,
+   "forecast_us": 77.3,
+   "basis": "fitted HVX depthwise"
+  },
+  {
+   "name": "Conv_133",
+   "kind": "conv",
+   "unit": "hmx",
+   "output_shape": [
+    128,
+    8,
+    8
+   ],
+   "conv_class": "pointwise",
+   "kernel": [
+    1,
+    1
+   ],
+   "stride": [
+    1,
+    1
+   ],
+   "pads": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "act": null,
+   "residual": true,
+   "macs": 1048576,
+   "weight_values": 16512,
+   "padded_hmx_macs": 1048576,
+   "output_values": 8192,
+   "forecast_us": 61.6,
+   "basis": "fitted HMX pointwise"
+  },
+  {
+   "name": "Conv_135",
+   "kind": "conv",
+   "unit": "hvx",
+   "output_shape": [
+    128,
+    8,
+    8
+   ],
+   "conv_class": "depthwise",
+   "kernel": [
+    3,
+    3
+   ],
+   "stride": [
+    1,
+    1
+   ],
+   "pads": [
+    1,
+    1,
+    1,
+    1
+   ],
+   "act": "relu6",
+   "residual": false,
+   "macs": 73728,
+   "weight_values": 1280,
+   "output_values": 8192,
+   "forecast_us": 77.3,
+   "basis": "fitted HVX depthwise"
+  },
+  {
+   "name": "Conv_139",
+   "kind": "conv",
+   "unit": "hmx",
+   "output_shape": [
+    160,
+    8,
+    8
+   ],
+   "conv_class": "pointwise",
+   "kernel": [
+    1,
+    1
+   ],
+   "stride": [
+    1,
+    1
+   ],
+   "pads": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "act": null,
+   "residual": false,
+   "macs": 1310720,
+   "weight_values": 20640,
+   "padded_hmx_macs": 1310720,
+   "output_values": 10240,
+   "forecast_us": 39.3,
+   "basis": "fitted HMX pointwise"
+  },
+  {
+   "name": "AveragePool_142",
+   "kind": "avgpool",
+   "unit": "fp32",
+   "output_shape": [
+    160,
+    1,
+    1
+   ],
+   "kernel": [
+    6,
+    6
+   ],
+   "output_values": 160,
+   "forecast_us": 2.3,
+   "basis": "teacher FP32 heads rate per weight value (incl. parameter copy)"
+  },
+  {
+   "name": "Conv_143",
+   "kind": "conv",
+   "unit": "fp32",
+   "output_shape": [
+    462,
+    1,
+    1
+   ],
+   "conv_class": "pointwise",
+   "kernel": [
+    1,
+    1
+   ],
+   "stride": [
+    1,
+    1
+   ],
+   "pads": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "act": "relu6",
+   "residual": false,
+   "macs": 73920,
+   "weight_values": 74382,
+   "padded_hmx_macs": 2457600,
+   "output_values": 462,
+   "forecast_us": 1069.0,
+   "basis": "teacher FP32 heads rate per weight value (incl. parameter copy)"
+  },
+  {
+   "name": "Reshape_148",
+   "kind": "reshape",
+   "unit": "layout",
+   "output_shape": [
+    21,
+    22
+   ],
+   "output_values": 462,
+   "forecast_us": 0.0,
+   "basis": "layout (no compute)"
+  },
+  {
+   "name": "AveragePool_151",
+   "kind": "avgpool",
+   "unit": "fp32",
+   "output_shape": [
+    160,
+    2,
+    2
+   ],
+   "kernel": [
+    3,
+    3
+   ],
+   "output_values": 640,
+   "forecast_us": 9.2,
+   "basis": "teacher FP32 heads rate per weight value (incl. parameter copy)"
+  },
+  {
+   "name": "Flatten_152",
+   "kind": "reshape",
+   "unit": "layout",
+   "output_shape": [
+    640
+   ],
+   "output_values": 640,
+   "forecast_us": 0.0,
+   "basis": "layout (no compute)"
+  },
+  {
+   "name": "Gemm_153",
+   "kind": "dense",
+   "unit": "fp32",
+   "output_shape": [
+    128
+   ],
+   "macs": 81920,
+   "weight_values": 82048,
+   "act": "relu6",
+   "output_values": 128,
+   "forecast_us": 1179.1,
+   "basis": "teacher FP32 heads rate per weight value (incl. parameter copy)"
+  },
+  {
+   "name": "Gemm_158",
+   "kind": "dense",
+   "unit": "fp32",
+   "output_shape": [
+    8
+   ],
+   "macs": 1024,
+   "weight_values": 1032,
+   "act": null,
+   "output_values": 8,
+   "forecast_us": 14.8,
+   "basis": "teacher FP32 heads rate per weight value (incl. parameter copy)"
+  },
+  {
+   "name": "Conv_159",
+   "kind": "conv",
+   "unit": "hmx",
+   "output_shape": [
+    63,
+    10,
+    10
+   ],
+   "conv_class": "dense",
+   "kernel": [
+    3,
+    3
+   ],
+   "stride": [
+    1,
+    1
+   ],
+   "pads": [
+    2,
+    2,
+    2,
+    2
+   ],
+   "act": "relu6",
+   "residual": false,
+   "macs": 9072000,
+   "weight_values": 90783,
+   "padded_hmx_macs": 11796480,
+   "output_values": 6300,
+   "forecast_us": 106.7,
+   "basis": "fitted HMX pointwise on K=cin*kh*kw + im2col pass, by analogy"
+  },
+  {
+   "name": "ConvTranspose_163",
+   "kind": "deconv2x2",
+   "unit": "hmx",
+   "output_shape": [
+    42,
+    20,
+    20
+   ],
+   "macs": 1058400,
+   "padded_hmx_macs": 1572864,
+   "weight_values": 10626,
+   "output_values": 16800,
+   "forecast_us": 60.2,
+   "basis": "fitted HMX pointwise (4*cout channels) + pixel shuffle, by analogy"
+  },
+  {
+   "name": "Conv_164",
+   "kind": "conv",
+   "unit": "hmx",
+   "output_shape": [
+    21,
+    22,
+    22
+   ],
+   "conv_class": "dense",
+   "kernel": [
+    3,
+    3
+   ],
+   "stride": [
+    1,
+    1
+   ],
+   "pads": [
+    2,
+    2,
+    2,
+    2
+   ],
+   "act": "relu6",
+   "residual": false,
+   "macs": 3841992,
+   "weight_values": 7959,
+   "padded_hmx_macs": 6291456,
+   "output_values": 10164,
+   "forecast_us": 76.5,
+   "basis": "fitted HMX pointwise on K=cin*kh*kw + im2col pass, by analogy"
+  },
+  {
+   "name": "AveragePool_170",
+   "kind": "avgpool",
+   "unit": "fp32",
+   "output_shape": [
+    160,
+    2,
+    2
+   ],
+   "kernel": [
+    3,
+    3
+   ],
+   "output_values": 640,
+   "forecast_us": 9.2,
+   "basis": "teacher FP32 heads rate per weight value (incl. parameter copy)"
+  },
+  {
+   "name": "Flatten_171",
+   "kind": "reshape",
+   "unit": "layout",
+   "output_shape": [
+    640
+   ],
+   "output_values": 640,
+   "forecast_us": 0.0,
+   "basis": "layout (no compute)"
+  },
+  {
+   "name": "Gemm_172",
+   "kind": "dense",
+   "unit": "fp32",
+   "output_shape": [
+    128
+   ],
+   "macs": 81920,
+   "weight_values": 82048,
+   "act": "relu6",
+   "output_values": 128,
+   "forecast_us": 1179.1,
+   "basis": "teacher FP32 heads rate per weight value (incl. parameter copy)"
+  },
+  {
+   "name": "Gemm_177",
+   "kind": "dense",
+   "unit": "fp32",
+   "output_shape": [
+    10
+   ],
+   "macs": 1280,
+   "weight_values": 1290,
+   "act": null,
+   "output_values": 10,
+   "forecast_us": 18.5,
+   "basis": "teacher FP32 heads rate per weight value (incl. parameter copy)"
+  }
+ ],
+ "source_sha256": {
+  "tool": "0522c8afa6cf406fb8e2ce9a798a36978a4b1fc64fa2ef3b12726ead53d61af2",
+  "mercury.py": "c7728bd8600670d839b6a8e454c1067d7c1b9b95fb350bfb5723a7fb9d0953fd",
+  "teacher-tail-fp16.json": "170a2db9106be9d1cbf82e7a7be6f06b4521243f777f270d2c432bfc25cb3730",
+  "teacher-prefix-comparison.json": "d50a16caac4863b94774f6f8ab5e705706296992948338709c33e89b38402cd6"
+ }
+}
