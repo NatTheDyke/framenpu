@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Traced live thermal peaks to [shared CPU cores](docs/MERCURY_LIVE.md#heat-and-cpu-placement):
+  Valve's XRService, vrserver and compositor run on the same cores 0–4 as the
+  tracker and keep that cluster at 3.15 GHz. The tracker gained an opt-in
+  `--uclamp-max` frequency cap; in short alternating trials, cores 5–6 with
+  `--uclamp-max 512` lowered the hottest core p95 from 87–90 °C to 77–80 °C
+  at about the same total CPU power and lower capture-to-collect latency.
+  The live comparison tool now records rail power (MAX34417), per-zone
+  temperatures and fan speed per run, and accepts a per-run frequency cap.
+
 - Added [fresh-frame scheduling and camera-idle power release](docs/MERCURY_LIVE.md#fresh-frame-scheduling-and-idle-release)
   to the tracker integration. Each capture is submitted at most once, held
   HMX power is released after 0.2 s of blocked admission (camera stall, no

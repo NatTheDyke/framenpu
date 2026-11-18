@@ -99,3 +99,4 @@ include evidence/mercury-runtime-device.json
 recursive-include integrations *.patch *.md *.json *.LICENSE
 include evidence/mercury-live-validation.json
 include evidence/mercury-fresh-live.json
+include evidence/mercury-thermal-placement.json

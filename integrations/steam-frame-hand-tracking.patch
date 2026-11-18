@@ -18,10 +18,10 @@ index 8e1d009..8f85496 100644
  ![Hand Tracking panel](overlay/panel_preview.png)
 diff --git a/docs/FRAMENPU.md b/docs/FRAMENPU.md
 new file mode 100644
-index 0000000..b65efb2
+index 0000000..e85f97c
 --- /dev/null
 +++ b/docs/FRAMENPU.md
-@@ -0,0 +1,147 @@
+@@ -0,0 +1,156 @@
 +# Mercury inference backends
 +
 +Mercury tracking keeps its existing crop geometry, normalization, hint policy,
@@ -121,6 +121,15 @@ index 0000000..b65efb2
 +columns 21..24 record the submit path, capture sequence and the pair's read and
 +optical-flow-done times; FrameNPU's `tools/mercury_live_report.py` turns them
 +into per-stage request ages.
++
++`--uclamp-max N` (or `HANDTRACK_UCLAMP_MAX`, 0..1024, off by default) caps the
++CPU frequency the tracker and its workers request through Linux uclamp; workers
++inherit it. On the Frame, Valve's XRService, vrserver and compositor share
++cores 0-4 and keep that cluster at its top frequency, so the cap only takes
++effect on a cluster the tracker has mostly to itself. Short live trials of
++`HANDTRACK_CPUS=5-6` with `--uclamp-max 512` lowered the hottest core peaks by
++about 10 C versus the default 0-4 placement; see FrameNPU `docs/MERCURY_LIVE.md`.
++This is not yet the default.
 +
 +Shutdown waits for the active job, releases power,
 +retires the image and restores the borrowed arena. The worker also registers a
@@ -305,7 +314,7 @@ index 0000000..c430d2b
 +        return cpu
 +    return FallbackBackend(cpu, lambda: FrameNPUBackend(model_path, framenpu_jobs))
 diff --git a/handtrack/live.py b/handtrack/live.py
-index 80689d4..2770fd6 100644
+index 80689d4..c77b121 100644
 --- a/handtrack/live.py
 +++ b/handtrack/live.py
 @@ -49,6 +49,7 @@ cv2.setNumThreads(1)
@@ -337,7 +346,7 @@ index 80689d4..2770fd6 100644
      ap.add_argument("--curl-source", choices=("mercury", "geometric"), default="mercury",
                      help="finger curls from Mercury's curl output (default) or from the 3D joint angles")
      ap.add_argument("--merc-hz", type=float, default=30.0, help="Mercury tracking cycles per second (one crop per hand)")
-@@ -335,6 +343,10 @@ def main():
+@@ -335,6 +343,13 @@ def main():
                           "camera and with the current position (prevents short depth jumps)")
      ap.add_argument("--merc-early", action="store_true",
                      help="collect finished Mercury jobs and submit the next one between camera frames")
@@ -345,10 +354,13 @@ index 80689d4..2770fd6 100644
 +                    help="submit Mercury right after optical flow (before MediaPipe handling); collect finished jobs "
 +                         "between camera frames and submit then only if the newest frame became ready less than a "
 +                         "third of a frame period ago, else wait for the next frame")
++    ap.add_argument("--uclamp-max", type=int, default=os.environ.get("HANDTRACK_UCLAMP_MAX") or None,
++                    help="cap the CPU frequency this tracker and its workers request (Linux uclamp, 0..1024; "
++                         "512 ~ 2 GHz on the big cores); default: no cap (or HANDTRACK_UCLAMP_MAX)")
      ap.add_argument("--merc-sched", choices=("batch", "perhand"), default="batch",
                      help="batch: all tracked hands in one Mercury job, published together (original); "
                           "perhand: one hand per job on the newest frame, published as soon as it is done")
-@@ -349,12 +361,16 @@ def main():
+@@ -349,12 +364,16 @@ def main():
                      help="rotation glides toward each new orientation with this time constant (0 = step)")
      ap.add_argument("--blend-ms", type=float, default=120.0,
                      help="ease MediaPipe re-seed corrections in over this time constant (0 = snap)")
@@ -366,7 +378,22 @@ index 80689d4..2770fd6 100644
      import handtrack.fasttrack as _ft
      _ft.MAX_SPEED = a.max_speed
      _ft.LK["maxLevel"] = a.lk_levels
-@@ -383,13 +399,15 @@ def main():
+@@ -365,6 +384,14 @@ def main():
+         os.nice(10)
+     except (AttributeError, OSError):
+         pass
++    if a.uclamp_max is not None:
++        # before any worker pool exists, so MediaPipe / Mercury workers inherit the clamp
++        from handtrack import uclamp
++        try:
++            n = uclamp.set_process_max(int(a.uclamp_max))
++            print("uclamp: max %d on %d thread(s)" % (int(a.uclamp_max), n), file=sys.stderr, flush=True)
++        except (OSError, ValueError) as e:
++            print("uclamp: not applied (%s)" % e, file=sys.stderr, flush=True)
+     thermal = ThermalGuard()
+     tel = Telemetry(a.telemetry) if a.telemetry else None
+     shm = PtShm()
+@@ -383,13 +410,15 @@ def main():
          print("debug view: ssh -L 8765:127.0.0.1:8765 frame  ->  http://localhost:8765", file=sys.stderr)
      logf = open(a.log, "a") if a.log else None
  
@@ -384,7 +411,7 @@ index 80689d4..2770fd6 100644
          mt = MercuryTracker(palm, merc_pool, mpworker)
          mt.curl_source = a.curl_source
          mt.sched = a.merc_sched
-@@ -409,6 +427,10 @@ def main():
+@@ -409,6 +438,10 @@ def main():
      lock = threading.Lock()
      stats = new_stats()
      stop = threading.Event()
@@ -395,7 +422,7 @@ index 80689d4..2770fd6 100644
      NAME = {0: "cam0 (right)", 1: "cam1 (left)"}
  
      pool = ThreadPoolExecutor(2)
-@@ -509,9 +531,23 @@ def main():
+@@ -509,9 +542,23 @@ def main():
          k = 0
          frame_no = 0
          last_hand = 0.0
@@ -422,7 +449,7 @@ index 80689d4..2770fd6 100644
              nonlocal next_merc, next_det, last_hand
              if mt is not None:
                  for side, (pose_m, sl_m, px_m, t_m, img_m) in mt.collect().items():
-@@ -534,9 +570,12 @@ def main():
+@@ -534,9 +581,12 @@ def main():
                      # thread CPU vs runqueue wait, hands in the job, outcome, raw (unfiltered) orientation
                      for rc in mt.records:
                          q_ = rc["rq"] if rc["rq"] is not None else (0, 0, 0, 0)
@@ -437,7 +464,7 @@ index 80689d4..2770fd6 100644
                  mt.records.clear()
                  if mt.collapsed:
                      # both trackers ended up on one physical hand: forget the dropped one everywhere and
-@@ -547,17 +586,44 @@ def main():
+@@ -547,17 +597,44 @@ def main():
                      next_det = 0.0
                      if tel is not None:
                          tel.write("C,%d,%s" % (t_cap, mt.collapsed))
@@ -493,7 +520,7 @@ index 80689d4..2770fd6 100644
  
  
          hands_cfg = EnabledHands()
-@@ -597,10 +663,16 @@ def main():
+@@ -597,10 +674,16 @@ def main():
                  bridge.enabled_mask = (1 if "left" in enabled else 0) | (2 if "right" in enabled else 0)
              r0, r1 = shm.read(0, last[0]), shm.read(1, last[1])
              if not r0 or not r1:
@@ -514,7 +541,7 @@ index 80689d4..2770fd6 100644
                  time.sleep(0.002)
                  continue
              if abs(r0[1] - r1[1]) > 8e6:          # not the same capture: wait for the lagging camera
-@@ -610,6 +682,7 @@ def main():
+@@ -610,6 +693,7 @@ def main():
                      last[1] = r1[0]
                  continue
              last[0], last[1] = r0[0], r1[0]
@@ -522,7 +549,7 @@ index 80689d4..2770fd6 100644
              frame_no += 1
              have_frame = True
              t_raw = min(r0[1], r1[1])
-@@ -632,6 +705,11 @@ def main():
+@@ -632,6 +716,11 @@ def main():
              fast_pos = {} if skip_frame else fast.step(imgs, t_s)
              v2_report()
              fast_ms = (time.perf_counter() - tf) * 1e3
@@ -534,7 +561,7 @@ index 80689d4..2770fd6 100644
  
              # ---- slow path: collect a finished MediaPipe run, re-seed the tracker
              if job and job[0].done():
-@@ -771,7 +849,9 @@ def main():
+@@ -771,7 +860,9 @@ def main():
                                                                    float(np.median(e3[[0, 5, 9, 13, 17]])),
                                                                    float(np.median(gap)) * 100))
  
@@ -545,7 +572,7 @@ index 80689d4..2770fd6 100644
  
              # ---- schedule the next MediaPipe run (rate cap, thermal guard, idle mode)
              now_m = time.monotonic()
-@@ -910,7 +990,7 @@ def main():
+@@ -910,7 +1001,7 @@ def main():
          t.start()
      t0 = tstat = time.monotonic()
      try:
@@ -554,7 +581,7 @@ index 80689d4..2770fd6 100644
              time.sleep(0.25)
              now = time.monotonic()
              if now - tstat > 5:
-@@ -951,9 +1031,17 @@ def main():
+@@ -951,9 +1042,17 @@ def main():
                  tstat = now
      except KeyboardInterrupt:
          pass
@@ -884,6 +911,62 @@ index 6a744cd..9e0a887 100644
      return out
  
  
+diff --git a/handtrack/uclamp.py b/handtrack/uclamp.py
+new file mode 100644
+index 0000000..c2af089
+--- /dev/null
++++ b/handtrack/uclamp.py
+@@ -0,0 +1,50 @@
++"""Per-task utilization clamp (Linux uclamp): cap the CPU frequency our own work asks schedutil for.
++
++The tracker's bursty single-threaded work (MediaPipe, optical flow, Mercury host work) otherwise
++drives its cores to their top frequency, where each cycle costs about a third more energy and the
++core hot spots spike. uclamp_max limits only the frequency requested on behalf of these tasks;
++other processes on the same cores keep theirs. Children inherit the clamp across fork and exec.
++Lowering one's own clamp needs no privileges.
++"""
++import ctypes
++import os
++import platform
++import struct
++
++_SCHED_SETATTR = {"aarch64": 274, "x86_64": 314}
++_FLAGS = 0x08 | 0x10 | 0x40   # SCHED_FLAG_KEEP_POLICY | SCHED_FLAG_KEEP_PARAMS | SCHED_FLAG_UTIL_CLAMP_MAX
++
++
++def _set(tid, value):
++    nr = _SCHED_SETATTR.get(platform.machine())
++    if nr is None:
++        raise OSError("sched_setattr syscall number unknown for " + platform.machine())
++    # struct sched_attr, SCHED_ATTR_SIZE_VER1 (56 bytes): size, policy, flags, nice, priority,
++    # runtime, deadline, period, util_min, util_max
++    attr = ctypes.create_string_buffer(struct.pack("<IIQiIQQQII", 56, 0, _FLAGS, 0, 0, 0, 0, 0, 0, value))
++    libc = ctypes.CDLL(None, use_errno=True)
++    if libc.syscall(nr, tid, attr, 0) != 0:
++        err = ctypes.get_errno()
++        raise OSError(err, os.strerror(err))
++
++
++def set_process_max(value):
++    """Clamp every current thread of this process (new threads and children inherit it)."""
++    if not 0 <= value <= 1024:
++        raise ValueError("uclamp max must be 0..1024")
++    tids = [int(t) for t in os.listdir("/proc/self/task")]
++    for tid in tids:
++        _set(tid, value)
++    return len(tids)
++
++
++def current_max(pid="self"):
++    """Effective uclamp.max of a process (None when the kernel does not report it)."""
++    try:
++        with open("/proc/%s/sched" % pid) as f:
++            for line in f:
++                if line.startswith("effective uclamp.max"):
++                    return int(line.split(":")[1])
++    except OSError:
++        pass
++    return None
 diff --git a/headset/stop.sh b/headset/stop.sh
 index 22e55ce..bf824b6 100644
 --- a/headset/stop.sh
@@ -911,10 +994,10 @@ index 22e55ce..bf824b6 100644
  for n in $names; do f=$R/$n.pid; [ -f $f ] && kill "$(cat $f)" 2>/dev/null; rm -f $f; done
 diff --git a/tests/test_inference.py b/tests/test_inference.py
 new file mode 100644
-index 0000000..c87fd1e
+index 0000000..db67e80
 --- /dev/null
 +++ b/tests/test_inference.py
-@@ -0,0 +1,306 @@
+@@ -0,0 +1,329 @@
 +import os
 +from pathlib import Path
 +import sys
@@ -1195,6 +1278,29 @@ index 0000000..c87fd1e
 +        self.assertEqual(len(releases), 1)
 +        self.assertGreater(releases[0], 0.3 + STALL_S)
 +        self.assertLess(releases[0], 0.3 + STALL_S + IDLE_S + 0.01)
++
++
++@unittest.skipUnless(sys.platform == "linux" and os.path.exists("/proc/self/sched"), "Linux only")
++class UclampTests(unittest.TestCase):
++    def test_clamp_applies_to_threads_and_is_inherited(self):
++        import subprocess
++        from handtrack import uclamp
++        if uclamp.current_max() is None:
++            self.skipTest("kernel without uclamp reporting")
++        root = str(Path(__file__).resolve().parents[1])
++        child = "from handtrack import uclamp; print(uclamp.current_max())"
++        parent = ("import subprocess, sys, threading; from handtrack import uclamp; "
++                  "threading.Thread(target=lambda: None).start(); uclamp.set_process_max(512); "
++                  "print(uclamp.current_max()); "
++                  "print(subprocess.run([sys.executable, '-c', %r], capture_output=True, text=True).stdout.strip())"
++                  % child)
++        out = subprocess.run([sys.executable, "-c", parent], capture_output=True, text=True,
++                             env=dict(os.environ, PYTHONPATH=root))
++        if out.returncode and "Operation not permitted" in out.stderr:
++            self.skipTest("uclamp not permitted here")
++        self.assertEqual(out.stdout.split(), ["512", "512"], out.stderr)
++        with self.assertRaises(ValueError):
++            uclamp.set_process_max(2000)
 +
 +
 +@unittest.skipUnless(os.environ.get("FNPU_MERCURY_MODEL"), "pinned local model required")

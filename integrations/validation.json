@@ -2,7 +2,7 @@
   "format": "framenpu-tracker-integration-validation",
   "upstream": "https://github.com/spyjacob/steam-frame-hand-tracking",
   "base_commit": "8852ec9bdd4f81fb5a359e5bf88ed25f0e6fc89e",
-  "patch_sha256": "a5b7353e7eb334e554b3e867cfb14d8fa8d45760783271be88ed28debec80b27",
+  "patch_sha256": "53550b41e69f06ba9867eeedce2a9d08994ba3f02cc6d8b4ce283eed07a59c81",
   "cpu_default": true,
   "accelerator_failure_latched_to_cpu": true,
   "request_crop_counts": [
@@ -13,7 +13,7 @@
   "wait_for_more_crops": false,
   "padding": false,
   "framenpu_tests_passed": 345,
-  "tracker_tests_passed": 22,
+  "tracker_tests_passed": 21,
   "original_cpu_geometry_decode_exact_observations": 4,
   "clean_patch_application_passed": true,
   "device_evidence": "evidence/mercury-runtime-device.json",
@@ -23,12 +23,14 @@
   "sustained_thermal_and_pc_rendering_validated": false,
   "live_evidence": "evidence/mercury-live-validation.json",
   "live_evidence_sha256": "cc43b9e5482304b3908d48f0a6b3e7e538b72439df08304ee1480654c98ed390",
-  "tracker_commit": "b12358233ac8ac6b29ed0211fb7650d712cb00db",
+  "tracker_commit": "b62bb5dbf4f0934ca4676dd4fe763aecba36cef9",
   "tracker_fork": "https://github.com/NatTheDyke/steam-frame-hand-tracking",
   "tracker_branch": "framenpu-inference",
   "capture_submitted_at_most_once": true,
   "camera_idle_power_release_validated_live": true,
   "fresh_scheduler_live_comparison_passed": true,
   "fresh_live_evidence": "evidence/mercury-fresh-live.json",
-  "fresh_live_evidence_sha256": "fe139aca2c03b17888c2fcad2fe504af7e255e87eb35925a053d1c31df1dbe74"
+  "fresh_live_evidence_sha256": "fe139aca2c03b17888c2fcad2fe504af7e255e87eb35925a053d1c31df1dbe74",
+  "thermal_placement_evidence": "evidence/mercury-thermal-placement.json",
+  "thermal_placement_evidence_sha256": "e72c8c4aa4d2ce81262780e8cffc5e9a83522d71c5d200a0b49f948b1f618fa1"
 }

@@ -134,6 +134,37 @@ and `dsp_service` matched before and after every session. These are short
 runs at 51–86 °C with uncontrolled hand motion; they are not a sustained thermal
 result, and CPU remains the default backend.
 
+## Heat and CPU placement
+
+[Evidence](../evidence/mercury-thermal-placement.json). The Frame's MAX34417
+monitors expose rail power: `apc2` is the cores 2–4 cluster, `apc1` cores 5–6,
+`nsp1`/`nsp2` the DSP and `vph` the whole headset (about 3.4 W off, 10.5–11 W
+worn and idle, 13–14 W while tracking). Valve's fan daemon logs at 1 Hz to
+`/var/log/deckard-fan-control.log`.
+
+Thermal stops came from hot spots, not bulk heat: cores 2–4 spiked to
+88–91 °C and fell back within seconds while the heatsink stayed at 50–54 °C.
+Valve's XRService (about 63% of a core), vrserver, vrcompositor and helpers run
+on cores 0–4, the tracker's default `HANDTRACK_CPUS`; that cluster ran at its
+top frequency 99.8% of the time while cores 5–6 were about 85% idle. A
+frequency cap (`--uclamp-max 512`) on cores 0–4 changed nothing, because
+Valve's tasks keep the cluster at its maximum. On a pinned busy loop, the same
+cap cut energy per cycle by a third (0.27 vs 0.40 W/GHz).
+
+| 20 s runs (A B B A) | Cores 0–4, no cap | Cores 5–6, `--uclamp-max 512` |
+|---|---:|---:|
+| Hottest core p95 | 87.0 / 89.7 °C | **77.2 / 79.7 °C** |
+| Hottest core max | 88.0 / 90.7 °C | **78.1 / 80.1 °C** |
+| Cores 2–4 / 5–6 power | 2.1 / 0.3 W | 0.87 / 1.57 W |
+| Cores 0–4 busy | about 50% | about 30% |
+| Fast-path frames/s | 54.1 / 52.9 | 59.3 / 57.7 |
+| Camera detected → collect, median | 68.3 / 60.6 ms | 53.3 / 56.5 ms |
+
+Total CPU power is about the same; the heat is spread over two clusters and
+the tracker no longer competes with Valve's processes. Placement and the cap
+changed together, runs were short, and compositor frame timing was not
+measured, so this is not yet the default.
+
 ## Reproduce
 
 Use the [integration setup](MERCURY_INTEGRATION.md), private factory calibration
