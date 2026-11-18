@@ -31,6 +31,12 @@ records the SHA256 of its merged final tensor so runs on two images can be
 compared bit for bit.
 An RS_PW_PROFILE build (timing instrument) adds the 1x1 phase tick totals of
 each merged frame (parameter copy, output zeroing, B gather, HMX, post).
+Each merged frame records its host phases (staging, request with the
+device.py submit marks, readback). --held-power powers HMX once for the
+session (device._hold_power, verified read-only before every request,
+released under the gate before the retire) instead of per request.
+--batch 2 runs two crops per merged request (cases i and i+1 in crops 0 and
+1); each crop's final must equal its own case's qualify result.
 --stop-after LAYER truncates both phases (early-layer pilot, no heads).
 Protections as tests/hardware_teacher_link.py: lease, refusal record, audited
 direct dispatch, no retry/recovery/restart, window and reservation restored
@@ -84,11 +90,35 @@ SOURCES = (
 )
 
 
+class _SubmitHooks:
+    """The device as LinkRunner sees it: every _submit records its host phase
+    times (device.py marks) and, while the runner holds HMX power for the
+    session, passes that owner so the request verifies instead of cycling power."""
+
+    def __init__(self, dev, runner):
+        self._dev, self._runner = dev, runner
+
+    def __getattr__(self, name):
+        return getattr(self._dev, name)
+
+    def _submit(self, *args, **kw):
+        phases = {}
+        if self._runner.held_power is not None:
+            kw["_held_power"] = self._runner.held_power
+        self._runner.last_phases = phases
+        t0 = time.perf_counter()
+        try:
+            return self._dev._submit(*args, _phase_times=phases, **kw)
+        finally:
+            phases["submit_total_ms"] = (time.perf_counter() - t0) * 1e3
+
+
 class MercuryRunner(HL.LinkRunner):
     """LinkRunner's seal/admin/linked submit, without the teacher plans."""
 
     def __init__(self, dev, mem, loader, image, profile=False):
-        self.dev, self.mem = dev, mem
+        self.dev, self.mem = _SubmitHooks(dev, self), mem
+        self.held_power, self.last_phases = None, None
         self.loader, self.image = loader, image
         self.reservation = image + bytes(HL.CODE_BYTES - len(image))  # zero seal vector
         self.sealed = False
@@ -236,12 +266,25 @@ def qualify(runner, model, segments, case, dump=None):
     return t, raw, ratios, rows
 
 
-def frame(runner, merged, case):
+def frame(runner, merged, cases):
+    """One merged request over len(cases) == merged.batch crops; returns
+    (request row, final bytes per crop, host wall ms)."""
+    if len(cases) != merged.batch:
+        raise ValueError("one case per crop")
     t0 = time.perf_counter()
-    ML.stage_inputs(merged, runner.put, host_inputs(case, merged.prefix))
+    for k, case in enumerate(cases):
+        ML.stage_inputs(merged.crop(k), runner.put, host_inputs(case, merged.prefix))
+    t1 = time.perf_counter()
     row = runner.request(merged, merged.plan.jobs[0])
-    final = runner.raw(merged, merged.final)
-    return row, final, (time.perf_counter() - t0) * 1e3
+    t2 = time.perf_counter()
+    finals = [runner.raw(merged.crop(k), merged.final) for k in range(merged.batch)]
+    t3 = time.perf_counter()
+    row["host_ms"] = {
+        "stage": (t1 - t0) * 1e3,
+        "request": (t2 - t1) * 1e3,
+        "readback": (t3 - t2) * 1e3,
+    } | (getattr(runner, "last_phases", None) or {})
+    return row, finals, (t3 - t0) * 1e3
 
 
 def keypoint_drift(model, out, ref):
@@ -264,7 +307,8 @@ def controls(runner, merged, case, expect):
     plan = merged.plan
     rs = plan.jobs[0]
     runner.install(merged)
-    ML.stage_inputs(merged, runner.put, host_inputs(case, merged.prefix))
+    for k in range(merged.batch):
+        ML.stage_inputs(merged.crop(k), runner.put, host_inputs(case, merged.prefix))
     runner.request(merged, rs, fault=True)
     table = bytearray(plan.table)
     k = next(n for n in range(rs.end) if struct.unpack_from("<I", table, 128 * n)[0] == 1)
@@ -283,8 +327,8 @@ def controls(runner, merged, case, expect):
             count += 1
     runner.install(merged)
     runner.admin(7, reject=True)  # already sealed
-    _, final, _ = frame(runner, merged, case)
-    if final != expect:
+    _, finals, _ = frame(runner, merged, [case] * merged.batch)
+    if any(f != expect for f in finals):
         raise ValueError("clean merged frame after controls differs")
     return {
         "guarded_fault_linked": 1,
@@ -295,22 +339,26 @@ def controls(runner, merged, case, expect):
     }
 
 
-def run(runner, model, cases, manifest, rounds, stop_after, prefix=False, dump=None):
+def run(runner, model, cases, manifest, rounds, stop_after, prefix=False, dump=None, batch=1):
+    """Phase A qualifies every case; phase B then runs the merged frames. With
+    batch > 1, case i's frames put cases i, i+1, ... (cyclic) into the crops of one
+    request, and every crop's final must equal its own case's qualify result."""
     import numpy as np
     from framenpu import mercury
 
     segments = ML.qualify_segments(model, stop_after, prefix)
-    merged = ML.build_plan(model, "merged", stop_after, prefix=prefix)
+    merged = ML.build_plan(model, "merged", stop_after, prefix=prefix, batch=batch)
     full = merged.final == ML.OUTPUT
     contract = "full" if prefix else ""  # FP16 contract with / without the FP32 host prefix
-    out = {}
-    for i, entry in enumerate(manifest["cases"]):
+    entries = manifest["cases"]
+    loaded, raws, devs, out = [], [], [], {}
+    for i, entry in enumerate(entries):
         case = load_case(cases, entry)
         t, raw, ratios, qrows = qualify(runner, model, segments, case, dump)
         expected = (
             ML.tensor_bytes(merged, merged.final, case["expected" + contract]) if full else None
         )
-        row = {
+        out[f"case{i:02d}"] = {
             "split": entry["split"],
             "hinted": entry["hinted"],
             "qualify": {
@@ -320,14 +368,23 @@ def run(runner, model, cases, manifest, rounds, stop_after, prefix=False, dump=N
                 "matches_host_emulator": (raw[merged.final] == expected) if full else None,
             },
         }
+        loaded.append(case)
+        raws.append(raw[merged.final])
+        devs.append(t.get(ML.OUTPUT))
+    for i, entry in enumerate(entries):
+        row, case = out[f"case{i:02d}"], loaded[i]
+        group = [(i + k) % len(entries) for k in range(batch)]
         runner.install(merged)  # setup, excluded from frame timing
         frames = []
         for r in range(rounds):
-            req, final, wall = frame(runner, merged, case)
-            if final != raw[merged.final]:
-                raise ValueError(f"{entry['name']} round {r}: merged final differs from qualify")
+            req, finals, wall = frame(runner, merged, [loaded[g] for g in group])
+            for k, (g, fin) in enumerate(zip(group, finals)):
+                if fin != raws[g]:
+                    raise ValueError(
+                        f"{entry['name']} round {r} crop {k}: merged final differs from qualify"
+                    )
             frames.append(req | {"host_wall_ms": wall})
-            row["final_sha256"] = hashlib.sha256(final).hexdigest()  # A/B across images
+            row["final_sha256"] = hashlib.sha256(finals[0]).hexdigest()  # A/B across images
             print(
                 json.dumps(
                     {
@@ -341,10 +398,11 @@ def run(runner, model, cases, manifest, rounds, stop_after, prefix=False, dump=N
                 flush=True,
             )
         row["frames"] = frames
+        if batch > 1:
+            row["batch_cases"] = group
         if full:
-            dev = t[ML.OUTPUT]
             t0 = time.perf_counter()
-            outs = mercury.run_tail(model, {ML.OUTPUT: dev}, ML.LAST)
+            outs = mercury.run_tail(model, {ML.OUTPUT: devs[i]}, ML.LAST)
             row["host_tail_ms"] = (time.perf_counter() - t0) * 1e3
             fp32 = {k: case[f"fp32/{k}"] for k in mercury.OUTPUTS}
             fp16 = {k: case[f"fp16{contract}/{k}"] for k in mercury.OUTPUTS}
@@ -352,10 +410,10 @@ def run(runner, model, cases, manifest, rounds, stop_after, prefix=False, dump=N
             row["vs_fp16_contract"] = keypoint_drift(model, outs, fp16)
             row["outputs_equal_fp16_contract"] = all(np.array_equal(outs[k], fp16[k]) for k in fp16)
         if i == 0:
-            row["controls"] = controls(runner, merged, case, raw[merged.final])
-        out[f"case{i:02d}"] = row
+            row["controls"] = controls(runner, merged, case, raws[0])
     plans = {
         "merged": {
+            "batch": merged.batch,
             "descriptors": merged.descriptors,
             "vtcm_peak_vectors": merged.vtcm_peak,
             "window_end": f"{merged.plan.end:#x}",
@@ -374,7 +432,7 @@ def run(runner, model, cases, manifest, rounds, stop_after, prefix=False, dump=N
     return out, plans
 
 
-def summarize(crops, merged_ops):
+def summarize(crops, merged_ops, batch=1):
     import numpy as np
 
     rows = list(crops.values())
@@ -383,7 +441,9 @@ def summarize(crops, merged_ops):
     wall = [f["host_wall_ms"] for r in rows for f in r["frames"][1:]]
     per_op = np.median([f["op_us"] for r in rows for f in r["frames"][1:]], axis=0)
     prof = [f["pw_profile_us"] for r in rows for f in r["frames"][1:] if "pw_profile_us" in f]
+    host = [f["host_ms"] for r in rows for f in r["frames"][1:]]
     s = {
+        "host_ms_median": {k: float(np.median([h[k] for h in host])) for k in host[0]},
         "pw_profile_us_median": {k: float(np.median([p[k] for p in prof])) for k in PW_BUCKETS}
         if prof
         else None,
@@ -394,6 +454,9 @@ def summarize(crops, merged_ops):
         "body_ms_median": float(np.median(body)),
         "wrapper_ms_median": float(np.median(wrap)),
         "host_wall_ms_median": float(np.median(wall)),
+        "batch": batch,
+        "body_ms_per_crop_median": float(np.median(body)) / batch,
+        "host_wall_ms_per_crop_median": float(np.median(wall)) / batch,
         "descriptor_us_median": [round(float(v), 2) for v in per_op],
         "ops": merged_ops,
     }
@@ -425,9 +488,17 @@ def main():
     p.add_argument("--max-cases", type=int, default=0, help="first N cases only (0 = all)")
     p.add_argument("--prefix", action="store_true", help="step 2b: Conv_0 .. on the DSP too")
     p.add_argument("--dump", type=Path, help="private directory for bound-failure tensors")
+    p.add_argument("--batch", type=int, default=1, help="crops per merged request (1 or 2)")
+    p.add_argument(
+        "--held-power",
+        action="store_true",
+        help="hold HMX power for the session (device._hold_power) instead of per request",
+    )
     args = p.parse_args()
     if not args.run_on_device or os.geteuid() != 0 or not 2 <= args.rounds <= 20:
         p.error("Frame root, --run-on-device and rounds in 2..20 required")
+    if args.batch not in (1, 2):
+        p.error("--batch is 1 or 2 (160 descriptors per request)")
     loader_job, image, link_record = HL.load_link(args.jobs)
     if (
         not link_record.get("stride2")
@@ -446,9 +517,9 @@ def main():
     if args.max_cases:
         manifest["cases"] = manifest["cases"][: args.max_cases]
     # validate first, against the checks of the build actually loaded
-    for mp in [ML.build_plan(model, "merged", args.stop_after, prefix=args.prefix)] + list(
-        ML.qualify_segments(model, args.stop_after, args.prefix)
-    ):
+    for mp in [
+        ML.build_plan(model, "merged", args.stop_after, prefix=args.prefix, batch=args.batch)
+    ] + list(ML.qualify_segments(model, args.stop_after, args.prefix)):
         for n in range(len(mp.plan.table) // 128):
             row = struct.unpack_from("<32I", mp.plan.table, 128 * n)
             if not RL.native_ok(row, s2_direct=ML.S2_PHASE if s2_direct else None):
@@ -464,6 +535,8 @@ def main():
         "s2_direct": s2_direct,
         "pw_profile": profile,
         "pw_fast": bool(link_record.get("pw_fast")),
+        "held_power": args.held_power,
+        "batch": args.batch,
         "stop_after": args.stop_after,
         "builds": {"loader": link_record["loader"], "linked": link_record["linked"]},
         "model_sha256": model.sha256,
@@ -497,6 +570,8 @@ def main():
                         )
                         try:
                             report["seal_wrapper_ms"] = runner.seal()
+                            if args.held_power:
+                                runner.held_power = dev._hold_power()
                             report["cases"], report["plans"] = run(
                                 runner,
                                 model,
@@ -506,21 +581,32 @@ def main():
                                 args.stop_after,
                                 args.prefix,
                                 args.dump,
+                                args.batch,
                             )
                         except RecoveryRequired:
                             unsafe = True
                             raise
                         finally:
+                            if runner.held_power is not None:
+                                held, runner.held_power = runner.held_power, None
+                                if unsafe or dev._transport.poisoned:
+                                    held.abandon()  # never gate clocks in an unknown state
+                                else:
+                                    dev._release_power(held)
                             if runner.sealed:
                                 retired = False
                                 if not unsafe and not dev._transport.poisoned:
                                     report["retire_wrapper_ms"] = runner.admin(8)
                                     retired = True
-                        merged = ML.build_plan(model, "merged", args.stop_after, prefix=args.prefix)
+                        merged = ML.build_plan(
+                            model, "merged", args.stop_after, prefix=args.prefix, batch=args.batch
+                        )
                         runner.install(merged)
                         runner.request(merged, merged.plan.jobs[0], refused=True)
                         report["unsealed_request_refused"] = True
-                        report["summary"] = summarize(report["cases"], len(merged.ops))
+                        report["summary"] = summarize(
+                            report["cases"], len(merged.ops), merged.batch
+                        )
                 except RecoveryRequired:
                     unsafe = True
                     raise

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- [Host time](docs/MERCURY.md#host-time-held-hmx-power-and-2-crop-batches):
+  the Mercury harness records host phases per frame. `--held-power` keeps HMX
+  powered for the session through the existing held-power owner, instead of
+  a power cycle per request (about 5.9 ms). `--batch 2` runs two crops per
+  request, sharing the parameter images (`build_plan(..., batch=2)`). Per-crop
+  host wall falls from 14.1 to 7.8 ms against 6.0 ms on the DSP. Final
+  tensors are bit-identical on all 16 cases.
 - Added a [fast 1x1 post](docs/MERCURY.md#fast-1x1-post)
   (`build_teacher_link.py --pw-fast`, new image; existing images byte-identical
   and frozen in tests). It keeps the overflow flags in a register instead of

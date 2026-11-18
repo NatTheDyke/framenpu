@@ -408,6 +408,67 @@ Device ([fast post](../evidence/mercury-pw-fast-device.json), after a
 Bounds (worst 0.394), keypoint drift, controls, the 969 restoration audits and
 the arena hash are all unchanged. DSP-bound throughput is about 165 crops/s.
 
+## Host time: held HMX power and 2-crop batches
+
+With the DSP at 6.03 ms, host overhead dominated a request: 13.5 ms host
+wall per crop. Each merged frame now records its host phases: staging,
+readback, and the `device.py` submit marks. Every request used to power HMX
+on and off around itself. `power.start()` rehashes the Qualcomm image,
+uploads the sequencer program, locks the PLL and runs the power-on sequence;
+`close()` runs the power-off sequence, with a 1 ms sleep, and verifies the
+restored registers.
+
+Two harness options address this:
+
+- `--held-power` uses the existing session-held owner
+  (`Device._hold_power`, as the FrameTop runtime does). HMX is powered once
+  after the seal. Each request proves the held configuration read-only under
+  the gate, and the session releases it under the gate before the retire.
+  After a `RecoveryRequired`, it only unmaps and never gates clocks.
+- `--batch 2` runs two crops in one request
+  (`build_plan(..., batch=2)`): the merged sequence twice, 110 of 160
+  descriptors. The parameter images are shared, and each crop has its own
+  input and final-tensor window slots (about 270 KB more window). VTCM is
+  reused from crop to crop; the peak is unchanged, at 11,289 vectors. A
+  simulator test runs two different inputs and checks that each crop equals
+  its own batch-1 result. With different inputs, crop 1 can't pass by reading
+  crop 0's leftover VTCM. On the device, batch frame *i* runs cases *i* and
+  *i*+1, and each crop's final must equal its own case's qualify result.
+
+Host timing on the Frame is noisy: SteamVR is running and the governor is
+schedutil. Single frames vary by up to 5 ms, and one full run had every host
+phase 5–10x slower. So the timing comparison comes from short alternating
+runs (4 cases × 20 rounds, one with per-request power, then three pairs of
+batch 1 / batch 2 with held power,
+[percall](../evidence/mercury-host-ab-percall.json),
+[b1](../evidence/mercury-host-ab-b1-r1.json)/[b2](../evidence/mercury-host-ab-b2-r1.json)
+r1–r3):
+
+| Per crop | Per-request power | Held, batch 1 | Held, batch 2 |
+|---|---:|---:|---:|
+| **Host wall, median** | 14.06 ms | 8.87 ms | **7.80 ms** |
+| Host wall, min / p90 | 13.10 / 18.30 | 7.90 / 13.42 | 7.12 / 9.78 |
+| DSP body | 6.03 | 6.03 | 6.03 |
+| HMX power on + off (verify when held) | 4.39 + 1.49 | 0.16 | 0.08 |
+| Dispatch: publish-to-completion minus DSP wrapper time | 0.9 | 0.9 | 0.46 |
+| Gate claim + acknowledge (incl. harness audit) | 0.65 | 0.78 | 0.37 |
+| Staging (im2col + grid packing) | 0.31 | 0.59 | 0.54 |
+
+The full runs carry the correctness evidence
+([held, batch 1](../evidence/mercury-held-power-device.json),
+[batch 2](../evidence/mercury-batch2-device.json), after a
+[batch-2 pilot](../evidence/mercury-batch-pilot.json)). They use the same 16
+cases × 5 rounds on image `e7b06441`. Final tensors are bit-identical on
+16/16 cases to the per-request-power run, with the same bounds, keypoint
+drift and controls (96 stride-2 rejections at batch 2). Restoration audits
+pass (969 and 1,017), the arena hash is unchanged, and the DSP service is
+unchanged.
+
+Held power keeps the HMX clocks on for the life of the session, so a
+runtime must release them when tracking goes idle. A 2-crop request takes
+12.1 ms on the DSP and about 15.6 ms of host wall for both hands; two
+batch-1 requests take about 17.7 ms.
+
 ## Next steps
 
 - **Remaining 1x1 cost.** 3.64 ms. After the fast post, the largest items
@@ -417,11 +478,15 @@ the arena hash are all unchanged. DSP-bound throughput is about 165 crops/s.
   per-tile update causes the remaining wait. The parameter copy is about 900 KB
   and does not fit in VTCM next to the peak plan, so overlapping it with
   compute is the lever there.
-- **Host overhead** is now the larger share of a request: 13.5 ms wall
-  against 6.0 ms on the DSP.
+- **Host overhead** is now about 1.8 ms per crop at batch 2 with held power.
+  The remaining pieces are the dispatch wake and completion poll (about 0.9 ms
+  per request), the staging in NumPy (about 0.55 ms per crop) and the gate
+  claim and acknowledge. Part of the last is the harness audit, which a
+  runtime would not repeat on every request.
 - **Step 2c: heatmap heads on the DSP** (the two dense 3x3 convolutions and
-  the 2x2 transposed convolution). Then batch 2 crops per request and time
-  the stack's seam (`MercuryKeypoint.run`) end to end.
+  the 2x2 transposed convolution). Then time the stack's seam
+  (`MercuryKeypoint.run`) end to end, with held power and both hands per
+  request.
 - **Corpus.** Collect real Mercury tracking crops on the headset, using the
   stack's local-only `validate_mercury.py`. Do this before freezing accuracy
   ceilings; the affine crops here are only a numerical stand-in.
@@ -456,4 +521,5 @@ sudo python tests/hardware_mercury.py --run-on-device --jobs /tmp/mercury/jobs \
 # step 2b: the same, plus --prefix (pilot: --prefix --stop-after Conv_18 --max-cases 1)
 # direct stride 2: build with --stride2 --s2-even --s2-direct; compare final_sha256 per case
 # fast 1x1 post: add --pw-fast (timing breakdown: also --pw-profile, 1 case x 3 rounds)
+# host time: --held-power [--batch 2]; compare per-crop wall over alternating short runs
 ~~~

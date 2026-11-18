@@ -266,6 +266,67 @@ class MercuryLayoutTest(unittest.TestCase):
             self.assertEqual(stray, 0)
             np.testing.assert_array_equal(a, b)
 
+    def test_batch_plan_crops_independent(self):
+        """Two crops in one request: shared parameter images, own slots, and each
+        crop bit-identical to its batch-1 result (different inputs, so crop 1
+        cannot pass by reading crop 0's leftover VTCM)."""
+        import mercury_layout as ML
+        import teacher_resident_layout as RL
+
+        one = ML.build_plan(self.model, prefix=True)
+        two = ML.build_plan(self.model, prefix=True, batch=2)
+        self.assertEqual(two.descriptors, 2 * one.descriptors)
+        self.assertEqual(two.vtcm_peak, one.vtcm_peak)
+        self.assertEqual(two.plan.fixed, one.plan.fixed)
+        self.assertEqual(two.crop(0).where, one.where)
+        a, b = two.crops
+        self.assertFalse(set(a.values()) & set(b.values()))
+        for n in range(two.descriptors):
+            self.assertTrue(
+                RL.native_ok(struct.unpack_from("<32I", two.plan.table, 128 * n), s2_direct=0)
+            )
+        ins = []
+        for seed in (21, 22):
+            case, _ = synthetic_case(self.model, seed, hinted=seed % 2 == 0)
+            ins.append({ML.STEM_COLS: ML.stem_columns(case["image"]), ML.HINT: case["hint"]})
+        for direct in (False, True):
+            got = ML.simulate(two, ins, s2_direct=direct)
+            for k in range(2):
+                want, _ = ML.simulate(one, ins[k], s2_direct=direct)[ML.OUTPUT]
+                out, stray = got[k][ML.OUTPUT]
+                self.assertEqual(stray, 0)
+                np.testing.assert_array_equal(out, want)
+            self.assertFalse(np.array_equal(got[0][ML.OUTPUT][0], got[1][ML.OUTPUT][0]))
+        with self.assertRaises(ValueError):
+            ML.build_plan(self.model, prefix=True, batch=3)  # 165 descriptors
+        with self.assertRaises(ValueError):
+            ML.build_plan(self.model, "qualify", prefix=True, batch=2)
+
+    def test_batch_harness_flow_on_simulator(self):
+        import hardware_mercury as HM
+        import mercury_layout as ML
+
+        _bind()
+        cases = [synthetic_case(self.model, s)[0] for s in (31, 32)]
+        runner = SimRunner()
+        manifest = {
+            "cases": [
+                {"name": f"s{i}", "split": "synthetic", "hinted": True, "sha256": ""}
+                for i in range(2)
+            ]
+        }
+        orig = HM.load_case
+        HM.load_case = lambda c, entry: cases[int(entry["name"][1:])]
+        try:
+            rows, plans = HM.run(runner, self.model, None, manifest, 2, ML.LAST, True, None, 2)
+        finally:
+            HM.load_case = orig
+        self.assertEqual(plans["merged"]["batch"], 2)
+        self.assertEqual(rows["case01"]["batch_cases"], [1, 0])
+        self.assertTrue(all(r["outputs_equal_fp16_contract"] for r in rows.values()))
+        s = HM.summarize(rows, len(ML.build_plan(self.model, prefix=True).ops), 2)
+        self.assertEqual(s["batch"], 2)
+
     def test_direct_stride2_spill_check(self):
         """The direct build rejects an output plane too short for its zero-lane spill."""
         import mercury_layout as ML

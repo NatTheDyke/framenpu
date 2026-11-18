@@ -78,4 +78,14 @@ include evidence/mercury-pw-fast-pilot.json
 include evidence/mercury-pw-fast-device.json
 include evidence/mercury-pw-profile-before.json
 include evidence/mercury-pw-profile-after.json
+include evidence/mercury-batch-pilot.json
+include evidence/mercury-held-power-device.json
+include evidence/mercury-batch2-device.json
+include evidence/mercury-host-ab-percall.json
+include evidence/mercury-host-ab-b1-r1.json
+include evidence/mercury-host-ab-b1-r2.json
+include evidence/mercury-host-ab-b1-r3.json
+include evidence/mercury-host-ab-b2-r1.json
+include evidence/mercury-host-ab-b2-r2.json
+include evidence/mercury-host-ab-b2-r3.json
 include evidence/ncnn-cpu-baseline.json

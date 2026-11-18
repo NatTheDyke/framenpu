@@ -228,18 +228,32 @@ class MercuryPlan:
     host_parts: list  # composite parts the host stages into their parent's window slot
     composites: dict  # parent -> [(part, source)] for every composite of the network
     prefix: bool
+    crops: tuple = ()  # batch: one window map per crop (parameter images shared)
 
     def grid(self, name):
         return grid(self.shape[name])
+
+    @property
+    def batch(self):
+        return len(self.crops) or 1
+
+    def crop(self, k):
+        """The plan as seen by crop k of a batch: its own input/output window slots."""
+        return replace(self, where=self.crops[k]) if self.crops else self
 
     @property
     def needs_hint(self):
         return HINT in self.host_parts
 
 
-def build_plan(model, mode="merged", stop_after=LAST, start=None, prefix=False):
+def build_plan(model, mode="merged", stop_after=LAST, start=None, prefix=False, batch=1):
+    """batch > 1 (merged only): one request runs the merged sequence once per crop,
+    each crop with its own input and final-tensor slots; parameter images are
+    shared, and VTCM is reused from crop to crop."""
     if mode not in ("merged", "qualify"):
         raise ValueError(mode)
+    if batch < 1 or (batch > 1 and mode != "merged"):
+        raise ValueError("batch > 1 needs a merged plan")
     ops = device_ops(model, stop_after, start, prefix)
     final = ops[-1].output
     shape = shapes(model, prefix)
@@ -287,16 +301,20 @@ def build_plan(model, mode="merged", stop_after=LAST, start=None, prefix=False):
         cursor = RL._al(cursor + len(images[op.name][0]))
     stored = [final] if mode == "merged" else [op.output for op in ops]
     with_host = [par for par in free if any(src == "host" for _, src in comps[par])]
-    where = {}
-    for name in dict.fromkeys(external + with_host + stored):
-        if name in parent_of and parent_of[name] in with_host:
-            continue  # inside its parent's slot
-        cursor = RL._al(cursor, 4096)
-        where[name] = cursor
-        cursor += vec(name) * 128
-    for par in with_host:
-        for n, off in free[par].items():
-            where[n] = where[par] + 128 * off
+    crops = []
+    for _ in range(batch):
+        where = {}
+        for name in dict.fromkeys(external + with_host + stored):
+            if name in parent_of and parent_of[name] in with_host:
+                continue  # inside its parent's slot
+            cursor = RL._al(cursor, 4096)
+            where[name] = cursor
+            cursor += vec(name) * 128
+        for par in with_host:
+            for n, off in free[par].items():
+                where[n] = where[par] + 128 * off
+        crops.append(where)
+    where = crops[0]
     if cursor > T.WIN_HI:
         raise ValueError(f"window plan ends at {cursor:#x}")
 
@@ -306,11 +324,13 @@ def build_plan(model, mode="merged", stop_after=LAST, start=None, prefix=False):
     def words(*w):
         table.append(RL._words(*w))
 
+    cur = dict(where)  # the crop being emitted
+
     def load(name, to):
-        words(RL.KIND["load"], 0, 0, 0, 0, 0, 0, 0, 0, where[name], vec(name), 0, 0, 0, to)
+        words(RL.KIND["load"], 0, 0, 0, 0, 0, 0, 0, 0, cur[name], vec(name), 0, 0, 0, to)
 
     def store(name, frm):
-        words(RL.KIND["store"], 0, 0, 0, 0, 0, 0, 0, 0, where[name], vec(name), 0, 0, 0, frm)
+        words(RL.KIND["store"], 0, 0, 0, 0, 0, 0, 0, 0, cur[name], vec(name), 0, 0, 0, frm)
 
     def emit(op, at, vt):
         src = op.inputs[0]
@@ -374,40 +394,25 @@ def build_plan(model, mode="merged", stop_after=LAST, start=None, prefix=False):
         for i, op in enumerate(ops):
             for b in op.inputs:
                 last_use[key(b)] = i
-        vt, at = RL._Vtcm(), {}
-        for b in external:
-            at[b] = vt.take(vec(b))
-            load(b, at[b])
-        for i, op in enumerate(ops):
-            dst = op.output
-            par = parent_of.get(dst)
-            if par is not None:
-                if par not in at:
-                    at[par] = vt.take(vec(par), top=len(free[par]) > 2)
-                    for n, off in free[par].items():
-                        at[n] = at[par] + off
-            else:
-                later = [k for k in range(i + 1, len(ops)) if dst in ops[k].inputs]
-                at[dst] = vt.take(vec(dst), top=bool(later) and later[-1] > i + 1)
-            emit(op, at, vt)
-            if par is not None:
-                dev = [n for n, src in comps[par] if src == "device"]
-                if dst == dev[-1]:
-                    for n, src in comps[par]:
-                        if src == "host":
-                            load(n, at[n])
-            if dst == final:
-                store(final, at[final])
-            for b in set(op.inputs):
-                if last_use.get(key(b)) == i:
-                    k = key(b)
-                    if k in at:
-                        vt.give(at.pop(k), vec(k))
-                        for n in free.get(k, {}):
-                            at.pop(n, None)
-            k = key(dst)
-            if k not in last_use and k in at and (par is None or dst == final):
-                vt.give(at.pop(k), vec(k))
+        vt = RL._Vtcm()
+        for k in range(batch):
+            cur.clear()
+            cur.update(crops[k])
+            _merged_crop(
+                ops,
+                external,
+                free,
+                comps,
+                parent_of,
+                final,
+                last_use,
+                key,
+                vec,
+                vt,
+                load,
+                store,
+                emit,
+            )
         job = RL.Job("rs", first=0, end=len(table), ops=[op.name for op in ops], stores=[final])
         job.vtcm_peak = peak = vt.peak
         jobs.append(job)
@@ -430,8 +435,62 @@ def build_plan(model, mode="merged", stop_after=LAST, start=None, prefix=False):
     blob = b"".join(table)
     plan = RL.Plan(mode, jobs, blob, table_at, fixed, where, cursor, ops, shape)
     return MercuryPlan(
-        mode, plan, ops, final, where, shape, peak, len(table), external, host_parts, comps, prefix
+        mode,
+        plan,
+        ops,
+        final,
+        where,
+        shape,
+        peak,
+        len(table),
+        external,
+        host_parts,
+        comps,
+        prefix,
+        tuple(crops) if batch > 1 else (),
     )
+
+
+def _merged_crop(
+    ops, external, free, comps, parent_of, final, last_use, key, vec, vt, load, store, emit
+):
+    """One crop of a merged request; every VTCM block it takes is given back."""
+    at = {}
+    for b in external:
+        at[b] = vt.take(vec(b))
+        load(b, at[b])
+    for i, op in enumerate(ops):
+        dst = op.output
+        par = parent_of.get(dst)
+        if par is not None:
+            if par not in at:
+                at[par] = vt.take(vec(par), top=len(free[par]) > 2)
+                for n, off in free[par].items():
+                    at[n] = at[par] + off
+        else:
+            later = [k for k in range(i + 1, len(ops)) if dst in ops[k].inputs]
+            at[dst] = vt.take(vec(dst), top=bool(later) and later[-1] > i + 1)
+        emit(op, at, vt)
+        if par is not None:
+            dev = [n for n, src in comps[par] if src == "device"]
+            if dst == dev[-1]:
+                for n, src in comps[par]:
+                    if src == "host":
+                        load(n, at[n])
+        if dst == final:
+            store(final, at[final])
+        for b in set(op.inputs):
+            if last_use.get(key(b)) == i:
+                k = key(b)
+                if k in at:
+                    vt.give(at.pop(k), vec(k))
+                    for n in free.get(k, {}):
+                        at.pop(n, None)
+        k = key(dst)
+        if k not in last_use and k in at and (par is None or dst == final):
+            vt.give(at.pop(k), vec(k))
+    if at:
+        raise ValueError(f"crop leaves VTCM blocks held: {sorted(at)}")
 
 
 def qualify_segments(model, stop_after=LAST, prefix=False):
@@ -520,7 +579,8 @@ def read_tensor(mplan, get, name):
 
 def simulate(mplan, tensors, s2_direct=False):
     """Lane-level simulation; returns {stored tensor: (array, stray)}.
-    s2_direct models the RS_S2_DIRECT image's stride-2 data path."""
+    s2_direct models the RS_S2_DIRECT image's stride-2 data path. For a batch
+    plan, tensors is one dict per crop and the result one dict per crop."""
     window = bytearray(T.WIN_HI - T.WIN_LO)
 
     def put(off, data):
@@ -531,9 +591,17 @@ def simulate(mplan, tensors, s2_direct=False):
 
     for off, data in RL.setup_writes(mplan.plan).items():
         put(off, data)
-    stage_inputs(mplan, put, tensors)
+    crops = tensors if mplan.crops else [tensors]
+    if len(crops) != mplan.batch:
+        raise ValueError("one tensor set per crop")
+    for k, ts in enumerate(crops):
+        stage_inputs(mplan.crop(k), put, ts)
     RL.simulate(mplan.plan, window, s2_phase=S2_PHASE, s2_direct=s2_direct)
-    return {b: read_tensor(mplan, get, b) for job in mplan.plan.jobs for b in job.stores}
+    outs = [
+        {b: read_tensor(mplan.crop(k), get, b) for job in mplan.plan.jobs for b in job.stores}
+        for k in range(mplan.batch)
+    ]
+    return outs if mplan.crops else outs[0]
 
 
 # ---------------------------------------------------------------- FP16 bounds
