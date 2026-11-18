@@ -569,15 +569,94 @@ Group 8 is the qualified image ([full run](../evidence/mercury-pw-group-device.j
 step on the way, and its report isn't kept. Bounds (worst 0.394), keypoint
 drift, the 969 restoration audits and the arena hash are unchanged.
 
+## One to three crops per request
+
+`--replay` on `build_teacher_link.py` adds crop replay to the grouped-1x1
+image (`d7a78a81…`, 6,960 B; `RS_REPLAY`). Existing images and the loader
+remain byte-identical, with hashes frozen in `tests/test_teacher_link.py`.
+The whole network still uses **55 descriptors**, replayed once for each crop.
+This avoids the 160-descriptor table limit that an expanded 3-crop table
+would exceed (165 descriptors). The 20 ms native budget covers the entire
+request, including all crops.
+
+**Three is a maximum.** The Mercury harness reads `replay` from `link.json`;
+`--batch 3` reserves slots for up to three crops but sends 1, 2 or 3 as
+available, with no padding. Its test schedule cycles the count as
+`1 + (round + case_index) % batch`, so smaller requests also follow larger
+ones. Each crop gets the next case cyclically, starting with the current
+case. Every crop of every request must match its own per-op qualification
+result. The lane simulator also checks different inputs with VTCM carried
+from one crop to the next.
+
+`mercury_layout.build_plan(..., batch=3, replay=True, pw_group=8)` emits all
+three crop sequences first and verifies that their VTCM layouts and compute
+descriptors are identical, while every load/store window address differs by
+one fixed crop stride. It then retains only crop 0's table. Parameter images
+are shared. The full-network stride is `0x43000` bytes; window end is
+`0x1c3e800`; peak VTCM remains 11,289 vectors.
+
+The request and completion fields are:
+
+| Field (32-bit words) | Replay meaning |
+|---|---|
+| Input 0..2 | Existing magic, table address, descriptor count |
+| Input 3 | Actual crop count, 1..3 (0 retains the one-crop convention) |
+| Input 4 | Crop stride in bytes, a 4 KiB multiple; zero for one crop |
+| Metadata 2 | Total descriptors executed: crop count × table range length |
+| Metadata 48..50 | Cumulative end ticks per crop when count > 1; otherwise zero |
+| Metadata 96 onward | Cumulative descriptor end ticks for the **last** crop |
+
+Before validating each load/store descriptor, the kernel adds
+`crop_index * stride` to its window address. It bounds the stride before
+multiplication and checks every adjusted descriptor against the existing
+window. Compute descriptors and parameter addresses stay shared. The
+harness checks all crop ends are increasing, the last end equals the last
+descriptor tick, the last crop's descriptors follow the preceding crop end,
+and the total stays within the wrapper time and native budget. Per-crop
+body durations come from consecutive crop-end differences. The report keeps
+these as `crop_end_ticks` and `crop_body_ms`; `op_us` describes the last
+crop, identified by `op_us_crop_index`.
+
+Device evidence: [pilot through Conv_18](../evidence/mercury-replay-pilot.json)
+(3 cases × 4 rounds), then the
+[full network](../evidence/mercury-replay-device.json) (16 cases × 5 rounds).
+The full run sent 80 requests carrying 159 crops. Timing excludes each
+case's first request (64 requests, 128 crops remain):
+
+| Crops in request | Timed requests | DSP body, median | DSP per crop | Host wall per request | Host wall per crop |
+|---|---:|---:|---:|---:|---:|
+| 1 | 21 | 4.98 ms | 4.98 ms | 9.38 ms | 9.38 ms |
+| 2 | 22 | 9.95 ms | 4.97 ms | 15.04 ms | 7.52 ms |
+| 3 | 21 | 14.92 ms | 4.97 ms | 21.44 ms | 7.15 ms |
+
+The longest request body was 14.94 ms. Replay keeps DSP time per crop near
+the previous 4.92 ms; batching amortizes host costs. Host wall includes
+staging, submit and final-tensor readback, and excludes the host heads
+(2.09 ms median per case here). As with the earlier held-power runs, these
+host times are noisy observations on the running Frame, not an end-to-end
+Mercury tracking benchmark.
+
+All crops matched qualification bit for bit; all 16 case final hashes match
+the previous grouped-1x1 evidence. Worst bound ratio remains 0.394, worst
+joint drift versus FP32 remains 0.185 px median / 0.669 px max, with no
+`is_hand` flips. New controls natively reject **4 crops**, a **misaligned
+stride**, and an **aligned stride that moves a later crop outside the
+window**. The last passes the stride header check and exercises adjusted
+descriptor validation. A clean 3-crop request passes after the controls.
+The guarded fault, descriptor and 48 stride-2 field rejections, second-seal
+and unsealed-request controls also pass. All 972 restoration audits pass;
+window, reservation, whole-arena hash, firmware/power state and DSP service
+are unchanged.
+
 ## Next steps
 
 - **Remaining DSP time** (4.92 ms per crop): 1x1 3.18 ms, of which HMX
   itself is about 1.45 and parameter copies about 0.72; depthwise 0.98;
   stride 2 0.59; activation load/store 0.17. Hiding the posts and gathers
   behind HMX would need a second hardware thread for the HVX work.
-- **Batch of 4.** 4 × 4.92 ms fits the 20 ms budget with little margin.
-  It still needs either fewer descriptors per crop (55 now, cap 160) or a
-  request that replays one crop's descriptors with per-crop address offsets.
+- **Request scheduling.** Integrate replay with actual groups of 1..3 crops
+  at the Mercury call site. Three is the maximum; submit fewer crops as
+  available, without padding or waiting for a third crop.
 - **Host overhead** is now about 1.8 ms per crop at batch 2 with held power.
   The remaining pieces are the dispatch wake and completion poll (about 0.9 ms
   per request), the staging in NumPy (about 0.55 ms per crop) and the gate
@@ -624,4 +703,15 @@ sudo python tests/hardware_mercury.py --run-on-device --jobs /tmp/mercury/jobs \
 # host time: --held-power [--batch 2]; compare per-crop wall over alternating short runs
 # fast depthwise: add --dw-fast to the build
 # grouped 1x1: add --pw-group 8 to the build
+# replay: build the current image, then deploy the sources and jobs to the Frame
+python tools/build_teacher_link.py --stride2 --s2-even --s2-direct --pw-fast \
+  --dw-fast --pw-group 8 --replay --output /tmp/mercury/jobs-replay
+# Frame root: pilot first (3 cases x 4 rounds), then full (omit --stop-after/--max-cases)
+sudo python tests/hardware_mercury.py --run-on-device --jobs /tmp/mercury/jobs-replay \
+  --model /tmp/mercury/grayscale_keypoint_jan18.onnx --cases /tmp/mercury/cases \
+  --prefix --held-power --batch 3 --stop-after Conv_18 --max-cases 3 --rounds 4 \
+  --output replay-pilot.json
+sudo python tests/hardware_mercury.py --run-on-device --jobs /tmp/mercury/jobs-replay \
+  --model /tmp/mercury/grayscale_keypoint_jan18.onnx --cases /tmp/mercury/cases \
+  --prefix --held-power --batch 3 --rounds 5 --output replay-device.json
 ~~~

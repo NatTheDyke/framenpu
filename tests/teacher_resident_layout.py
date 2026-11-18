@@ -103,6 +103,20 @@ class Plan:
     end: int  # first window byte past the plan
     ops: list
     shape_of: dict
+    max_crops: int = 1  # RS_REPLAY: a request may run 1..max_crops crops of the table
+    crop_stride: int = 0  # bytes between crop k's and crop k+1's load/store addresses
+
+
+MAX_CROPS = 3  # RS_MAX_CROPS
+
+
+def replay_row(row, k, stride):
+    """A descriptor as the RS_REPLAY kernel runs it for crop k: load and store
+    window addresses (word 9) moved by k * stride, everything else unchanged."""
+    row = list(row)
+    if row[0] in (KIND["load"], KIND["store"]) and row[9] <= T.WIN_HI:
+        row[9] += k * stride
+    return row
 
 
 class _Vtcm:
@@ -407,11 +421,17 @@ def setup_writes(plan):
     return {plan.table_at: plan.table} | dict(plan.fixed)
 
 
-def payload(plan):
+def payload(plan, crops=1):
+    """The request words; crops > 1 (an RS_REPLAY plan) adds words 3, 4."""
     import numpy as np
 
+    most = getattr(plan, "max_crops", 1)  # plan stand-ins without the field: one crop
+    if not 1 <= crops <= most:
+        raise ValueError(f"crops must be 1..{most}")
     w = np.zeros(32, "<u4")
     w[:3] = [RS_MAGIC, plan.table_at, len(plan.table) // 128]
+    if crops > 1:
+        w[3:5] = [crops, plan.crop_stride]
     return w.tobytes()
 
 
@@ -470,14 +490,16 @@ def _s2_direct(row, vt, phase):
                 words[q : q + 32] = v
 
 
-def simulate(plan, window, *, s2_phase=1, s2_direct=False):
+def simulate(plan, window, *, s2_phase=1, s2_direct=False, crops=1):
     """Run a plan against `window` (bytearray covering WIN_LO..WIN_HI) with the
     kernel's addressing; VTCM starts each resident job filled with NaN. The
     caller performs setup_writes(plan) first, exactly as the harness does; the
     table is read back from the window for every job. s2_phase 1 is the
     teacher's (2y+1, 2x+1) decimation; 0 is the RS_S2_EVEN (Mercury) build.
     s2_direct models an RS_S2_DIRECT build's stride-2 data path word by word
-    (_s2_direct); its arithmetic is the stride-1 path's, so results must match."""
+    (_s2_direct); its arithmetic is the stride-1 path's, so results must match.
+    crops > 1 runs an RS_REPLAY plan's rs jobs once per crop, as the kernel does:
+    replay_row addressing, and VTCM carried from crop to crop (not refilled)."""
     import numpy as np
     from hmx_block_layout import unpack
 
@@ -508,8 +530,15 @@ def simulate(plan, window, *, s2_phase=1, s2_direct=False):
             ).items():
                 put(off, data)
             continue
+        if not 1 <= crops <= plan.max_crops:
+            raise ValueError(f"crops must be 1..{plan.max_crops}")
         vt = np.full((SPAN, 32, 2), np.nan, np.float16)
-        for row in tab[job.first : job.end]:
+        rows = [
+            np.asarray(replay_row(r, k, plan.crop_stride), np.uint32) if k else r
+            for k in range(crops)
+            for r in tab[job.first : job.end]
+        ]
+        for row in rows:
             if row[0] == 6:
                 import teacher_heads_layout as H
 

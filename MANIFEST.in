@@ -93,3 +93,5 @@ include evidence/mercury-dw-fast-device.json
 include evidence/mercury-pw-group-pilot.json
 include evidence/mercury-pw-group-device.json
 include evidence/ncnn-cpu-baseline.json
+include evidence/mercury-replay-pilot.json
+include evidence/mercury-replay-device.json

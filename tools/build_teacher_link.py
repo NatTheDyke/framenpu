@@ -11,6 +11,8 @@ in tl_rs only; --dw-blocks 4 restores four-block coefficient sharing there.
 --s2-even (Mercury, with --stride2 only) keeps the even stride-2 phase.
 --dw-fast (stride2, 2 dw blocks) unrolls the 3x3 depthwise taps, inlines the
 post and holds the overflow flags in a register per op (same arithmetic).
+--replay (stride2) runs up to 3 crops per request from one crop's descriptors
+(request words 3, 4: crop count, crop stride).
 --pw-group N (with --pw-fast) runs the 1x1 HMX tiles of N column blocks
 before their posts; 1x1 scratch grows to N * (nk + no) * 16 vectors.
 --pw-fast (stride2 only) posts each 1x1 HMX tile with hoisted fields and
@@ -110,7 +112,10 @@ def build(
     pw_fast=False,
     pw_group=1,
     dw_fast=False,
+    replay=False,
 ):
+    if replay and (not stride2 or heads or stem):
+        raise ValueError("crop replay is a stride2 build without heads/stem")
     if dw_fast and (not stride2 or heads or stem or dw_blocks != 2):
         raise ValueError("the fast depthwise is the stride2, 2-block build")
     if pw_group != 1 and (not pw_fast or pw_group not in (2, 4, 8)):
@@ -215,6 +220,7 @@ def build(
             *(["-DRS_PW_FAST"] if pw_fast else []),
             *([f"-DRS_PW_GROUP={pw_group}"] if pw_group > 1 else []),
             *(["-DRS_DW_FAST"] if dw_fast else []),
+            *(["-DRS_REPLAY"] if replay else []),
         ),
         compile_(folder, 2, TESTS / "teacher_dw_probe.c", "-Dframe_job=tl_dw"),
         compile_(folder, 3, SDK / "hmx.S"),
@@ -243,6 +249,7 @@ def build(
         "pw_fast": pw_fast,
         "pw_group": pw_group,
         "dw_fast": dw_fast,
+        "replay": replay,
         "loader": {"bytes": len(loader.code), "sha256": _sha(loader.code), "name": LOADER_NAME},
         "linked": {"bytes": len(image), "sha256": _sha(image)},
         "reservation": {"code": f"{CODE:#x}", "bytes": CODE_BYTES, "seal_vector": f"{SEAL_AT:#x}"},
@@ -275,6 +282,9 @@ def main():
     p.add_argument("--pw-fast", action="store_true", help="1x1 post with register-held flags")
     p.add_argument("--pw-group", type=int, default=1, help="1x1 column blocks per HMX group")
     p.add_argument("--dw-fast", action="store_true", help="unrolled depthwise, inlined post")
+    p.add_argument(
+        "--replay", action="store_true", help="up to 3 crops per request, one descriptor table"
+    )
     args = p.parse_args()
     r = build(
         args.output,
@@ -291,6 +301,7 @@ def main():
         pw_fast=args.pw_fast,
         pw_group=args.pw_group,
         dw_fast=args.dw_fast,
+        replay=args.replay,
     )
     print(
         json.dumps(

@@ -35,8 +35,10 @@ Each merged frame records its host phases (staging, request with the
 device.py submit marks, readback). --held-power powers HMX once for the
 session (device._hold_power, verified read-only before every request,
 released under the gate before the retire) instead of per request.
---batch 2 runs two crops per merged request (cases i and i+1 in crops 0 and
-1); each crop's final must equal its own case's qualify result.
+--batch 2 runs two crops per merged request. With an RS_REPLAY image, --batch
+is a maximum (up to 3): requests mix 1..batch crops across rounds, with no
+padding. Each crop must equal its own qualify result; crop-end ticks bound
+the last crop's descriptor times and give each crop's body time.
 --stop-after LAYER truncates both phases (early-layer pilot, no heads).
 Protections as tests/hardware_teacher_link.py: lease, refusal record, audited
 direct dispatch, no retry/recovery/restart, window and reservation restored
@@ -57,7 +59,7 @@ import time
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "src"), str(ROOT / "tests"), str(ROOT / "tools")]
 from framenpu import Device
-from framenpu import RecoveryRequired
+from framenpu import RecoveryRequired, JobFailed
 from framenpu.resident_gemm import _lease, RECORD
 from framenpu.resident_landmark import CONTROL, ARENA_START, ARENA_END
 from hardware_hmx import PowerSnapshot, audited_device
@@ -116,70 +118,122 @@ class _SubmitHooks:
 class MercuryRunner(HL.LinkRunner):
     """LinkRunner's seal/admin/linked submit, without the teacher plans."""
 
-    def __init__(self, dev, mem, loader, image, profile=False):
+    def __init__(self, dev, mem, loader, image, profile=False, replay=False):
         self.dev, self.mem = _SubmitHooks(dev, self), mem
         self.held_power, self.last_phases = None, None
         self.loader, self.image = loader, image
         self.reservation = image + bytes(HL.CODE_BYTES - len(image))  # zero seal vector
         self.sealed = False
         self.stride2, self.split_after, self.dw_blocks = True, None, 2
-        self.profile = profile
+        self.profile, self.replay = profile, replay
 
-    def submit(self, plan, job, *, fault=False, reject=False, linked=False, refused=False):
-        if not self.profile or not linked or fault or reject or refused:
+    def submit(
+        self,
+        plan,
+        job,
+        *,
+        fault=False,
+        reject=False,
+        linked=False,
+        refused=False,
+        crops=1,
+        replay_words=None,
+    ):
+        if not linked or not (self.profile or self.replay):
+            if crops != 1 or replay_words is not None:
+                raise ValueError("crop replay needs an RS_REPLAY linked image")
             return super().submit(
                 plan, job, fault=fault, reject=reject, linked=linked, refused=refused
             )
-        return self._profiled(plan, job)
-
-    def _profiled(self, plan, job):
-        """LinkRunner's linked resident submit for an RS_PW_PROFILE image: meta words
-        3..11 carry the 1x1 phase tick totals; every other check is unchanged."""
+        if replay_words is not None and not (self.replay and reject):
+            raise ValueError("raw replay words are rejection controls only")
         for off, data in job.staged.items():
             self.put(off, data)
-        sealed = self.sealed
+        data = RL.payload(plan, crops)
+        if replay_words is not None:
+            data = bytearray(data)
+            struct.pack_into("<2I", data, 12, *replay_words)
+            data = bytes(data)
+        sealed, seen = self.sealed, []
 
         def validate(result):
-            HL.linked_completion(result, len(self.image), output_bytes=T.META_BYTES)
+            HL.linked_completion(
+                result,
+                len(self.image),
+                output_bytes=T.META_BYTES,
+                fault=fault,
+                reject=reject or refused,
+            )
             self._check_reservation(sealed)
+            seen.append(result)
 
         t0 = time.perf_counter()
-        res = self.dev._submit(
-            self.loader,
-            RL.payload(plan),
-            opcode=RL.RS_OPCODE,
-            params=(1, job.first, job.end, 0, 0, 0),
-            output_size=T.META_BYTES,
-            use_direct=True,
-            _completion_validator=validate,
-            _prepare=lambda t: self._check_reservation(sealed),
-        )
+        try:
+            res = self.dev._submit(
+                self.loader,
+                data,
+                opcode=RL.RS_OPCODE,
+                params=(1, job.first, job.end, 0, 0, int(fault)),
+                output_size=T.META_BYTES,
+                use_direct=True,
+                _completion_validator=validate,
+                _prepare=lambda t: self._check_reservation(sealed),
+            )
+        except JobFailed:
+            if (
+                not seen
+                or not (fault or reject or refused)
+                or seen[0].workers[0][2] != (2 if fault else 1)
+            ):
+                raise
+            return None
         wall = time.perf_counter() - t0
+        if fault or reject or refused:
+            raise ValueError("expected fault/rejection missing")
+        return self._resident_metadata(plan, job, res, wall, crops)
+
+    def _resident_metadata(self, plan, job, res, wall, crops):
+        """Replay keeps the last crop's cumulative descriptor ticks in 96..255
+        and each crop's cumulative end in 48..50 (zero for a one-crop request).
+        Validate boundaries before subtracting the preceding crop's end."""
         m = struct.unpack_from("<256I", res.output)
         ref = res.kernel_reference_ticks
         n = job.end - job.first
         ticks = list(m[96 : 96 + n])
+        ends = list(m[48 : 48 + crops]) if crops > 1 else [ticks[-1]]
+        base = ends[-2] if crops > 1 else 0
         if (
             not HL.IMAGE_CACHED <= m[1] < HL.IMAGE_CACHED + len(self.image)
             or any(m[64:96])
             or m[0] != RL.RS_MAGIC
-            or m[2] != n
-            or any(m[12:64])
+            or m[2] != n * crops
+            or (any(m[3:12]) if not self.profile else sum(m[3:12]) > ticks[-1])
+            or any(m[12:48])
+            or any(m[48 + crops : 64] if crops > 1 else m[48:64])
             or any(m[96 + n :])
             or any(b < a for a, b in zip(ticks, ticks[1:]))
-            or not 0 < ticks[-1] <= ref
-            or sum(m[3:12]) > ticks[-1]
+            or any(b <= a for a, b in zip([0] + ends, ends))
+            or not base < ticks[0] <= ticks[-1] == ends[-1] <= min(ref, 384000)
         ):
-            raise ValueError(f"{job.ops}: profiled resident metadata differs")
-        per = [b - a for a, b in zip([0] + ticks, ticks)]
-        return {
+            raise ValueError(f"{job.ops}: resident metadata/crop boundaries/budget differs")
+        per = [b - a for a, b in zip([base] + ticks, ticks)]
+        row = {
             "kind": "rs",
             "wall_ms": wall * 1e3,
             "wrapper_ms": ref / 19200,
             "body_ms": ticks[-1] / 19200,
             "op_us": [x / 19.2 for x in per],
-            "pw_profile_us": dict(zip(PW_BUCKETS, (x / 19.2 for x in m[3:12]))),
         }
+        if self.replay:
+            row |= {
+                "crops": crops,
+                "crop_end_ticks": ends,
+                "crop_body_ms": [b / 19200 - a / 19200 for a, b in zip([0] + ends, ends)],
+                "op_us_crop_index": crops - 1,
+            }
+        if self.profile:
+            row["pw_profile_us"] = dict(zip(PW_BUCKETS, (x / 19.2 for x in m[3:12])))
+        return row
 
     def get(self, off, n):
         return bytes(self.mem[off : off + n])
@@ -267,18 +321,18 @@ def qualify(runner, model, segments, case, dump=None):
 
 
 def frame(runner, merged, cases):
-    """One merged request over len(cases) == merged.batch crops; returns
+    """One merged request over 1..merged.batch crops on replay; returns
     (request row, final bytes per crop, host wall ms)."""
-    if len(cases) != merged.batch:
-        raise ValueError("one case per crop")
+    count = merged.table_crops(len(cases))
     t0 = time.perf_counter()
     for k, case in enumerate(cases):
         ML.stage_inputs(merged.crop(k), runner.put, host_inputs(case, merged.prefix))
     t1 = time.perf_counter()
-    row = runner.request(merged, merged.plan.jobs[0])
+    row = runner.request(merged, merged.plan.jobs[0], **({"crops": count} if merged.replay else {}))
     t2 = time.perf_counter()
-    finals = [runner.raw(merged.crop(k), merged.final) for k in range(merged.batch)]
+    finals = [runner.raw(merged.crop(k), merged.final) for k in range(count)]
     t3 = time.perf_counter()
+    row["crops"] = count
     row["host_ms"] = {
         "stage": (t1 - t0) * 1e3,
         "request": (t2 - t1) * 1e3,
@@ -326,6 +380,17 @@ def controls(runner, merged, case, expect):
             runner.request(merged, rs, reject=True)
             count += 1
     runner.install(merged)
+    replay_controls = {}
+    if merged.replay:
+        # The aligned stride passes the header bound, but crop 2's window
+        # addresses leave WIN_HI. This exercises shifted descriptor validation.
+        for name, words in {
+            "four_crops": (4, plan.crop_stride),
+            "misaligned_stride": (2, plan.crop_stride + 1),
+            "out_of_window_stride": (3, (T.WIN_HI - T.WIN_LO) // 2),
+        }.items():
+            runner.request(merged, rs, reject=True, replay_words=words)
+            replay_controls[name] = True
     runner.admin(7, reject=True)  # already sealed
     _, finals, _ = frame(runner, merged, [case] * merged.batch)
     if any(f != expect for f in finals):
@@ -336,6 +401,7 @@ def controls(runner, merged, case, expect):
         "stride2_descriptor_rejections": count,
         "second_seal_refused": 1,
         "clean_after_controls": True,
+        **({"replay_rejections": replay_controls} if merged.replay else {}),
     }
 
 
@@ -350,6 +416,7 @@ def run(
     dump=None,
     batch=1,
     pw_group=1,
+    replay=False,
 ):
     """Phase A qualifies every case; phase B then runs the merged frames. With
     batch > 1, case i's frames put cases i, i+1, ... (cyclic) into the crops of one
@@ -359,7 +426,7 @@ def run(
 
     segments = ML.qualify_segments(model, stop_after, prefix, pw_group=pw_group)
     merged = ML.build_plan(
-        model, "merged", stop_after, prefix=prefix, batch=batch, pw_group=pw_group
+        model, "merged", stop_after, prefix=prefix, batch=batch, pw_group=pw_group, replay=replay
     )
     full = merged.final == ML.OUTPUT
     contract = "full" if prefix else ""  # FP16 contract with / without the FP32 host prefix
@@ -390,19 +457,22 @@ def run(
         runner.install(merged)  # setup, excluded from frame timing
         frames = []
         for r in range(rounds):
-            req, finals, wall = frame(runner, merged, [loaded[g] for g in group])
-            for k, (g, fin) in enumerate(zip(group, finals)):
+            count = 1 + (r + i) % batch if replay else batch
+            actual = group[:count]
+            req, finals, wall = frame(runner, merged, [loaded[g] for g in actual])
+            for k, (g, fin) in enumerate(zip(actual, finals)):
                 if fin != raws[g]:
                     raise ValueError(
                         f"{entry['name']} round {r} crop {k}: merged final differs from qualify"
                     )
-            frames.append(req | {"host_wall_ms": wall})
+            frames.append(req | {"host_wall_ms": wall, "batch_cases": actual})
             row["final_sha256"] = hashlib.sha256(finals[0]).hexdigest()  # A/B across images
             print(
                 json.dumps(
                     {
                         "case": i,
                         "round": r,
+                        "crops": count,
                         "wrapper_ms": req["wrapper_ms"],
                         "body_ms": req["body_ms"],
                         "host_wall_ms": wall,
@@ -427,6 +497,8 @@ def run(
     plans = {
         "merged": {
             "batch": merged.batch,
+            "replay": merged.replay,
+            "crop_stride": merged.plan.crop_stride,
             "descriptors": merged.descriptors,
             "vtcm_peak_vectors": merged.vtcm_peak,
             "window_end": f"{merged.plan.end:#x}",
@@ -449,7 +521,9 @@ def summarize(crops, merged_ops, batch=1):
     import numpy as np
 
     rows = list(crops.values())
-    body = [f["body_ms"] for r in rows for f in r["frames"][1:]]
+    frames = [f for r in rows for f in r["frames"][1:]]
+    counts = [f.get("crops", batch) for f in frames]
+    body = [f["body_ms"] for f in frames]
     wrap = [f["wrapper_ms"] for r in rows for f in r["frames"][1:]]
     wall = [f["host_wall_ms"] for r in rows for f in r["frames"][1:]]
     per_op = np.median([f["op_us"] for r in rows for f in r["frames"][1:]], axis=0)
@@ -468,10 +542,28 @@ def summarize(crops, merged_ops, batch=1):
         "wrapper_ms_median": float(np.median(wrap)),
         "host_wall_ms_median": float(np.median(wall)),
         "batch": batch,
-        "body_ms_per_crop_median": float(np.median(body)) / batch,
-        "host_wall_ms_per_crop_median": float(np.median(wall)) / batch,
+        "body_ms_per_crop_median": float(np.median([v / n for v, n in zip(body, counts)])),
+        "host_wall_ms_per_crop_median": float(np.median([v / n for v, n in zip(wall, counts)])),
         "descriptor_us_median": [round(float(v), 2) for v in per_op],
         "ops": merged_ops,
+        "by_crop_count": {
+            str(n): {
+                "requests": len(fs),
+                "body_ms_median": float(np.median([f["body_ms"] for f in fs])),
+                "body_ms_per_crop_median": float(np.median([f["body_ms"] / n for f in fs])),
+                "crop_body_ms_median": [
+                    float(np.median([f["crop_body_ms"][k] for f in fs])) for k in range(n)
+                ]
+                if "crop_body_ms" in fs[0]
+                else None,
+                "host_wall_ms_median": float(np.median([f["host_wall_ms"] for f in fs])),
+                "host_wall_ms_per_crop_median": float(
+                    np.median([f["host_wall_ms"] / n for f in fs])
+                ),
+            }
+            for n in sorted(set(counts))
+            for fs in [[f for f in frames if f.get("crops", batch) == n]]
+        },
     }
     if "vs_fp32" in rows[0]:
         w = [r["vs_fp32"]["worst_joint_px"] for r in rows]
@@ -501,7 +593,12 @@ def main():
     p.add_argument("--max-cases", type=int, default=0, help="first N cases only (0 = all)")
     p.add_argument("--prefix", action="store_true", help="step 2b: Conv_0 .. on the DSP too")
     p.add_argument("--dump", type=Path, help="private directory for bound-failure tensors")
-    p.add_argument("--batch", type=int, default=1, help="crops per merged request (1 or 2)")
+    p.add_argument(
+        "--batch",
+        type=int,
+        default=1,
+        help="crops per request; replay image: maximum, 1..3, mixed across rounds",
+    )
     p.add_argument(
         "--held-power",
         action="store_true",
@@ -510,8 +607,6 @@ def main():
     args = p.parse_args()
     if not args.run_on_device or os.geteuid() != 0 or not 2 <= args.rounds <= 20:
         p.error("Frame root, --run-on-device and rounds in 2..20 required")
-    if args.batch not in (1, 2):
-        p.error("--batch is 1 or 2 (160 descriptors per request)")
     loader_job, image, link_record = HL.load_link(args.jobs)
     if (
         not link_record.get("stride2")
@@ -521,6 +616,9 @@ def main():
         or link_record.get("dw_blocks", 2) != 2
     ):
         p.error("--jobs must be a --stride2 --s2-even linked build without heads/stem")
+    replay = bool(link_record.get("replay"))
+    if not 1 <= args.batch <= (RL.MAX_CROPS if replay else 2):
+        p.error("--batch is 1..3 for a replay image, otherwise 1 or 2")
     s2_direct = bool(link_record.get("s2_direct"))
     profile = bool(link_record.get("pw_profile"))
     pw_group = int(link_record.get("pw_group", 1))  # the build's 1x1 scratch layout
@@ -539,12 +637,18 @@ def main():
             prefix=args.prefix,
             batch=args.batch,
             pw_group=pw_group,
+            replay=replay,
         )
     ] + list(ML.qualify_segments(model, args.stop_after, args.prefix, pw_group=pw_group)):
         for n in range(len(mp.plan.table) // 128):
             row = struct.unpack_from("<32I", mp.plan.table, 128 * n)
-            if not RL.native_ok(
-                row, s2_direct=ML.S2_PHASE if s2_direct else None, pw_group=pw_group
+            if any(
+                not RL.native_ok(
+                    RL.replay_row(row, k, mp.plan.crop_stride),
+                    s2_direct=ML.S2_PHASE if s2_direct else None,
+                    pw_group=pw_group,
+                )
+                for k in range(mp.plan.max_crops)
             ):
                 p.error(f"plan descriptor {n} would be rejected by this build")
     if args.prefix and "image" not in load_case(args.cases, manifest["cases"][0]):
@@ -560,6 +664,7 @@ def main():
         "pw_fast": bool(link_record.get("pw_fast")),
         "held_power": args.held_power,
         "batch": args.batch,
+        "replay": replay,
         "pw_group": pw_group,
         "stop_after": args.stop_after,
         "builds": {"loader": link_record["loader"], "linked": link_record["linked"]},
@@ -590,7 +695,7 @@ def main():
                 try:
                     with audited_device(power, report["audits"])(dispatch="direct") as dev:
                         runner = MercuryRunner(
-                            dev, dev._transport.memory, loader_job, image, profile
+                            dev, dev._transport.memory, loader_job, image, profile, replay
                         )
                         try:
                             report["seal_wrapper_ms"] = runner.seal()
@@ -607,6 +712,7 @@ def main():
                                 args.dump,
                                 args.batch,
                                 pw_group,
+                                replay,
                             )
                         except RecoveryRequired:
                             unsafe = True
@@ -630,6 +736,7 @@ def main():
                             prefix=args.prefix,
                             batch=args.batch,
                             pw_group=pw_group,
+                            replay=replay,
                         )
                         runner.install(merged)
                         runner.request(merged, merged.plan.jobs[0], refused=True)

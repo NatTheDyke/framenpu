@@ -81,7 +81,7 @@ class TeacherLinkBuild(unittest.TestCase):
     def test_mercury_images_frozen(self):
         # Device-qualified Mercury images (evidence/mercury-*.json): even-phase
         # stride 2, direct stride 2, direct stride 2 with the fast 1x1 post, and that plus
-        # the fast depthwise, and that plus 1x1 groups of 8 column blocks.
+        # the fast depthwise, 1x1 groups of 8 column blocks, and crop replay.
         frozen = {
             (): "d0427fb0137f4d34d4a1046c1a4bced7af582e618c279b8468c171cfb6b39e0b",
             ("s2_direct",): "58c5ec58ac5df03982d416e1f08640c929fcc36c517ffdb848005b1e0e987916",
@@ -94,6 +94,9 @@ class TeacherLinkBuild(unittest.TestCase):
             ("s2_direct", "pw_fast", "dw_fast", ("pw_group", 8)): (
                 "a2377f9cf86850138368181d44142225da491059679723dde24e3316a44c0a9d"
             ),
+            ("s2_direct", "pw_fast", "dw_fast", ("pw_group", 8), "replay"): (
+                "d7a78a81469c10acaf193b0d99cc0415f92d1de845a7a9aa292a7a1ebe691819"
+            ),
         }
         for i, (flags, digest) in enumerate(frozen.items()):
             kw = dict(f if isinstance(f, tuple) else (f, True) for f in flags)
@@ -103,7 +106,7 @@ class TeacherLinkBuild(unittest.TestCase):
             self.assertEqual(r["loader"], self.record["loader"])
 
     def test_pw_options_need_stride2(self):
-        for flag in ("pw_fast", "pw_profile", "dw_fast"):
+        for flag in ("pw_fast", "pw_profile", "dw_fast", "replay"):
             with self.assertRaises(ValueError):
                 self.BL.build(self.out / f"bad-{flag}", **{flag: True})
         for group, fast in ((8, False), (3, True), (16, True)):

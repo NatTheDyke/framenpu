@@ -71,7 +71,9 @@ class SimRunner:
         for off, data in RL.setup_writes(mplan.plan).items():
             self.put(off, data)
 
-    def request(self, mplan, job, fault=False, reject=False, refused=False):
+    def request(
+        self, mplan, job, fault=False, reject=False, refused=False, crops=1, replay_words=None
+    ):
         import dataclasses
         import mercury_layout as ML
         import teacher_resident_layout as RL
@@ -80,16 +82,29 @@ class SimRunner:
         if fault or refused:
             self.events.append("fault" if fault else "refused")
             return None
+        if replay_words is not None:
+            crops, stride = replay_words
+            if crops > 3 or stride & 4095 or stride > (self.T.WIN_HI - self.T.WIN_LO) // 2:
+                self.events.append("reject")
+                return None
+            one = dataclasses.replace(one, crop_stride=stride, max_crops=3)
         if reject:
             try:
-                RL.simulate(one, self.window, s2_phase=ML.S2_PHASE)
+                RL.simulate(one, self.window, s2_phase=ML.S2_PHASE, crops=crops)
             except ValueError:
                 self.events.append("reject")
                 return None
             raise AssertionError("descriptor was not rejected")
-        RL.simulate(one, self.window, s2_phase=ML.S2_PHASE)
+        RL.simulate(one, self.window, s2_phase=ML.S2_PHASE, crops=crops)
         n = job.end - job.first
-        return {"kind": "rs", "wall_ms": 1.0, "wrapper_ms": 1.0, "body_ms": 1.0, "op_us": [1.0] * n}
+        return {
+            "kind": "rs",
+            "wall_ms": float(crops),
+            "wrapper_ms": float(crops),
+            "body_ms": float(crops),
+            "op_us": [1.0] * n,
+            **({"crop_body_ms": [1.0] * crops} if mplan.replay else {}),
+        }
 
     def admin(self, command, reject=False):
         self.events.append(("admin", command, reject))
@@ -103,6 +118,54 @@ def _bind():
 
     SimRunner.tensor = HM.MercuryRunner.tensor
     SimRunner.raw = HM.MercuryRunner.raw
+
+
+class MercuryReplayMetadataTest(unittest.TestCase):
+    def test_crop_boundaries_and_partial_replay_are_checked(self):
+        from types import SimpleNamespace
+        import hardware_mercury as HM
+        import hardware_teacher_link as HL
+        import teacher_resident_layout as RL
+
+        runner = object.__new__(HM.MercuryRunner)
+        runner.image, runner.profile, runner.replay = bytes(256), False, True
+        job = SimpleNamespace(first=2, end=5, ops=["test"])
+        for count in (1, 2, 3):
+            m = [0] * 256
+            m[:3] = [RL.RS_MAGIC, HL.IMAGE_CACHED + 4, 3 * count]
+            ends = [19200 * (k + 1) for k in range(count)]
+            if count > 1:
+                m[48 : 48 + count] = ends
+            m[96:99] = [ends[-1] - 12000, ends[-1] - 6000, ends[-1]]
+
+            def parse(words):
+                res = SimpleNamespace(
+                    output=struct.pack("<256I", *words), kernel_reference_ticks=60000
+                )
+                return runner._resident_metadata(None, job, res, 0.01, count)
+
+            row = parse(m)
+            self.assertEqual(row["crop_end_ticks"], ends)
+            self.assertEqual(row["crop_body_ms"], [1.0] * count)
+            self.assertEqual(sum(row["op_us"]), 1000.0)
+            mutations = [
+                (2, 3 * count - 1),
+                (51, 1),
+                (64, 1),
+                (99, 1),
+                (97, m[96] - 1),
+                (98, 60001),
+                (3, 1),
+            ]
+            if count > 1:
+                mutations += [(48, 0), (48 + count - 1, ends[-1] - 1), (96, ends[-2] - 1)]
+            else:
+                mutations += [(48, ends[0])]
+            for word, value in mutations:
+                bad = m.copy()
+                bad[word] = value
+                with self.subTest(crops=count, word=word), self.assertRaises(ValueError):
+                    parse(bad)
 
 
 @unittest.skipUnless(np is not None and MODEL, "needs NumPy and FNPU_MERCURY_MODEL")
@@ -327,6 +390,57 @@ class MercuryLayoutTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             ML.build_plan(self.model, "qualify", prefix=True, batch=2)
 
+    def test_replay_plan_runs_one_to_three_crops(self):
+        """RS_REPLAY: one crop's 55 descriptors, run 1, 2 or 3 times per request with
+        the crop stride added to load/store addresses. Each crop (different inputs,
+        VTCM carried over from the previous crop) is bit-identical to its batch-1
+        result; the payload and the crop count are checked."""
+        import mercury_layout as ML
+        import teacher_resident_layout as RL
+
+        one = ML.build_plan(self.model, prefix=True)
+        rp = ML.build_plan(self.model, prefix=True, batch=3, replay=True, pw_group=8)
+        self.assertEqual(rp.descriptors, one.descriptors)
+        self.assertEqual(rp.plan.max_crops, 3)
+        self.assertEqual(rp.plan.crop_stride % 4096, 0)
+        self.assertEqual(rp.crop(0).where, one.where)
+        for k in range(3):
+            for b, at in rp.crops[k].items():
+                self.assertEqual(at, one.where[b] + k * rp.plan.crop_stride)
+        for n in range(rp.descriptors):
+            row = struct.unpack_from("<32I", rp.plan.table, 128 * n)
+            for k in range(3):
+                self.assertTrue(
+                    RL.native_ok(
+                        RL.replay_row(row, k, rp.plan.crop_stride), s2_direct=0, pw_group=8
+                    )
+                )
+        w = np.frombuffer(RL.payload(rp.plan, 3), "<u4")
+        self.assertEqual(list(w[:5]), [RL.RS_MAGIC, rp.plan.table_at, 55, 3, rp.plan.crop_stride])
+        self.assertFalse(np.frombuffer(RL.payload(rp.plan, 1), "<u4")[3:].any())
+        for bad in (0, 4):
+            with self.assertRaises(ValueError):
+                RL.payload(rp.plan, bad)
+        with self.assertRaises(ValueError):
+            RL.payload(one.plan, 2)
+        ins = []
+        for seed in (31, 32, 33):
+            case, _ = synthetic_case(self.model, seed, hinted=seed % 2 == 1)
+            ins.append({ML.STEM_COLS: ML.stem_columns(case["image"]), ML.HINT: case["hint"]})
+        want = [ML.simulate(one, x, s2_direct=True)[ML.OUTPUT][0] for x in ins]
+        for n in (1, 2, 3):
+            got = ML.simulate(rp, ins[:n], s2_direct=True)
+            self.assertEqual(len(got), n)
+            for k in range(n):
+                out, stray = got[k][ML.OUTPUT]
+                self.assertEqual(stray, 0)
+                np.testing.assert_array_equal(out, want[k])
+        self.assertFalse(np.array_equal(want[0], want[1]))
+        with self.assertRaises(ValueError):
+            ML.simulate(rp, ins + ins[:1], s2_direct=True)
+        with self.assertRaises(ValueError):
+            ML.build_plan(self.model, prefix=True, batch=4, replay=True)
+
     def test_batch_harness_flow_on_simulator(self):
         import hardware_mercury as HM
         import mercury_layout as ML
@@ -351,6 +465,48 @@ class MercuryLayoutTest(unittest.TestCase):
         self.assertTrue(all(r["outputs_equal_fp16_contract"] for r in rows.values()))
         s = HM.summarize(rows, len(ML.build_plan(self.model, prefix=True).ops), 2)
         self.assertEqual(s["batch"], 2)
+
+    def test_replay_harness_mixes_request_counts(self):
+        import hardware_mercury as HM
+        from unittest.mock import patch
+
+        _bind()
+        cases = [synthetic_case(self.model, s)[0] for s in (31, 32, 33)]
+        runner = SimRunner()
+        manifest = {
+            "cases": [
+                {"name": f"s{i}", "split": "synthetic", "hinted": True, "sha256": ""}
+                for i in range(3)
+            ]
+        }
+        with patch.object(HM, "load_case", side_effect=lambda c, e: cases[int(e["name"][1:])]):
+            rows, plans = HM.run(
+                runner,
+                self.model,
+                None,
+                manifest,
+                4,
+                "Conv_18",
+                prefix=True,
+                batch=3,
+                pw_group=8,
+                replay=True,
+            )
+        self.assertTrue(plans["merged"]["replay"])
+        for i, row in enumerate(rows.values()):
+            fs = row["frames"]
+            self.assertEqual([f["crops"] for f in fs], [1 + (r + i) % 3 for r in range(4)])
+            for f in fs:
+                self.assertEqual(f["batch_cases"], [(i + k) % 3 for k in range(f["crops"])])
+        self.assertEqual(len(rows["case00"]["controls"]["replay_rejections"]), 3)
+        self.assertEqual(runner.events.count("reject"), 40)  # 36 s2 fields + descriptor + 3 replay
+        summary = HM.summarize(rows, plans["merged"]["ops"], 3)
+        self.assertEqual(summary["body_ms_per_crop_median"], 1.0)
+        for n in (1, 2, 3):
+            got = summary["by_crop_count"][str(n)]
+            self.assertEqual(got["requests"], 3)
+            self.assertEqual(got["body_ms_median"], float(n))
+            self.assertEqual(got["crop_body_ms_median"], [1.0] * n)
 
     def test_direct_stride2_spill_check(self):
         """The direct build rejects an output plane too short for its zero-lane spill."""

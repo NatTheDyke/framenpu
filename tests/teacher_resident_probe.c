@@ -55,6 +55,18 @@ void fnpu_hmx_store(fnpu_u16 *, const void *);
 #define RS_WIN_LO 0x1a40000u
 #define RS_WIN_HI 0x1f00000u
 #define RS_META 1024u
+#ifdef RS_REPLAY
+#if !defined(RS_STRIDE2) || defined(RS_STEM) || defined(RS_HEADS)
+#error "RS_REPLAY is a stride-2 Mercury option (no stem prefix, no heads)"
+#endif
+/* Request word 3: crops (0 or 1 = one crop, at most RS_MAX_CROPS); word 4: the
+ * crop stride in bytes (4 KiB multiple). Crop k runs descriptors a..b again with
+ * k * stride added to the window address of its load and store descriptors
+ * (kinds 3, 4) before validation; compute ops and parameter images are shared.
+ * VTCM carries over from crop to crop, so a plan must leave nothing in it that
+ * the next crop reads before writing. */
+#define RS_MAX_CROPS 3u
+#endif
 #ifndef RS_DW_BLOCKS
 #define RS_DW_BLOCKS 2
 #endif
@@ -131,7 +143,11 @@ static __attribute__((noinline)) void rs_zero(volatile HVX_Vector *to, fnpu_u32 
 }
 
 /* Fetch descriptor i into d; nonzero if any index it implies leaves bounds. */
+#ifdef RS_REPLAY
+static __attribute__((noinline)) fnpu_u32 rs_get(fnpu_u32 tab, fnpu_u32 i, rs_op *d, fnpu_u32 off) {
+#else
 static __attribute__((noinline)) fnpu_u32 rs_get(fnpu_u32 tab, fnpu_u32 i, rs_op *d) {
+#endif
     rs_copy(RS_DESC, (const volatile HVX_Vector *)(RS_DDR + tab) + i, 1);
 #ifdef RS_STEM
     if (((const volatile fnpu_u32 *)RS_DESC)[0] == TS_KIND) {
@@ -150,6 +166,10 @@ static __attribute__((noinline)) fnpu_u32 rs_get(fnpu_u32 tab, fnpu_u32 i, rs_op
     fnpu_u32 *t = (fnpu_u32 *)d, big = 0;
 #pragma clang loop unroll(disable)
     for (fnpu_u32 w = 0; w < 15; w++) big |= (t[w] = ((const volatile fnpu_u32 *)RS_DESC)[w]) & -(w != 9);
+#ifdef RS_REPLAY
+    /* off <= the window size (frame_job); a dpar inside the window cannot wrap */
+    if (((d->kind == 3) | (d->kind == 4)) & (d->dpar <= RS_WIN_HI)) d->dpar += off;
+#endif
 #ifdef RS_STRIDE2
     for (fnpu_u32 w = 0; w < 6; w++) big |= ((fnpu_u32 *)&d->onbin)[w] = ((const volatile fnpu_u32 *)RS_DESC)[15 + w];
     fnpu_u32 s2 = d->kind == 5;
@@ -594,6 +614,11 @@ static __attribute__((noinline)) void rs_s2(rs_op *d) {
 fnpu_u32 frame_job(const fnpu_context *c) {
     const volatile fnpu_u32 *in = fnpu_input(c);
     fnpu_u32 tab = in[1], n = in[2], a = c->params[1], b = c->params[2], i;
+#ifdef RS_REPLAY
+    fnpu_u32 nc = in[3] ? in[3] : 1, cs = in[4], steps = 0, stop = 0, t = 0;
+    if ((nc > RS_MAX_CROPS) | (cs & 4095) | ((nc == 1) & (cs != 0)) | (cs > (RS_WIN_HI - RS_WIN_LO) / 2))
+        return FNPU_BAD_ARGUMENT;
+#endif
     rs_op ds[1];
     rs_op *d = ds;
 #ifdef RS_STRIDE2
@@ -610,9 +635,17 @@ fnpu_u32 frame_job(const fnpu_context *c) {
     RS_SCALE[0] = Q6_V_vsplat_R(0x3c00u);
     fault_control(c);
     fnpu_u32 t0 = rs_ticks();
+#ifdef RS_REPLAY
+#pragma clang loop unroll(disable)
+    for (fnpu_u32 k = 0; k < nc && !stop; k++) {
+#pragma clang loop unroll(disable)
+    for (i = a; i < b; i++) {
+        if (rs_get(tab, i, d, k * cs)) return FNPU_BAD_ARGUMENT;
+#else
 #pragma clang loop unroll(disable)
     for (i = a; i < b; i++) {
         if (rs_get(tab, i, d)) return FNPU_BAD_ARGUMENT;
+#endif
 #ifdef RS_STEM
         if (d->kind == TS_KIND) {
 #ifdef RS_STEM_PROFILE
@@ -646,13 +679,27 @@ fnpu_u32 frame_job(const fnpu_context *c) {
 #ifdef RS_STEM
         }
 #endif
+#ifdef RS_REPLAY
+        t = rs_ticks() - t0;
+        meta[96 + i - a] = t; /* the last crop's ticks remain */
+        steps++;
+        if (t > 384000u) { stop = 1; break; }
+    }
+    if (nc > 1) meta[48 + k] = t; /* crop k's end */
+    }
+#else
         fnpu_u32 t = rs_ticks() - t0;
         meta[96 + i - a] = t;
         if (t > 384000u) { i++; break; }
     }
+#endif
     fnpu_u32 pc;
     __asm__ volatile("%0 = pc" : "=r"(pc)::"memory");
+#ifdef RS_REPLAY
+    meta[0] = RS_MAGIC; meta[1] = pc; meta[2] = steps; /* descriptors run, all crops */
+#else
     meta[0] = RS_MAGIC; meta[1] = pc; meta[2] = i - a;
+#endif
 #ifdef RS_PW_PROFILE
     for (fnpu_u32 k = 0; k < 9; k++) meta[3 + k] = RS_PROF[k];
 #endif

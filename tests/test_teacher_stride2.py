@@ -45,11 +45,8 @@ class NativeStride2Checks(unittest.TestCase):
         struct = source[
             source.index("typedef struct {") : source.index("} rs_op;") + len("} rs_op;")
         ]
-        check = source[
-            source.index("static __attribute__((noinline)) fnpu_u32 rs_get") : source.index(
-                "/* Shared post"
-            )
-        ]
+        check = source[source.index("/* Fetch descriptor") : source.index("/* Shared post")]
+        scratch = source[source.index("#ifdef RS_PW_GROUP") : source.index("typedef long rs_uv")]
         prefix = """
 #include <stdint.h>
 #include <string.h>
@@ -73,15 +70,26 @@ static void rs_copy(volatile HVX_Vector *to, const volatile HVX_Vector *from, fn
 int accepted(const uint32_t *row) {
     memcpy(&input, row, 128);
     rs_op d;
+#ifdef RS_REPLAY
+    return rs_get(RS_WIN_LO, 0, &d, 0) == 0;
+#else
     return rs_get(RS_WIN_LO, 0, &d) == 0;
+#endif
 }
+#ifdef RS_REPLAY
+int accepted_replay(const uint32_t *row, uint32_t off) {
+    memcpy(&input, row, 128);
+    rs_op d;
+    return rs_get(RS_WIN_LO, 0, &d, off) == 0;
+}
+#endif
 """
         cls.tmp = tempfile.TemporaryDirectory()
         folder = Path(cls.tmp.name)
-        (folder / "check.c").write_text(prefix + struct + check + suffix)
+        (folder / "check.c").write_text(prefix + scratch + struct + check + suffix)
         cls.libs = {}
-        for blocks in (2, 4):
-            libpath = folder / f"check{blocks}.so"
+        for blocks, replay in ((2, False), (4, False), (2, True)):
+            libpath = folder / f"check{blocks}-{replay}.so"
             subprocess.run(
                 [
                     shutil.which("cc"),
@@ -89,6 +97,7 @@ int accepted(const uint32_t *row) {
                     "-fPIC",
                     "-O2",
                     f"-DRS_DW_BLOCKS={blocks}",
+                    *(["-DRS_REPLAY"] if replay else []),
                     str(folder / "check.c"),
                     "-o",
                     str(libpath),
@@ -99,7 +108,12 @@ int accepted(const uint32_t *row) {
             lib = ctypes.CDLL(str(libpath))
             lib.accepted.argtypes = [ctypes.POINTER(ctypes.c_uint32)]
             lib.accepted.restype = ctypes.c_int
-            cls.libs[blocks] = lib
+            if replay:
+                lib.accepted_replay.argtypes = [ctypes.POINTER(ctypes.c_uint32), ctypes.c_uint32]
+                lib.accepted_replay.restype = ctypes.c_int
+                cls.replay_lib = lib
+            else:
+                cls.libs[blocks] = lib
 
     @classmethod
     def tearDownClass(cls):
@@ -118,6 +132,20 @@ int accepted(const uint32_t *row) {
             with self.subTest(row=i):
                 self.assertTrue(self.accepted(row))
                 self.assertTrue(self.accepted(row, dw_blocks=4))
+
+    def test_replay_offsets_match_actual_native_checker(self):
+        import numpy as np
+        import teacher_tail_layout as T
+
+        for i, row in enumerate(self.rows):
+            row = np.asarray(row, dtype="<u4")
+            for offset in (0, 4096, (T.WIN_HI - T.WIN_LO) // 2, T.WIN_HI - T.WIN_LO):
+                with self.subTest(row=i, offset=offset):
+                    got = self.replay_lib.accepted_replay(
+                        row.ctypes.data_as(ctypes.POINTER(ctypes.c_uint32)), offset
+                    )
+                    want = self.R.native_ok(self.R.replay_row(row, 1, offset))
+                    self.assertEqual(bool(got), want)
 
     def test_mutations_match_python_mirror(self):
         import numpy as np

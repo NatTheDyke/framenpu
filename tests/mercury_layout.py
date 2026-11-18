@@ -29,6 +29,7 @@ inputs (composites are staged whole from the device's part bytes).
 ``start``/``stop_after`` truncate either mode (early-layer pilots).
 """
 
+import struct
 from dataclasses import dataclass, replace
 
 from hmx_block_layout import pack
@@ -231,6 +232,7 @@ class MercuryPlan:
     composites: dict  # parent -> [(part, source)] for every composite of the network
     prefix: bool
     crops: tuple = ()  # batch: one window map per crop (parameter images shared)
+    replay: bool = False  # RS_REPLAY: one crop's table; a request runs 1..batch crops
 
     def grid(self, name):
         return grid(self.shape[name])
@@ -238,6 +240,14 @@ class MercuryPlan:
     @property
     def batch(self):
         return len(self.crops) or 1
+
+    def table_crops(self, crops):
+        """Crops a request of this plan may carry: batch exactly, or 1..batch on replay."""
+        if crops is None:
+            crops = self.batch
+        if not (1 <= crops <= self.batch if self.replay else crops == self.batch):
+            raise ValueError(f"a request carries {'1..' if self.replay else ''}{self.batch} crops")
+        return crops
 
     def crop(self, k):
         """The plan as seen by crop k of a batch: its own input/output window slots."""
@@ -249,16 +259,31 @@ class MercuryPlan:
 
 
 def build_plan(
-    model, mode="merged", stop_after=LAST, start=None, prefix=False, batch=1, pw_group=1
+    model,
+    mode="merged",
+    stop_after=LAST,
+    start=None,
+    prefix=False,
+    batch=1,
+    pw_group=1,
+    replay=False,
 ):
     """batch > 1 (merged only): one request runs the merged sequence once per crop,
     each crop with its own input and final-tensor slots; parameter images are
     shared, and VTCM is reused from crop to crop. pw_group must match the build's
-    RS_PW_GROUP (it sizes the 1x1 scratch the kernel checks)."""
+    RS_PW_GROUP (it sizes the 1x1 scratch the kernel checks).
+
+    replay (an RS_REPLAY build): batch is the most crops a request may carry
+    (at most RL.MAX_CROPS) and a window slot set is reserved for each, but the table
+    holds crop 0's descriptors only; the kernel runs them once per crop with
+    replay_row addressing. The planner emits every crop and refuses the plan unless
+    each equals crop 0 under that rule (same VTCM layout, slots a fixed stride apart)."""
     if mode not in ("merged", "qualify"):
         raise ValueError(mode)
     if batch < 1 or (batch > 1 and mode != "merged"):
         raise ValueError("batch > 1 needs a merged plan")
+    if replay and (mode != "merged" or batch > RL.MAX_CROPS):
+        raise ValueError(f"replay is a merged plan of at most {RL.MAX_CROPS} crops")
     ops = device_ops(model, stop_after, start, prefix)
     final = ops[-1].output
     shape = shapes(model, prefix)
@@ -437,10 +462,27 @@ def build_plan(
             job.vtcm_peak = vt.peak
             peak = max(peak, vt.peak)
             jobs.append(job)
+    stride = 0
+    if replay:
+        per = len(table) // batch
+        if batch > 1:
+            stride = crops[1][final] - crops[0][final]
+        for k in range(batch):
+            if any(crops[k][b] - crops[0][b] != k * stride for b in crops[0]):
+                raise ValueError("crop slots are not a fixed stride apart")
+            for n in range(per):
+                got = struct.unpack("<32I", table[k * per + n])
+                want = RL.replay_row(struct.unpack("<32I", table[n]), k, stride)
+                if list(got) != want:
+                    raise ValueError(f"crop {k} descriptor {n} is not crop 0's replayed")
+        table = table[:per]
+        jobs[0].end = per
     if any(j.end - j.first > MAX_DESCRIPTORS for j in jobs):
         raise ValueError("a request exceeds 160 descriptors")
     blob = b"".join(table)
     plan = RL.Plan(mode, jobs, blob, table_at, fixed, where, cursor, ops, shape)
+    if replay:
+        plan.max_crops, plan.crop_stride = batch, stride
     return MercuryPlan(
         mode,
         plan,
@@ -455,6 +497,7 @@ def build_plan(
         comps,
         prefix,
         tuple(crops) if batch > 1 else (),
+        replay,
     )
 
 
@@ -587,7 +630,8 @@ def read_tensor(mplan, get, name):
 def simulate(mplan, tensors, s2_direct=False):
     """Lane-level simulation; returns {stored tensor: (array, stray)}.
     s2_direct models the RS_S2_DIRECT image's stride-2 data path. For a batch
-    plan, tensors is one dict per crop and the result one dict per crop."""
+    plan, tensors is one dict per crop and the result one dict per crop; a replay
+    plan takes 1..batch of them (the request's crop count)."""
     window = bytearray(T.WIN_HI - T.WIN_LO)
 
     def put(off, data):
@@ -599,14 +643,15 @@ def simulate(mplan, tensors, s2_direct=False):
     for off, data in RL.setup_writes(mplan.plan).items():
         put(off, data)
     crops = tensors if mplan.crops else [tensors]
-    if len(crops) != mplan.batch:
-        raise ValueError("one tensor set per crop")
+    n = mplan.table_crops(len(crops))
     for k, ts in enumerate(crops):
         stage_inputs(mplan.crop(k), put, ts)
-    RL.simulate(mplan.plan, window, s2_phase=S2_PHASE, s2_direct=s2_direct)
+    RL.simulate(
+        mplan.plan, window, s2_phase=S2_PHASE, s2_direct=s2_direct, crops=n if mplan.replay else 1
+    )
     outs = [
         {b: read_tensor(mplan.crop(k), get, b) for job in mplan.plan.jobs for b in job.stores}
-        for k in range(mplan.batch)
+        for k in range(n)
     ]
     return outs if mplan.crops else outs[0]
 

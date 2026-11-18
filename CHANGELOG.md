@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Added [1–3 crop replay requests](docs/MERCURY.md#one-to-three-crops-per-request)
+  (`build_teacher_link.py --replay`, frozen image; earlier images unchanged).
+  One 55-descriptor table runs the actual crop count, at most 3, without
+  padding. The harness mixes counts across rounds, validates per-crop end
+  ticks and reports body time by crop count. Frame pilot and full run pass:
+  4.98 / 9.95 / 14.92 ms DSP body for 1 / 2 / 3 crops, all crops bit-identical
+  to qualification and all 16 final hashes unchanged. Four crops, misaligned
+  stride and out-of-window stride are rejected; all restoration checks pass.
+
 - Added a [grouped 1x1](docs/MERCURY.md#grouped-1x1)
   (`build_teacher_link.py --pw-group 8`, new image; existing images
   byte-identical). It runs the HMX tiles of 8 column blocks before posting
