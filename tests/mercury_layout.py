@@ -518,8 +518,9 @@ def read_tensor(mplan, get, name):
     return g.from_bytes(get(mplan.where[name], g.tensor_bytes(c)), c)
 
 
-def simulate(mplan, tensors):
-    """Lane-level simulation; returns {stored tensor: (array, stray)}."""
+def simulate(mplan, tensors, s2_direct=False):
+    """Lane-level simulation; returns {stored tensor: (array, stray)}.
+    s2_direct models the RS_S2_DIRECT image's stride-2 data path."""
     window = bytearray(T.WIN_HI - T.WIN_LO)
 
     def put(off, data):
@@ -531,7 +532,7 @@ def simulate(mplan, tensors):
     for off, data in RL.setup_writes(mplan.plan).items():
         put(off, data)
     stage_inputs(mplan, put, tensors)
-    RL.simulate(mplan.plan, window, s2_phase=S2_PHASE)
+    RL.simulate(mplan.plan, window, s2_phase=S2_PHASE, s2_direct=s2_direct)
     return {b: read_tensor(mplan, get, b) for job in mplan.plan.jobs for b in job.stores}
 
 

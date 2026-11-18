@@ -292,10 +292,74 @@ computes the full stride-1 result and then decimates, so a direct stride-2
 depthwise would remove about three quarters of `Conv_14`. The 7.5 ms of host
 overhead per request is the other large item.
 
+## Direct stride-2 depthwise
+
+The old stride-2 path computed the full stride-1 depthwise into a temporary
+grid, then copied every kept word one at a time with scalar code. A new
+build option, `tools/build_teacher_link.py --stride2 --s2-even --s2-direct`
+(image `58c5ec58…`, 5,904 B, define `RS_S2_DIRECT`), computes only the kept
+outputs instead. For each output row and 32-column block:
+
+1. It deals the three input rows into even and odd columns with `vdeal`
+   (two unaligned load pairs per row).
+2. It accumulates the same 9 qf16 products in the same (dy, dx) order as the
+   stride-1 kernel, then applies the same bias add and clip.
+3. It stores the vector in one unaligned write, with lanes past the row
+   zeroed.
+
+Rows are written in increasing order, so the zero spill only lands on pad
+words or on words a later row rewrites. Two extra native checks bound the
+reads and the spill. The descriptor format is unchanged, so the same plans
+run on both images. One compiler hazard came up: LLVM fused `hf(acc)` with
+the following hf+hf bias add into a single qf16+hf add, which skips a
+rounding step. The kernel forces the FP16 rounding through a volatile VTCM
+slot, as the stride-1 path effectively does, and the disassembly confirms
+the ops are separate. Every existing image is byte-identical (`d0427fb0…`,
+`ef5721f8…`).
+
+Offline, a word-level model of the direct kernel's addressing is added to
+the lane simulator (`simulate(..., s2_direct=True)`). It reproduces the
+stride-1-plus-decimation result bit-exactly on every Mercury geometry
+(64→32, 32→16, 16→8), and it raises on any access outside the native bounds.
+A test checks that the direct build rejects an output plane too short for
+the spill.
+
+Device ([direct](../evidence/mercury-s2-direct-device.json),
+[baseline rerun](../evidence/mercury-s2-direct-baseline.json),
+[first-op pilot](../evidence/mercury-s2-direct-pilot.json)): the whole
+network (`--prefix`) ran with the same 16 cases × 5 rounds on both images.
+
+| | Stride-1 + decimate (`d0427fb0`) | Direct (`58c5ec58`) |
+|---|---:|---:|
+| `Conv_14`, per 32-channel group (64→32) | 598 µs | **72 µs** (8.3x) |
+| `Conv_33` (32→16, 192 ch) | 936 µs | 189 µs (5.0x) |
+| `Conv_118` (16→8, 576 ch) | 150 µs | 60 µs (2.5x) |
+| All 8 stride-2 ops | 4.67 ms | 0.68 ms |
+| All other ops | 10.48 ms | 10.48 ms |
+| **DSP request body, median** | 15.14 ms | **11.15 ms** |
+| Host wall per request, median | 22.5 ms | 18.5 ms |
+| Final tensor vs the other image | | **bit-identical, 16/16 cases** |
+
+Everything else is unchanged on the direct image:
+
+- every op within the FP16 bound (worst 0.39), and merged frames identical to
+  per-op qualification;
+- the same keypoint drift (0.185 px median / 0.669 px max vs FP32);
+- all controls refused natively (48 stride-2 field rejections);
+- 969 restoration audits, whole arena unchanged.
+
+DSP-bound throughput rises from 66 to about 90 crops/s.
+
+The largest remaining items are the HMX pointwise layers: the six `Conv_10`
+groups alone are 3.48 ms. Next is the host overhead of about 7.4 ms per
+request.
+
 ## Next steps
 
-- **Direct stride-2 depthwise** in the kernel: `Conv_14` is 3.6 ms, of which
-  roughly 3/4 is stride-1 work that the decimation throws away.
+- **Pointwise cost.** HMX 1x1 layers are now 8.77 of the 11.15 ms (depthwise
+  1.54, stride 2 0.68, load/store 0.17). The
+  per-row post-processing (bias, clip, mask, store per output vector)
+  dominates, not the MACs (see the forecast fit).
 - **Step 2c: heatmap heads on the DSP** (the two dense 3x3 convolutions and
   the 2x2 transposed convolution). Then batch 2 crops per request and time
   the stack's seam (`MercuryKeypoint.run`) end to end.
@@ -331,4 +395,5 @@ sudo python tests/hardware_mercury.py --run-on-device --jobs /tmp/mercury/jobs \
   --model /tmp/mercury/grayscale_keypoint_jan18.onnx --cases /tmp/mercury/cases \
   --output result.json --rounds 5 [--stop-after Conv_33 --max-cases 1]
 # step 2b: the same, plus --prefix (pilot: --prefix --stop-after Conv_18 --max-cases 1)
+# direct stride 2: build with --stride2 --s2-even --s2-direct; compare final_sha256 per case
 ~~~

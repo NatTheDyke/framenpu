@@ -249,6 +249,38 @@ class MercuryLayoutTest(unittest.TestCase):
         self.assertEqual(row["controls"]["stride2_descriptor_rejections"], 48)
         self.assertEqual(len(plans["qualify_segments"]), 4)
 
+    def test_direct_stride2_model_matches(self):
+        """RS_S2_DIRECT data path (word-level model) equals stride-1 + decimation."""
+        import mercury_layout as ML
+
+        for prefix in (False, True):
+            mp = ML.build_plan(self.model, prefix=prefix)
+            case, t = synthetic_case(self.model, 12 + prefix)
+            ins = (
+                {ML.STEM_COLS: ML.stem_columns(case["image"]), ML.HINT: case["hint"]}
+                if prefix
+                else t
+            )
+            a, _ = ML.simulate(mp, ins)[ML.OUTPUT]
+            b, stray = ML.simulate(mp, ins, s2_direct=True)[ML.OUTPUT]
+            self.assertEqual(stray, 0)
+            np.testing.assert_array_equal(a, b)
+
+    def test_direct_stride2_spill_check(self):
+        """The direct build rejects an output plane too short for its zero-lane spill."""
+        import mercury_layout as ML
+        import teacher_resident_layout as RL
+
+        mp = ML.build_plan(self.model, prefix=True)
+        tab = np.frombuffer(mp.plan.table, "<u4").reshape(-1, 32).copy()
+        row = next(r for r in tab if r[0] == RL.KIND["s2"] and r[19] == 8)  # 16 -> 8
+        oblk, oh, ows, ow = int(row[16]), int(row[18]), int(row[17]), int(row[19])
+        need = 32 * oblk + 2 + (oh - 1) * ows + 32
+        row[15] = -(-(32 * oblk + (oh - 1) * ows + 2 + ow) // 32)  # enough for stride-1 only
+        self.assertTrue(RL.native_ok(row))
+        self.assertLess(32 * int(row[15]), need)
+        self.assertFalse(RL.native_ok(row, s2_direct=0))
+
     def test_harness_flow_on_simulator(self):
         import hardware_mercury as HM
         import mercury_layout as ML

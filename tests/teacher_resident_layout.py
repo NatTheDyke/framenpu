@@ -418,12 +418,66 @@ def payload(plan):
 # ---------------------------------------------------------------- lane-level simulator
 
 
-def simulate(plan, window, *, s2_phase=1):
+def _s2_direct(row, vt, phase):
+    """Word-level model of rs_s2 under RS_S2_DIRECT (tests/teacher_resident_probe.c):
+    the kernel's word offsets, 32-word loads, deals and zero-lane stores, with the
+    simulator's arithmetic. Raises if any access leaves the bounds the native check
+    promises (reads inside the input planes, writes inside the output tensor)."""
+    import numpy as np
+
+    kind, cpi, cpo, k, clip, nb, blk0, nj, ws, dpar, npar, vin, vout, vres, vpar = (
+        int(x) for x in row[:15]
+    )
+    onb, oblk, ows, oh, ow, _tmp = (int(x) for x in row[15:21])
+    words = vt.reshape(-1, 2)  # word i = (vector i // 32, lane i % 32)
+    kk = 9
+    coef = vt[vpar:].reshape(-1, 2)[: cpi * kk].reshape(cpi, kk, 2).astype(np.float32)
+    bias = vt[vpar + (cpi * kk + 31) // 32 : vpar + (cpi * kk + 31) // 32 + cpi, 0, :]
+    vt[vout : vout + cpo * onb] = 0
+    off0 = 32 * blk0 + 1 + phase + phase * ws - ws
+    lo_in, hi_in = 32 * vin, 32 * (vin + cpi * nb)
+    lo_out, hi_out = 32 * vout, 32 * (vout + cpo * onb)
+    for c in range(cpi):
+        base = 32 * (vin + nb * c) + off0
+        out = 32 * (vout + onb * c) + 32 * oblk + 2
+        for y in range(oh):
+            for x0 in range(0, ow, 32):
+                acc = np.zeros((32, 2), np.float32)
+                for dy in range(3):
+                    p = base + 2 * y * ws + 2 * x0 + dy * ws
+                    if p < lo_in or p + 66 > hi_in:
+                        raise ValueError("direct stride-2 read outside the input")
+                    taps = (
+                        words[p : p + 64 : 2],
+                        words[p + 1 : p + 65 : 2],
+                        words[p + 2 : p + 66 : 2],
+                    )
+                    for dx, tap in enumerate(taps):
+                        acc = acc + (tap.astype(np.float32) * coef[c, 3 * dy + dx]).astype(
+                            np.float32
+                        )
+                v = np.clip(
+                    (acc.astype(np.float64).astype(np.float16).astype(np.float64) + bias[c]).astype(
+                        np.float16
+                    ),
+                    0,
+                    6,
+                )
+                v[min(32, ow - x0) :] = 0
+                q = out + y * ows + x0
+                if q < lo_out or q + 32 > hi_out:
+                    raise ValueError("direct stride-2 store outside the output")
+                words[q : q + 32] = v
+
+
+def simulate(plan, window, *, s2_phase=1, s2_direct=False):
     """Run a plan against `window` (bytearray covering WIN_LO..WIN_HI) with the
     kernel's addressing; VTCM starts each resident job filled with NaN. The
     caller performs setup_writes(plan) first, exactly as the harness does; the
     table is read back from the window for every job. s2_phase 1 is the
-    teacher's (2y+1, 2x+1) decimation; 0 is the RS_S2_EVEN (Mercury) build."""
+    teacher's (2y+1, 2x+1) decimation; 0 is the RS_S2_EVEN (Mercury) build.
+    s2_direct models an RS_S2_DIRECT build's stride-2 data path word by word
+    (_s2_direct); its arithmetic is the stride-1 path's, so results must match."""
     import numpy as np
     from hmx_block_layout import unpack
 
@@ -465,7 +519,7 @@ def simulate(plan, window, *, s2_phase=1):
                 vt[vpar : vpar + npar] = vecs(dpar, npar)
                 H.simulate_op(row, vt)
                 continue
-            if not native_ok(row):
+            if not native_ok(row, s2_direct=s2_phase if s2_direct else None):
                 raise ValueError("invalid resident descriptor")
             kind, cpi, cpo, k, clip, nb, blk0, nj, ws, dpar, npar, vin, vout, vres, vpar = (
                 int(x) for x in row[:15]
@@ -478,6 +532,9 @@ def simulate(plan, window, *, s2_phase=1):
                 continue
             vt[vpar : vpar + npar] = vecs(dpar, npar)
             dst = vout
+            if kind == 5 and s2_direct:
+                _s2_direct(row, vt, s2_phase)
+                continue
             if kind == 5:
                 onb, oblk, ows, oh, ow, vout = (int(x) for x in row[15:21])
                 vt[dst : dst + cpo * onb] = 0
@@ -547,8 +604,10 @@ def simulate(plan, window, *, s2_phase=1):
 # ---------------------------------------------------------------- native check mirror
 
 
-def native_ok(row, *, dw_blocks=2):
-    """Mirror of rs_get in tests/teacher_resident_probe.c (True = accepted)."""
+def native_ok(row, *, dw_blocks=2, s2_direct=None):
+    """Mirror of rs_get in tests/teacher_resident_probe.c (True = accepted).
+    s2_direct: the decimation phase (0 even, 1 odd) of an RS_S2_DIRECT build, which
+    adds bounds on the direct kernel's reads and zero-lane store spill."""
     if dw_blocks not in (2, 4):
         raise ValueError("dw_blocks must be 2 or 4")
     m = 0xFFFFFFFF
@@ -587,6 +646,12 @@ def native_ok(row, *, dw_blocks=2):
             return False
         if 2 * oh * ws > 32 * nj or 32 * oblk + (oh - 1) * ows + 2 + ow > 32 * onb:
             return False
+        if s2_direct is not None:
+            ph, xl = s2_direct, 32 * ((ow - 1) >> 5)
+            if 32 * blk0 + 1 + ph + (ph + 2 * oh - 1) * ws + 2 * xl + 65 >= 32 * nb:
+                return False
+            if 32 * oblk + 2 + (oh - 1) * ows + xl + 32 > 32 * onb:
+                return False
     kk, reach, no = k * k, (k >> 1) * (ws + 1), (cpo + 15) >> 4
     pw = kind == 1
     bias = vpar + (no * k * 16 if pw else (cpi * kk + 31) // 32)

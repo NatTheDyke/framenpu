@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Added a [direct stride-2 depthwise](docs/MERCURY.md#direct-stride-2-depthwise)
+  (`build_teacher_link.py --s2-direct`, new image; existing images
+  byte-identical). It computes only the kept outputs, dealing input rows into
+  even and odd columns, instead of a full stride-1 pass plus scalar
+  decimation. The Mercury network's 8 stride-2 ops drop from 4.67 to 0.68 ms
+  (`Conv_14` 8.3x) and the whole request from 15.14 to 11.15 ms. Final tensors
+  are bit-identical to the previous image on all 16 cases, with every check
+  and control passing.
 - Ran the [whole Mercury convolution network on the DSP](docs/MERCURY.md#step-2b-the-whole-convolution-network-on-the-dsp)
   (step 2b): `Conv_0 .. Conv_139` as one 55-descriptor request on the same
   image. The stem runs as an HMX pointwise over host im2col columns, and the

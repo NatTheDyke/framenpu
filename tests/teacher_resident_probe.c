@@ -30,6 +30,12 @@
  * words 15..20 are output nbin, blk0, ws, h, w and temporary vector offset.
  * RS_S2_EVEN (Mercury linked image) keeps (2*y, 2*x) instead, the phase of
  * symmetric (1,1) padding; the bounds checks cover both phases.
+ * RS_S2_DIRECT computes only the kept outputs instead: per output row and
+ * 32-column block it deals the three input rows into even/odd columns and
+ * accumulates the same 9 qf16 products in the same order as rs_dw, so each
+ * output equals the decimated stride-1 result; the temporary is unused (still
+ * validated). Lanes past the row are stored as zero onto pad words or words a
+ * later row rewrites; extra checks bound the reads and that spill.
  * The ordinary 4 KiB reference build does not include this extension. */
 #include "landmark_common.h"
 #ifdef RS_STEM
@@ -61,6 +67,14 @@ void fnpu_hmx_store(fnpu_u16 *, const void *);
 #define RS_MAX_KIND 4u
 #endif
 #define SPAN ((0x311e0000u - 0x31002000u) / 128u)
+#ifdef RS_S2_EVEN
+#define RS_S2_P 0u /* decimation phase: output (y, x) keeps stride-1 (2y+P, 2x+P) */
+#else
+#define RS_S2_P 1u
+#endif
+#if defined(RS_S2_DIRECT) && !defined(RS_STRIDE2)
+#error "RS_S2_DIRECT requires RS_STRIDE2"
+#endif
 #define LV(i) ((volatile HVX_Vector *)(0x31000000u + 128u * (i)))
 #define RS_SCALE LV(56)
 #define RS_FLAGS LV(62)
@@ -141,6 +155,15 @@ static __attribute__((noinline)) fnpu_u32 rs_get(fnpu_u32 tab, fnpu_u32 i, rs_op
         if (bad) return bad;
         bad |= (2 * d->oh * d->ws > 32 * nj) |
                (32 * d->oblk0 + (d->oh - 1) * d->ows + 2 + d->ow > 32 * d->onbin);
+#ifdef RS_S2_DIRECT
+        {
+            /* last word read (row 2(oh-1)+P+1, column block xl, 66 words from tap 0)
+             * and last word stored (a full vector from the last row's block xl) */
+            fnpu_u32 xl = 32 * ((d->ow - 1) >> 5);
+            bad |= (32 * d->blk0 + 1 + RS_S2_P + (RS_S2_P + 2 * d->oh - 1) * d->ws + 2 * xl + 65 >= 32 * nb) |
+                   (32 * d->oblk0 + 2 + (d->oh - 1) * d->ows + xl + 32 > 32 * d->onbin);
+        }
+#endif
         d->tmp = (fnpu_u32)FR(d->tmp);
     }
 #else
@@ -254,7 +277,51 @@ static __attribute__((noinline)) void rs_dw(const rs_op *d) {
     }
 }
 
-#ifdef RS_STRIDE2
+#if defined(RS_STRIDE2) && defined(RS_S2_DIRECT)
+static __attribute__((noinline)) void rs_s2(rs_op *d) {
+    const fnpu_u32 ws = d->ws, ows = d->ows, kk = 9;
+    const volatile fnpu_u32 *coef = (const volatile fnpu_u32 *)FR(d->vpar);
+    const HVX_Vector exp = Q6_V_vsplat_R(0x7c007c00u), top = Q6_V_vsplat_R(0x46004600u);
+    rs_zero((volatile HVX_Vector *)d->vout, d->cpo * d->onbin);
+    RS_ACC(4)[0] = Q6_Vqf16_vadd_VhfVhf(Q6_V_vzero(), Q6_V_vzero());
+#pragma clang loop unroll(disable)
+    for (fnpu_u32 i = 0; i < d->cpi * kk; i++) P(scr)[i] = Q6_V_vsplat_R(coef[i]);
+    /* word of tap (dy = 0, dx = 0) for output (0, 0): row P-1, column P-1 */
+    const fnpu_u32 off0 = 32 * d->blk0 + 1 + RS_S2_P + RS_S2_P * ws - ws;
+#pragma clang loop unroll(disable)
+    for (fnpu_u32 c = 0; c < d->cpi; c++) {
+        const char *in = (const char *)d->vin + 128 * d->nbin * c + 4 * off0;
+        volatile char *out = (volatile char *)d->vout + 128 * d->onbin * c + 4 * (32 * d->oblk0 + 2);
+        const HVX_Vector *w = (const HVX_Vector *)d->scr + c * kk;
+        const HVX_Vector bias = P(bias)[c];
+#pragma clang loop unroll(disable)
+        for (fnpu_u32 y = 0; y < d->oh; y++) {
+#pragma clang loop unroll(disable)
+            for (fnpu_u32 x0 = 0; x0 < d->ow; x0 += 32) {
+                HVX_Vector a = RS_ACC(4)[0]; /* qf16 zero */
+                const char *p = in + 4 * (2 * y * ws + 2 * x0);
+#pragma clang loop unroll(disable)
+                for (fnpu_u32 dy = 0; dy < 3; dy++, p += 4 * ws) {
+                    HVX_VectorPair e = Q6_W_vdeal_VVR(*(const rs_uv *)(p + 128), *(const rs_uv *)p, -4);
+                    HVX_VectorPair f = Q6_W_vdeal_VVR(*(const rs_uv *)(p + 136), *(const rs_uv *)(p + 8), -4);
+                    a = Q6_Vqf16_vadd_Vqf16Vqf16(a, Q6_Vqf16_vmpy_VhfVhf(Q6_V_lo_W(e), w[3 * dy]));
+                    a = Q6_Vqf16_vadd_Vqf16Vqf16(a, Q6_Vqf16_vmpy_VhfVhf(Q6_V_hi_W(e), w[3 * dy + 1]));
+                    a = Q6_Vqf16_vadd_Vqf16Vqf16(a, Q6_Vqf16_vmpy_VhfVhf(Q6_V_lo_W(f), w[3 * dy + 2]));
+                }
+                /* Round the accumulator to FP16 before the bias, as rs_dw/rs_post do:
+                 * the volatile slot stops LLVM fusing it into a qf16+hf add. */
+                RS_ACC(0)[0] = Q6_Vhf_equals_Vqf16(a);
+                HVX_Vector v = Q6_Vhf_equals_Vqf16(Q6_Vqf16_vadd_VhfVhf(RS_ACC(0)[0], bias));
+                v = Q6_Vhf_vmin_VhfVhf(Q6_Vhf_vmax_VhfVhf(v, Q6_V_vzero()), top);
+                fnpu_u32 n = d->ow - x0;
+                if (n < 32) v = Q6_V_vmux_QVV(Q6_Q_vsetq_R(4 * n), v, Q6_V_vzero());
+                RS_FLAGS[0] = Q6_V_vor_VV(RS_FLAGS[0], Q6_V_vand_QR(Q6_Q_vcmp_eq_VhVh(Q6_V_vand_VV(v, exp), exp), -1));
+                *(volatile rs_uv *)(out + 4 * (y * ows + x0)) = v;
+            }
+        }
+    }
+}
+#elif defined(RS_STRIDE2)
 static __attribute__((noinline)) void rs_s2(rs_op *d) {
     fnpu_u32 dst = d->vout;
     rs_zero((volatile HVX_Vector *)dst, d->cpo * d->onbin);

@@ -26,6 +26,9 @@ request refused by the loader.
 
 --prefix (step 2b) also runs Conv_0 .. Conv_18 on the DSP from host im2col stem
 columns of the FP16 image, against the full FP16 contract (no host prefix).
+A --s2-direct build (direct stride-2 depthwise) runs the same plans; each case
+records the SHA256 of its merged final tensor so runs on two images can be
+compared bit for bit.
 --stop-after LAYER truncates both phases (early-layer pilot, no heads).
 Protections as tests/hardware_teacher_link.py: lease, refusal record, audited
 direct dispatch, no retry/recovery/restart, window and reservation restored
@@ -254,6 +257,7 @@ def run(runner, model, cases, manifest, rounds, stop_after, prefix=False, dump=N
             if final != raw[merged.final]:
                 raise ValueError(f"{entry['name']} round {r}: merged final differs from qualify")
             frames.append(req | {"host_wall_ms": wall})
+            row["final_sha256"] = hashlib.sha256(final).hexdigest()  # A/B across images
             print(
                 json.dumps(
                     {
@@ -359,13 +363,21 @@ def main():
         or link_record.get("dw_blocks", 2) != 2
     ):
         p.error("--jobs must be a --stride2 --s2-even linked build without heads/stem")
+    s2_direct = bool(link_record.get("s2_direct"))
     model = mercury.load_keypoint(args.model)
     manifest = json.loads((args.cases / "manifest.json").read_text())
     if manifest["model_sha256"] != model.sha256 or manifest["host_prefix"] != ML.HOST_PREFIX:
         p.error("cases/model mismatch")
     if args.max_cases:
         manifest["cases"] = manifest["cases"][: args.max_cases]
-    ML.build_plan(model, "merged", args.stop_after, prefix=args.prefix)  # validate first
+    # validate first, against the checks of the build actually loaded
+    for mp in [ML.build_plan(model, "merged", args.stop_after, prefix=args.prefix)] + list(
+        ML.qualify_segments(model, args.stop_after, args.prefix)
+    ):
+        for n in range(len(mp.plan.table) // 128):
+            row = struct.unpack_from("<32I", mp.plan.table, 128 * n)
+            if not RL.native_ok(row, s2_direct=ML.S2_PHASE if s2_direct else None):
+                p.error(f"plan descriptor {n} would be rejected by this build")
     if args.prefix and "image" not in load_case(args.cases, manifest["cases"][0]):
         p.error("cases lack the FP16 image; regenerate with tools/mercury_device_cases.py")
     report = {
@@ -374,6 +386,7 @@ def main():
         + ("host im2col stem columns" if args.prefix else "FP32 prefix staged")
         + ", host hint and heads",
         "prefix": args.prefix,
+        "s2_direct": s2_direct,
         "stop_after": args.stop_after,
         "builds": {"loader": link_record["loader"], "linked": link_record["linked"]},
         "model_sha256": model.sha256,

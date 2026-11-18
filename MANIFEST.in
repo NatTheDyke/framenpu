@@ -71,4 +71,7 @@ include evidence/mercury-backbone-device.json
 include evidence/mercury-network-pilot-flush-failure.json
 include evidence/mercury-network-pilot.json
 include evidence/mercury-network-device.json
+include evidence/mercury-s2-direct-pilot.json
+include evidence/mercury-s2-direct-baseline.json
+include evidence/mercury-s2-direct-device.json
 include evidence/ncnn-cpu-baseline.json

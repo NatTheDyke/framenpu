@@ -1,0 +1,177 @@
+{
+ "format": "framenpu-mercury-backbone-run",
+ "scope": "Conv_0 .. Conv_14.g0 on the DSP; host im2col stem columns, host hint and heads",
+ "prefix": true,
+ "s2_direct": true,
+ "stop_after": "Conv_14.g0",
+ "builds": {
+  "loader": {
+   "bytes": 1960,
+   "sha256": "72280ad93eb4ffcf49e7de26908fa2d8f9056e0d9e1e8618f75eba867a7ba3f0",
+   "name": "teacher_link_loader_v1"
+  },
+  "linked": {
+   "bytes": 5904,
+   "sha256": "58c5ec58ac5df03982d416e1f08640c929fcc36c517ffdb848005b1e0e987916"
+  }
+ },
+ "model_sha256": "40c0daa598cedb993b54fff17685231b7465d6db342656c401b01c2029efd1d5",
+ "source_sha256": {
+  "tests/hardware_mercury.py": "7e5340fc358424a06d7ac37c1ea83ae81f88ec82917c0cfb2e3de170674dfd8c",
+  "tests/hardware_teacher_link.py": "4b3f399caf2aa03548746702c0de1bb124cf2469a1d58db1a50be31b200beacb",
+  "tests/mercury_layout.py": "b3b193e63817ce8187747ec1c68a71c226fd6337c94f97d17c4f026965f1d649",
+  "tests/teacher_resident_layout.py": "500f5253ce659ffc7208d8cb6875e8f54378bef5c0637184b276cf209e72c0c3",
+  "tests/teacher_tail_layout.py": "db128c94cdd75382768992ccd277b995fb5f740747a7c56ea9e266375bdbe08f",
+  "src/framenpu/mercury.py": "c47823c9fb79ac22ca59ceddc748a02c2d6cf441c4ac74e19883bccbe2aa13fa"
+ },
+ "cases_manifest_sha256": "6d26ad1c96c62c7119bef70330f66aad2fe7be72edd05e6f51dc9b7a93895918",
+ "window": [
+  "0x1a40000",
+  "0x1f00000"
+ ],
+ "reservation": [
+  "0x1ff0000",
+  "0x1ff4000"
+ ],
+ "audits": {
+  "restored_jobs": 22,
+  "restored_hmx_jobs": 20
+ },
+ "service_before": "MainPID=1045\nNRestarts=0\nActiveState=active\n",
+ "initial_health": {
+  "state": {
+   "abi": 9,
+   "control": [
+    1,
+    0,
+    1
+   ],
+   "callback": 0,
+   "poisoned": false
+  },
+  "firmware_code_prefix_bytes": 114688,
+  "firmware_code_prefix_sha256": "55679e13486357627ea22e494b25342acd9d24d73450f3f28eb1113b82c71b95",
+  "power_configuration_sha256": "2405bda200a51fd0bd699568e8415e53ba7b631cbaa9d4812c656b7240159bbd",
+  "power_restored": true
+ },
+ "arena_before_sha256": "94674964076f61f96f8eb7e5ba78b1e5defde8c1d2f320ba45fda8c3ac6c3b48",
+ "seal_wrapper_ms": 1.70109375,
+ "cases": {
+  "case00": {
+   "split": "calibration",
+   "hinted": false,
+   "qualify": {
+    "max_bound_ratio": 0.3253069570996037,
+    "bound_ratio": {
+     "Conv_0": 0.2872746472564098,
+     "Conv_4": 0.31608349171379646,
+     "Conv_8": 0.3253069570996037,
+     "Conv_10.g0": 0.20981681152141335,
+     "Conv_14.g0": 0.2237838046754996
+    },
+    "requests": 5,
+    "matches_host_emulator": null
+   },
+   "final_sha256": "f2aad707da2e6e8a95665a258dad0c0cd412e23b3f7186ac0e4c472cfcbf32c9",
+   "frames": [
+    {
+     "kind": "rs",
+     "wall_ms": 10.414131000288762,
+     "wrapper_ms": 2.1652604166666665,
+     "body_ms": 2.1347395833333334,
+     "op_us": [
+      77.08333333333334,
+      583.0208333333334,
+      176.71875,
+      580.625,
+      571.25,
+      72.34375,
+      73.69791666666667
+     ],
+     "host_wall_ms": 10.722196002461715
+    },
+    {
+     "kind": "rs",
+     "wall_ms": 9.240303999831667,
+     "wrapper_ms": 2.1523958333333333,
+     "body_ms": 2.1216666666666666,
+     "op_us": [
+      76.97916666666667,
+      566.6666666666667,
+      176.77083333333334,
+      581.5104166666667,
+      574.53125,
+      72.34375,
+      72.86458333333334
+     ],
+     "host_wall_ms": 9.526182999252342
+    }
+   ],
+   "controls": {
+    "guarded_fault_linked": 1,
+    "descriptor_rejection_linked": 1,
+    "stride2_descriptor_rejections": 6,
+    "second_seal_refused": 1,
+    "clean_after_controls": true
+   }
+  }
+ },
+ "plans": {
+  "merged": {
+   "descriptors": 7,
+   "vtcm_peak_vectors": 9001,
+   "window_end": "0x1a8c800",
+   "ops": 5
+  },
+  "qualify_segments": [
+   {
+    "first": "Conv_0",
+    "last": "Conv_14.g0",
+    "requests": 5,
+    "window_end": "0x1bc0800"
+   }
+  ]
+ },
+ "retire_wrapper_ms": 1.7183854166666668,
+ "unsealed_request_refused": true,
+ "summary": {
+  "cases": 1,
+  "max_bound_ratio": 0.3253069570996037,
+  "merged_bit_identical_to_qualify": true,
+  "matches_host_emulator": 0,
+  "body_ms_median": 2.1216666666666666,
+  "wrapper_ms_median": 2.1523958333333333,
+  "host_wall_ms_median": 9.526182999252342,
+  "descriptor_us_median": [
+   76.98,
+   566.67,
+   176.77,
+   581.51,
+   574.53,
+   72.34,
+   72.86
+  ],
+  "ops": 5
+ },
+ "window_restored": true,
+ "arena_after_sha256": "94674964076f61f96f8eb7e5ba78b1e5defde8c1d2f320ba45fda8c3ac6c3b48",
+ "reservation_restored": true,
+ "final_health": {
+  "state": {
+   "abi": 9,
+   "control": [
+    1,
+    0,
+    1
+   ],
+   "callback": 0,
+   "poisoned": false
+  },
+  "firmware_code_prefix_bytes": 114688,
+  "firmware_code_prefix_sha256": "55679e13486357627ea22e494b25342acd9d24d73450f3f28eb1113b82c71b95",
+  "power_configuration_sha256": "2405bda200a51fd0bd699568e8415e53ba7b631cbaa9d4812c656b7240159bbd",
+  "power_restored": true
+ },
+ "service_after": "MainPID=1045\nNRestarts=0\nActiveState=active\n",
+ "all_checks_passed": true
+}
