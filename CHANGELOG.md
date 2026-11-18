@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Added a [fast depthwise](docs/MERCURY.md#fast-depthwise)
+  (`build_teacher_link.py --dw-fast`, new image; existing images
+  byte-identical and frozen in tests). It unrolls the 3x3 taps, inlines the
+  post, keeps the overflow flags in a register per op, and keeps the FP16
+  rounding separate with a register fence. Mercury depthwise drops from 1.54
+  to 0.98 ms and the whole request from 6.02 to 5.30 ms, bit-identical on
+  all 16 cases. Also documents the negative results: copy overlap, flag-slot
+  placement, and store-drain probes.
 - [Host time](docs/MERCURY.md#host-time-held-hmx-power-and-2-crop-batches):
   the Mercury harness records host phases per frame. `--held-power` keeps HMX
   powered for the session through the existing held-power owner, instead of

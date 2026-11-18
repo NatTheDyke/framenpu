@@ -312,6 +312,74 @@ static __attribute__((noinline)) void rs_pw(const rs_op *d) {
     }
 }
 
+#ifdef RS_DW_FAST
+#if RS_DW_BLOCKS != 2 || defined(RS_STEM)
+#error "RS_DW_FAST is the 2-block, stem-free depthwise"
+#endif
+/* Keeps v in a register as its own value: stops LLVM fusing an FP16 rounding
+ * (hf = qf16) into the following qf16 + hf add, which would skip that rounding. */
+#define RS_FENCE(v) __asm__ volatile("" : "+v"(v))
+/* rs_post's operations for a depthwise output (no residual: rs_get rejects
+ * vres on depthwise), in the same order; flags accumulate in fl. */
+#define RS_DW_POST(v, at, bias, mask, fl)                                                    \
+    do {                                                                                  \
+        HVX_Vector x_ = (v);                                                              \
+        RS_FENCE(x_);                                                                     \
+        fl = Q6_V_vor_VV(fl, Q6_V_vand_QR(Q6_Q_vcmp_eq_VhVh(Q6_V_vand_VV(x_, exp), exp), -1)); \
+        x_ = Q6_Vhf_equals_Vqf16(Q6_Vqf16_vadd_VhfVhf(x_, bias));                         \
+        if (clip) x_ = Q6_Vhf_vmin_VhfVhf(Q6_Vhf_vmax_VhfVhf(x_, Q6_V_vzero()), six);    \
+        fl = Q6_V_vor_VV(fl, Q6_V_vand_QR(Q6_Q_vcmp_eq_VhVh(Q6_V_vand_VV(x_, exp), exp), -1)); \
+        P(vout)[at] = Q6_V_vand_VV(x_, mask);                                             \
+    } while (0)
+/* rs_dw with the taps unrolled for 3x3, the post inlined and the overflow
+ * flags held in a register for the whole op (one RS_FLAGS update). Same
+ * products, same accumulation order, same post: bit-identical output. */
+static __attribute__((noinline)) void rs_dw(const rs_op *d) {
+    const fnpu_u32 k = d->nk, kk = k * k, step = 4 * (d->ws - k), nb = d->nbin, clip = d->clip;
+    const fnpu_u32 base = 4 * (32 * d->blk0 - (k >> 1) * (d->ws + 1));
+    const volatile fnpu_u32 *coef = (const volatile fnpu_u32 *)FR(d->vpar);
+    const HVX_Vector exp = Q6_V_vsplat_R(0x7c007c00u), six = Q6_V_vsplat_R(0x46004600u);
+    const HVX_Vector zq = Q6_Vqf16_vadd_VhfVhf(Q6_V_vzero(), Q6_V_vzero());
+    HVX_Vector fl = Q6_V_vzero();
+#pragma clang loop unroll(disable)
+    for (fnpu_u32 i = 0; i < d->cpi * kk; i++) P(scr)[i] = Q6_V_vsplat_R(coef[i]);
+#pragma clang loop unroll(disable)
+    for (fnpu_u32 c = 0; c < d->cpi; c++) {
+        const char *s = (const char *)d->vin + 128 * nb * c + base;
+        const HVX_Vector *w = (const HVX_Vector *)d->scr + c * kk;
+        const HVX_Vector bias = P(bias)[c];
+#pragma clang loop unroll(disable)
+        for (fnpu_u32 j = 0; j < d->nj; j += 2) {
+            HVX_Vector a0 = zq, a1 = zq;
+            const char *p = s + 128 * j;
+            if (k == 3) {
+                const fnpu_u32 r = 4 * d->ws;
+#define RS_TAP(o, t)                                                                          \
+    a0 = Q6_Vqf16_vadd_Vqf16Vqf16(a0, Q6_Vqf16_vmpy_VhfVhf(*(const rs_uv *)(p + (o)), w[t]));       \
+    a1 = Q6_Vqf16_vadd_Vqf16Vqf16(a1, Q6_Vqf16_vmpy_VhfVhf(*(const rs_uv *)(p + (o) + 128), w[t]))
+                RS_TAP(0, 0); RS_TAP(4, 1); RS_TAP(8, 2);
+                RS_TAP(r, 3); RS_TAP(r + 4, 4); RS_TAP(r + 8, 5);
+                RS_TAP(2 * r, 6); RS_TAP(2 * r + 4, 7); RS_TAP(2 * r + 8, 8);
+#undef RS_TAP
+            } else {
+                const HVX_Vector *wt = w;
+#pragma clang loop unroll(disable)
+                for (fnpu_u32 dy = 0; dy < k; dy++, p += step) {
+#pragma clang loop unroll(disable)
+                    for (fnpu_u32 dx = 0; dx < k; dx++, p += 4, wt++) {
+                        a0 = Q6_Vqf16_vadd_Vqf16Vqf16(a0, Q6_Vqf16_vmpy_VhfVhf(*(const rs_uv *)p, *wt));
+                        a1 = Q6_Vqf16_vadd_Vqf16Vqf16(a1, Q6_Vqf16_vmpy_VhfVhf(*(const rs_uv *)(p + 128), *wt));
+                    }
+                }
+            }
+            fnpu_u32 at = c * nb + d->blk0 + j;
+            RS_DW_POST(Q6_Vhf_equals_Vqf16(a0), at, bias, P(bias)[d->cpo + j], fl);
+            RS_DW_POST(Q6_Vhf_equals_Vqf16(a1), at + 1, bias, P(bias)[d->cpo + j + 1], fl);
+        }
+    }
+    RS_FLAGS[0] = Q6_V_vor_VV(RS_FLAGS[0], fl);
+}
+#else
 static __attribute__((noinline)) void rs_dw(const rs_op *d) {
     const fnpu_u32 k = d->nk, kk = k * k, step = 4 * (d->ws - k);
     const fnpu_u32 base = 4 * (32 * d->blk0 - (k >> 1) * (d->ws + 1));
@@ -352,6 +420,7 @@ static __attribute__((noinline)) void rs_dw(const rs_op *d) {
         }
     }
 }
+#endif
 
 #if defined(RS_STRIDE2) && defined(RS_S2_DIRECT)
 static __attribute__((noinline)) void rs_s2(rs_op *d) {
@@ -360,6 +429,9 @@ static __attribute__((noinline)) void rs_s2(rs_op *d) {
     const HVX_Vector exp = Q6_V_vsplat_R(0x7c007c00u), top = Q6_V_vsplat_R(0x46004600u);
     rs_zero((volatile HVX_Vector *)d->vout, d->cpo * d->onbin);
     RS_ACC(4)[0] = Q6_Vqf16_vadd_VhfVhf(Q6_V_vzero(), Q6_V_vzero());
+#ifdef RS_DW_FAST
+    HVX_Vector fl = Q6_V_vzero();
+#endif
 #pragma clang loop unroll(disable)
     for (fnpu_u32 i = 0; i < d->cpi * kk; i++) P(scr)[i] = Q6_V_vsplat_R(coef[i]);
     /* word of tap (dy = 0, dx = 0) for output (0, 0): row P-1, column P-1 */
@@ -384,18 +456,31 @@ static __attribute__((noinline)) void rs_s2(rs_op *d) {
                     a = Q6_Vqf16_vadd_Vqf16Vqf16(a, Q6_Vqf16_vmpy_VhfVhf(Q6_V_hi_W(e), w[3 * dy + 1]));
                     a = Q6_Vqf16_vadd_Vqf16Vqf16(a, Q6_Vqf16_vmpy_VhfVhf(Q6_V_lo_W(f), w[3 * dy + 2]));
                 }
+#ifdef RS_DW_FAST
+                HVX_Vector v = Q6_Vhf_equals_Vqf16(a);
+                RS_FENCE(v); /* the FP16 rounding stays its own step, as below */
+                v = Q6_Vhf_equals_Vqf16(Q6_Vqf16_vadd_VhfVhf(v, bias));
+#else
                 /* Round the accumulator to FP16 before the bias, as rs_dw/rs_post do:
                  * the volatile slot stops LLVM fusing it into a qf16+hf add. */
                 RS_ACC(0)[0] = Q6_Vhf_equals_Vqf16(a);
                 HVX_Vector v = Q6_Vhf_equals_Vqf16(Q6_Vqf16_vadd_VhfVhf(RS_ACC(0)[0], bias));
+#endif
                 v = Q6_Vhf_vmin_VhfVhf(Q6_Vhf_vmax_VhfVhf(v, Q6_V_vzero()), top);
                 fnpu_u32 n = d->ow - x0;
                 if (n < 32) v = Q6_V_vmux_QVV(Q6_Q_vsetq_R(4 * n), v, Q6_V_vzero());
+#ifdef RS_DW_FAST
+                fl = Q6_V_vor_VV(fl, Q6_V_vand_QR(Q6_Q_vcmp_eq_VhVh(Q6_V_vand_VV(v, exp), exp), -1));
+#else
                 RS_FLAGS[0] = Q6_V_vor_VV(RS_FLAGS[0], Q6_V_vand_QR(Q6_Q_vcmp_eq_VhVh(Q6_V_vand_VV(v, exp), exp), -1));
+#endif
                 *(volatile rs_uv *)(out + 4 * (y * ows + x0)) = v;
             }
         }
     }
+#ifdef RS_DW_FAST
+    RS_FLAGS[0] = Q6_V_vor_VV(RS_FLAGS[0], fl);
+#endif
 }
 #elif defined(RS_STRIDE2)
 static __attribute__((noinline)) void rs_s2(rs_op *d) {

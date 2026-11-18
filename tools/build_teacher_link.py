@@ -9,6 +9,8 @@ offset zero, then tests/teacher_resident_probe.c and tests/teacher_dw_probe.c
 compiled as tl_rs and tl_dw. --stride2 enables the resident stride-2 extension
 in tl_rs only; --dw-blocks 4 restores four-block coefficient sharing there.
 --s2-even (Mercury, with --stride2 only) keeps the even stride-2 phase.
+--dw-fast (stride2, 2 dw blocks) unrolls the 3x3 depthwise taps, inlines the
+post and holds the overflow flags in a register per op (same arithmetic).
 --pw-fast (stride2 only) posts each 1x1 HMX tile with hoisted fields and
 register-held overflow flags (same arithmetic).
 --pw-profile adds 1x1 phase tick totals in meta words 3..11 (timing only).
@@ -104,7 +106,10 @@ def build(
     s2_direct=False,
     pw_profile=False,
     pw_fast=False,
+    dw_fast=False,
 ):
+    if dw_fast and (not stride2 or heads or stem or dw_blocks != 2):
+        raise ValueError("the fast depthwise is the stride2, 2-block build")
     if pw_fast and (not stride2 or heads or stem):
         raise ValueError("the fast 1x1 post is stride2-only")
     if pw_profile and (not stride2 or heads or stem):
@@ -203,6 +208,7 @@ def build(
             *(["-DRS_S2_DIRECT"] if s2_direct else []),
             *(["-DRS_PW_PROFILE"] if pw_profile else []),
             *(["-DRS_PW_FAST"] if pw_fast else []),
+            *(["-DRS_DW_FAST"] if dw_fast else []),
         ),
         compile_(folder, 2, TESTS / "teacher_dw_probe.c", "-Dframe_job=tl_dw"),
         compile_(folder, 3, SDK / "hmx.S"),
@@ -229,6 +235,7 @@ def build(
         "s2_direct": s2_direct,
         "pw_profile": pw_profile,
         "pw_fast": pw_fast,
+        "dw_fast": dw_fast,
         "loader": {"bytes": len(loader.code), "sha256": _sha(loader.code), "name": LOADER_NAME},
         "linked": {"bytes": len(image), "sha256": _sha(image)},
         "reservation": {"code": f"{CODE:#x}", "bytes": CODE_BYTES, "seal_vector": f"{SEAL_AT:#x}"},
@@ -259,6 +266,7 @@ def main():
     p.add_argument("--s2-direct", action="store_true", help="direct stride-2 depthwise")
     p.add_argument("--pw-profile", action="store_true", help="timing instrument: 1x1 phase ticks")
     p.add_argument("--pw-fast", action="store_true", help="1x1 post with register-held flags")
+    p.add_argument("--dw-fast", action="store_true", help="unrolled depthwise, inlined post")
     args = p.parse_args()
     r = build(
         args.output,
@@ -273,6 +281,7 @@ def main():
         s2_direct=args.s2_direct,
         pw_profile=args.pw_profile,
         pw_fast=args.pw_fast,
+        dw_fast=args.dw_fast,
     )
     print(
         json.dumps(

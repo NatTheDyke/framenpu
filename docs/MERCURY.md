@@ -469,15 +469,72 @@ runtime must release them when tracking goes idle. A 2-crop request takes
 12.1 ms on the DSP and about 15.6 ms of host wall for both hands; two
 batch-1 requests take about 17.7 ms.
 
+## Fast depthwise
+
+A batch of 4 crops needs at most 5 ms per crop to fit the 20 ms native
+budget (and more than the 160-descriptor cap allows: 4 × 55 = 220). So
+this round went after DSP time.
+
+`--dw-fast` (`RS_DW_FAST`, image `89511c18…`, 6,416 B) rewrites both
+depthwise kernels with the same products, accumulation order and post:
+
+- the 3x3 taps are fully unrolled; the generic loop stays for other kernel
+  sizes;
+- the stride-1 post (bias, clip, flags, mask) is inlined instead of calling
+  `rs_post` per vector;
+- the overflow flags stay in a register for the whole op, so `RS_FLAGS` is
+  updated once per op instead of read-modified-written per vector;
+- the FP16 rounding before the bias stays its own step through an empty
+  inline-asm register fence (`RS_FENCE`). This replaces the volatile VTCM
+  round trip in the direct stride-2 kernel. The disassembly has no fused
+  `qf16 + hf` add and no vector stack access.
+
+Device ([full run](../evidence/mercury-dw-fast-device.json), after a
+[pilot through `Conv_18`](../evidence/mercury-dw-fast-pilot.json); held
+power, 16 cases × 5 rounds):
+
+| | Fast 1x1 post (`e7b06441`) | + fast depthwise (`89511c18`) |
+|---|---:|---:|
+| Depthwise, 15 ops (largest: `Conv_23` 296 → 164 µs) | 1.54 ms | 0.98 ms |
+| Stride 2, 8 ops | 0.68 ms | 0.59 ms |
+| 1x1, 29 ops | 3.63 ms | 3.55 ms |
+| **DSP request body, median** | 6.02 ms | **5.30 ms** |
+| Final tensor vs the other image | | **bit-identical, 16/16 cases** |
+
+Bounds (worst 0.394), keypoint drift, controls, the 969 restoration audits and
+the arena hash are all unchanged.
+
+Negative results from the same round. These were instrument runs; the code
+was reverted, and their reports are not kept as evidence.
+
+- **Copies are a floor.** Issuing 8 DDR loads before their stores in
+  `rs_copy` made the 1x1 parameter copy slower (723 → 851 µs). DDR vector
+  loads serialize at about 0.1 µs each, so the 1.16 ms per crop of parameter
+  and activation copies can't be overlapped this way. Sharing parameters
+  across a batch only fits VTCM at the 8x8 stage (about 0.13 ms per crop).
+- **The 1x1 post-loop wait is not the flags slot.** Moving `RS_FLAGS`
+  outside the `LV` block left the wait unchanged (1.36 → 1.32 ms). On the
+  first attempt, the kernel rejected a legal merged descriptor and the
+  harness stopped with `RecoveryRequired`, which needed a reboot. The plans
+  top-allocate tensors to the very end of the scratch span (vector 15,296),
+  so shrinking the span by one vector broke them, and the harness's
+  pre-check used the planner's span rather than the build's. Any future
+  reserved slot must shrink the planner's span too.
+- **The wait is not plain store drain or HMX tail either.** A microbenchmark
+  of 16 stores at the post's stride plus a barrier drains in 0.10 µs
+  (contiguous: 0.06 µs). A 1 µs ALU spin after the HMX store made the post
+  itself faster (909 → 545 µs: its loads of the HMX output tile wait for
+  HMX). But the barrier after the post got slower (1.32 → 1.74 ms). Its
+  cause is open.
+
 ## Next steps
 
-- **Remaining 1x1 cost.** 3.64 ms. After the fast post, the largest items
-  are the per-tile barrier wait (~1.4 ms), the post (~0.9 ms) and the
-  parameter copy from DDR (~0.72 ms, 7,024 vectors per request). Next
-  experiment: a flags slot outside the HMX scratch block, to test whether the
-  per-tile update causes the remaining wait. The parameter copy is about 900 KB
-  and does not fit in VTCM next to the peak plan, so overlapping it with
-  compute is the lever there.
+- **Remaining DSP time** (5.30 ms per crop): 1x1 3.55 ms (parameter copy
+  ~0.72, post ~0.9, the unexplained post-loop wait ~1.3, HMX ~0.23, gather
+  ~0.21), depthwise 0.98, stride 2 0.59, activation load/store 0.17.
+- **Batch of 4.** It needs about 5.0 ms per crop or less (20 ms budget), and
+  either fewer descriptors per crop (55 now, cap 160) or a request that
+  replays one crop's descriptors with per-crop address offsets.
 - **Host overhead** is now about 1.8 ms per crop at batch 2 with held power.
   The remaining pieces are the dispatch wake and completion poll (about 0.9 ms
   per request), the staging in NumPy (about 0.55 ms per crop) and the gate
@@ -522,4 +579,5 @@ sudo python tests/hardware_mercury.py --run-on-device --jobs /tmp/mercury/jobs \
 # direct stride 2: build with --stride2 --s2-even --s2-direct; compare final_sha256 per case
 # fast 1x1 post: add --pw-fast (timing breakdown: also --pw-profile, 1 case x 3 rounds)
 # host time: --held-power [--batch 2]; compare per-crop wall over alternating short runs
+# fast depthwise: add --dw-fast to the build
 ~~~
