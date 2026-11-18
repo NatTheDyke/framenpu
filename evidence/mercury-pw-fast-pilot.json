@@ -1,0 +1,257 @@
+{
+ "format": "framenpu-mercury-backbone-run",
+ "scope": "Conv_0 .. Conv_18 on the DSP; host im2col stem columns, host hint and heads",
+ "prefix": true,
+ "s2_direct": true,
+ "pw_profile": false,
+ "pw_fast": true,
+ "stop_after": "Conv_18",
+ "builds": {
+  "loader": {
+   "bytes": 1960,
+   "sha256": "72280ad93eb4ffcf49e7de26908fa2d8f9056e0d9e1e8618f75eba867a7ba3f0",
+   "name": "teacher_link_loader_v1"
+  },
+  "linked": {
+   "bytes": 6128,
+   "sha256": "e7b064418102b2da41a34b9ef76aa3df89762fbcc196afa8ca68171e0e14d04f"
+  }
+ },
+ "model_sha256": "40c0daa598cedb993b54fff17685231b7465d6db342656c401b01c2029efd1d5",
+ "source_sha256": {
+  "tests/hardware_mercury.py": "d043e2dcfe958ca056e12b8da80f048d9e8ff9c53074bd3542d758e3f9fa68d3",
+  "tests/hardware_teacher_link.py": "4b3f399caf2aa03548746702c0de1bb124cf2469a1d58db1a50be31b200beacb",
+  "tests/mercury_layout.py": "b3b193e63817ce8187747ec1c68a71c226fd6337c94f97d17c4f026965f1d649",
+  "tests/teacher_resident_layout.py": "500f5253ce659ffc7208d8cb6875e8f54378bef5c0637184b276cf209e72c0c3",
+  "tests/teacher_tail_layout.py": "db128c94cdd75382768992ccd277b995fb5f740747a7c56ea9e266375bdbe08f",
+  "src/framenpu/mercury.py": "c47823c9fb79ac22ca59ceddc748a02c2d6cf441c4ac74e19883bccbe2aa13fa"
+ },
+ "cases_manifest_sha256": "6d26ad1c96c62c7119bef70330f66aad2fe7be72edd05e6f51dc9b7a93895918",
+ "window": [
+  "0x1a40000",
+  "0x1f00000"
+ ],
+ "reservation": [
+  "0x1ff0000",
+  "0x1ff4000"
+ ],
+ "audits": {
+  "restored_jobs": 64,
+  "restored_hmx_jobs": 62
+ },
+ "service_before": "MainPID=1045\nNRestarts=0\nActiveState=active\n",
+ "initial_health": {
+  "state": {
+   "abi": 9,
+   "control": [
+    1,
+    0,
+    1
+   ],
+   "callback": 0,
+   "poisoned": false
+  },
+  "firmware_code_prefix_bytes": 114688,
+  "firmware_code_prefix_sha256": "55679e13486357627ea22e494b25342acd9d24d73450f3f28eb1113b82c71b95",
+  "power_configuration_sha256": "2405bda200a51fd0bd699568e8415e53ba7b631cbaa9d4812c656b7240159bbd",
+  "power_restored": true
+ },
+ "arena_before_sha256": "94674964076f61f96f8eb7e5ba78b1e5defde8c1d2f320ba45fda8c3ac6c3b48",
+ "seal_wrapper_ms": 1.6975,
+ "cases": {
+  "case00": {
+   "split": "calibration",
+   "hinted": false,
+   "qualify": {
+    "max_bound_ratio": 0.3253069570996037,
+    "bound_ratio": {
+     "Conv_0": 0.2872746472564098,
+     "Conv_4": 0.31608349171379646,
+     "Conv_8": 0.3253069570996037,
+     "Conv_10.g0": 0.20981681152141335,
+     "Conv_14.g0": 0.2237838046754996,
+     "Conv_10.g1": 0.13916654543625376,
+     "Conv_14.g1": 0.1807809155099386,
+     "Conv_10.g2": 0.2689607780529098,
+     "Conv_14.g2": 0.21935616821542142,
+     "Conv_10.g3": 0.1711982268725558,
+     "Conv_14.g3": 0.18680190656616072,
+     "Conv_10.g4": 0.1490782195616077,
+     "Conv_14.g4": 0.18325613265522703,
+     "Conv_10.g5": 0.1337691176239278,
+     "Conv_14.g5": 0.15315576429395195,
+     "Conv_18": 0.10760274696487208
+    },
+    "requests": 16,
+    "matches_host_emulator": null
+   },
+   "final_sha256": "1224eadc760004401f231ed50852775e1d40474eead341727dd9a6057f85b4be",
+   "frames": [
+    {
+     "kind": "rs",
+     "wall_ms": 9.682353000243893,
+     "wrapper_ms": 2.6801041666666667,
+     "body_ms": 2.6489583333333333,
+     "op_us": [
+      77.13541666666667,
+      223.28125,
+      176.19791666666669,
+      227.03125,
+      225.57291666666669,
+      72.70833333333334,
+      223.75,
+      72.39583333333334,
+      229.47916666666669,
+      72.8125,
+      227.8125,
+      72.13541666666667,
+      227.8125,
+      72.70833333333334,
+      228.85416666666669,
+      72.65625,
+      74.79166666666667,
+      71.82291666666667
+     ],
+     "host_wall_ms": 10.021304002293618
+    },
+    {
+     "kind": "rs",
+     "wall_ms": 9.932920002029277,
+     "wrapper_ms": 2.6297916666666667,
+     "body_ms": 2.5991666666666666,
+     "op_us": [
+      77.23958333333334,
+      223.33333333333334,
+      176.30208333333334,
+      216.25,
+      219.27083333333334,
+      72.76041666666667,
+      220.0,
+      71.92708333333334,
+      218.85416666666669,
+      71.97916666666667,
+      223.90625,
+      72.23958333333334,
+      228.33333333333334,
+      72.65625,
+      214.73958333333334,
+      71.92708333333334,
+      75.05208333333334,
+      72.39583333333334
+     ],
+     "host_wall_ms": 10.25187199775246
+    },
+    {
+     "kind": "rs",
+     "wall_ms": 10.349214000598295,
+     "wrapper_ms": 2.673489583333333,
+     "body_ms": 2.6426041666666666,
+     "op_us": [
+      77.1875,
+      228.59375,
+      176.40625,
+      225.20833333333334,
+      227.23958333333334,
+      72.70833333333334,
+      226.77083333333334,
+      72.65625,
+      225.26041666666669,
+      72.55208333333334,
+      224.0625,
+      72.08333333333334,
+      225.46875,
+      72.70833333333334,
+      226.51041666666669,
+      72.44791666666667,
+      72.34375,
+      72.39583333333334
+     ],
+     "host_wall_ms": 10.63759299722733
+    }
+   ],
+   "controls": {
+    "guarded_fault_linked": 1,
+    "descriptor_rejection_linked": 1,
+    "stride2_descriptor_rejections": 36,
+    "second_seal_refused": 1,
+    "clean_after_controls": true
+   }
+  }
+ },
+ "plans": {
+  "merged": {
+   "descriptors": 18,
+   "vtcm_peak_vectors": 11289,
+   "window_end": "0x1ac4800",
+   "ops": 16
+  },
+  "qualify_segments": [
+   {
+    "first": "Conv_0",
+    "last": "Conv_14.g5",
+    "requests": 15,
+    "window_end": "0x1dfb800"
+   },
+   {
+    "first": "Conv_18",
+    "last": "Conv_18",
+    "requests": 1,
+    "window_end": "0x1ae0800"
+   }
+  ]
+ },
+ "retire_wrapper_ms": 1.6927083333333333,
+ "unsealed_request_refused": true,
+ "summary": {
+  "pw_profile_us_median": null,
+  "cases": 1,
+  "max_bound_ratio": 0.3253069570996037,
+  "merged_bit_identical_to_qualify": true,
+  "matches_host_emulator": 0,
+  "body_ms_median": 2.620885416666667,
+  "wrapper_ms_median": 2.6516406249999998,
+  "host_wall_ms_median": 10.444732497489895,
+  "descriptor_us_median": [
+   77.21,
+   225.96,
+   176.35,
+   220.73,
+   223.26,
+   72.73,
+   223.39,
+   72.29,
+   222.06,
+   72.27,
+   223.98,
+   72.16,
+   226.9,
+   72.68,
+   220.62,
+   72.19,
+   73.7,
+   72.4
+  ],
+  "ops": 16
+ },
+ "window_restored": true,
+ "arena_after_sha256": "94674964076f61f96f8eb7e5ba78b1e5defde8c1d2f320ba45fda8c3ac6c3b48",
+ "reservation_restored": true,
+ "final_health": {
+  "state": {
+   "abi": 9,
+   "control": [
+    1,
+    0,
+    1
+   ],
+   "callback": 0,
+   "poisoned": false
+  },
+  "firmware_code_prefix_bytes": 114688,
+  "firmware_code_prefix_sha256": "55679e13486357627ea22e494b25342acd9d24d73450f3f28eb1113b82c71b95",
+  "power_configuration_sha256": "2405bda200a51fd0bd699568e8415e53ba7b631cbaa9d4812c656b7240159bbd",
+  "power_restored": true
+ },
+ "service_after": "MainPID=1045\nNRestarts=0\nActiveState=active\n",
+ "all_checks_passed": true
+}

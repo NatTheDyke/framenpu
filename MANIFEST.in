@@ -74,4 +74,8 @@ include evidence/mercury-network-device.json
 include evidence/mercury-s2-direct-pilot.json
 include evidence/mercury-s2-direct-baseline.json
 include evidence/mercury-s2-direct-device.json
+include evidence/mercury-pw-fast-pilot.json
+include evidence/mercury-pw-fast-device.json
+include evidence/mercury-pw-profile-before.json
+include evidence/mercury-pw-profile-after.json
 include evidence/ncnn-cpu-baseline.json

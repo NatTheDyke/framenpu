@@ -72,6 +72,19 @@ void fnpu_hmx_store(fnpu_u16 *, const void *);
 #else
 #define RS_S2_P 1u
 #endif
+/* RS_PW_PROFILE (timing instrument only): 19.2 MHz tick totals over the request
+ * for 1x1 ops -- parameter copy, output zeroing, B gather, HMX clear/load/store,
+ * post, barrier after the gather, an extra barrier before the gather (draining
+ * the previous block's stores), a barrier after each tile's post, a second
+ * barrier after the HMX store -- in meta words 3..11. Outputs are unchanged. */
+#ifdef RS_PW_PROFILE
+#define RS_PROF ((volatile fnpu_u32 *)LV(63)) /* zeroed with LV(57..63) per request */
+#define RS_PT(v) fnpu_u32 v = rs_ticks()
+#define RS_PADD(k, v) (RS_PROF[k] += rs_ticks() - (v))
+#else
+#define RS_PT(v)
+#define RS_PADD(k, v)
+#endif
 #if defined(RS_S2_DIRECT) && !defined(RS_STRIDE2)
 #error "RS_S2_DIRECT requires RS_STRIDE2"
 #endif
@@ -214,24 +227,87 @@ static __attribute__((noinline)) void rs_post(const rs_op *d, HVX_Vector v, fnpu
 #endif
 }
 
+#ifdef RS_PW_FAST
+#ifdef RS_STEM
+#error "RS_PW_FAST has no stem prefix path"
+#endif
+/* rs_post for one HMX tile (output rows 16o.. of block j), same operations in
+ * the same order, with the descriptor fields hoisted and the overflow flags
+ * kept in a register: one RS_FLAGS update per tile instead of a
+ * read-modify-write per vector (a per-op update would spill the vector).
+ * Measured with RS_PW_PROFILE: the per-vector update left about 2.7 us of
+ * stores to drain per tile, paid by the next barrier or HMX op. */
+static __attribute__((noinline)) void rs_pw_post(const rs_op *d, fnpu_u32 o, fnpu_u32 j) {
+    fnpu_u32 n = d->cpo - 16 * o, nb = d->nbin, at = 16 * o * nb + d->blk0 + j;
+    if (n > 16) n = 16;
+    const volatile HVX_Vector *bias = P(bias) + 16 * o, *res = d->vres ? P(vres) + at : 0;
+    volatile HVX_Vector *out = P(vout) + at;
+    HVX_Vector exp = Q6_V_vsplat_R(0x7c007c00u), mask = P(bias)[d->cpo + j], fl = Q6_V_vzero();
+    fnpu_u32 clip = d->clip;
+#pragma clang loop unroll(disable)
+    for (fnpu_u32 rr = 0; rr < n; rr++) {
+        HVX_Vector v = LV(0)[rr];
+        fl = Q6_V_vor_VV(fl, Q6_V_vand_QR(Q6_Q_vcmp_eq_VhVh(Q6_V_vand_VV(v, exp), exp), -1));
+        v = Q6_Vhf_equals_Vqf16(Q6_Vqf16_vadd_VhfVhf(v, bias[rr]));
+        if (clip) v = Q6_Vhf_vmin_VhfVhf(Q6_Vhf_vmax_VhfVhf(v, Q6_V_vzero()), Q6_V_vsplat_R(0x46004600u));
+        if (res) v = Q6_Vhf_equals_Vqf16(Q6_Vqf16_vadd_VhfVhf(v, res[rr * nb])); /* check: no qf16+hf fusion */
+        fl = Q6_V_vor_VV(fl, Q6_V_vand_QR(Q6_Q_vcmp_eq_VhVh(Q6_V_vand_VV(v, exp), exp), -1));
+        out[rr * nb] = Q6_V_vand_VV(v, mask);
+    }
+    RS_FLAGS[0] = Q6_V_vor_VV(RS_FLAGS[0], fl);
+}
+#endif
 static __attribute__((noinline)) void rs_pw(const rs_op *d) {
     volatile HVX_Vector *bt = P(scr);
     fnpu_u32 nk = d->nk;
 #pragma clang loop unroll(disable)
     for (fnpu_u32 j = 0; j < d->nj; j++) {
         const volatile HVX_Vector *src = P(vin) + d->blk0 + j;
+#ifdef RS_PW_PROFILE
+        {   /* instrument: drain the previous block's post stores separately */
+            RS_PT(tq);
+            __asm__ volatile("barrier" ::: "memory");
+            RS_PADD(6, tq);
+        }
+#endif
+        RS_PT(tg);
 #pragma clang loop unroll(disable)
         for (fnpu_u32 p = 0; p < nk * 16; p++) bt[p] = p < d->cpi ? src[p * d->nbin] : LV(57)[0]; /* zero */
+        RS_PADD(2, tg);
+        RS_PT(tb);
         __asm__ volatile("barrier" ::: "memory");
+        RS_PADD(5, tb);
 #pragma clang loop unroll(disable)
         for (fnpu_u32 o = 0; 16 * o < d->cpo; o++) {
+            RS_PT(th);
             fnpu_hmx_clear();
 #pragma clang loop unroll(disable)
             for (fnpu_u32 t = 0; t < nk; t++)
                 fnpu_hmx_load((const fnpu_u16 *)FR(d->vpar + (o * nk + t) * 16), (const fnpu_u16 *)(bt + 16 * t));
             fnpu_hmx_store((fnpu_u16 *)LV(0), (const void *)RS_SCALE);
+            RS_PADD(3, th);
+#ifdef RS_PW_PROFILE
+            {   /* instrument: a second barrier after the HMX store */
+                RS_PT(ts);
+                __asm__ volatile("barrier" ::: "memory");
+                RS_PADD(8, ts);
+            }
+#endif
+            RS_PT(tp);
+#ifdef RS_PW_FAST
+            rs_pw_post(d, o, j);
+#else
 #pragma clang loop unroll(disable)
             for (fnpu_u32 rr = 0; rr < 16 && 16 * o + rr < d->cpo; rr++) rs_post(d, LV(0)[rr], 16 * o + rr, j);
+#endif
+            RS_PADD(4, tp);
+#ifdef RS_PW_PROFILE
+            {   /* instrument: drain this tile's post stores */
+                RS_PT(tr);
+                __asm__ volatile("barrier" ::: "memory");
+                RS_PADD(7, tr);
+            }
+#endif
         }
     }
 }
@@ -388,9 +464,17 @@ fnpu_u32 frame_job(const fnpu_context *c) {
         } else {
 #endif
         volatile HVX_Vector *v = FR(d->vpar), *m = (volatile HVX_Vector *)(RS_DDR + d->dpar);
+        RS_PT(tc);
         if (d->kind == 4) rs_copy(m, v, d->npar);
         else rs_copy(v, m, d->npar);
+#ifdef RS_PW_PROFILE
+        if (d->kind == 1) RS_PADD(0, tc);
+#endif
+        RS_PT(tz);
         if (d->kind < 3) rs_zero(P(vout), d->cpo * d->nbin);
+#ifdef RS_PW_PROFILE
+        if (d->kind == 1) RS_PADD(1, tz);
+#endif
         if (d->kind == 1) rs_pw(d);
         if (d->kind == 2) rs_dw(d);
 #ifdef RS_STRIDE2
@@ -409,6 +493,9 @@ fnpu_u32 frame_job(const fnpu_context *c) {
     fnpu_u32 pc;
     __asm__ volatile("%0 = pc" : "=r"(pc)::"memory");
     meta[0] = RS_MAGIC; meta[1] = pc; meta[2] = i - a;
+#ifdef RS_PW_PROFILE
+    for (fnpu_u32 k = 0; k < 9; k++) meta[3 + k] = RS_PROF[k];
+#endif
     ((volatile HVX_Vector *)meta)[2] = RS_FLAGS[0];
     __asm__ volatile("barrier" ::: "memory");
     return FNPU_OK;

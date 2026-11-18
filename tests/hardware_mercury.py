@@ -29,6 +29,8 @@ columns of the FP16 image, against the full FP16 contract (no host prefix).
 A --s2-direct build (direct stride-2 depthwise) runs the same plans; each case
 records the SHA256 of its merged final tensor so runs on two images can be
 compared bit for bit.
+An RS_PW_PROFILE build (timing instrument) adds the 1x1 phase tick totals of
+each merged frame (parameter copy, output zeroing, B gather, HMX, post).
 --stop-after LAYER truncates both phases (early-layer pilot, no heads).
 Protections as tests/hardware_teacher_link.py: lease, refusal record, audited
 direct dispatch, no retry/recovery/restart, window and reservation restored
@@ -61,6 +63,17 @@ import mercury_layout as ML
 import teacher_tail_layout as T
 import teacher_resident_layout as RL
 
+PW_BUCKETS = (
+    "param_copy",
+    "zero_output",
+    "b_gather",
+    "hmx",
+    "post",
+    "gather_barrier",
+    "pre_gather_barrier",
+    "post_barrier",
+    "hmx_store_barrier",
+)
 SOURCES = (
     "tests/hardware_mercury.py",
     "tests/hardware_teacher_link.py",
@@ -74,12 +87,69 @@ SOURCES = (
 class MercuryRunner(HL.LinkRunner):
     """LinkRunner's seal/admin/linked submit, without the teacher plans."""
 
-    def __init__(self, dev, mem, loader, image):
+    def __init__(self, dev, mem, loader, image, profile=False):
         self.dev, self.mem = dev, mem
         self.loader, self.image = loader, image
         self.reservation = image + bytes(HL.CODE_BYTES - len(image))  # zero seal vector
         self.sealed = False
         self.stride2, self.split_after, self.dw_blocks = True, None, 2
+        self.profile = profile
+
+    def submit(self, plan, job, *, fault=False, reject=False, linked=False, refused=False):
+        if not self.profile or not linked or fault or reject or refused:
+            return super().submit(
+                plan, job, fault=fault, reject=reject, linked=linked, refused=refused
+            )
+        return self._profiled(plan, job)
+
+    def _profiled(self, plan, job):
+        """LinkRunner's linked resident submit for an RS_PW_PROFILE image: meta words
+        3..11 carry the 1x1 phase tick totals; every other check is unchanged."""
+        for off, data in job.staged.items():
+            self.put(off, data)
+        sealed = self.sealed
+
+        def validate(result):
+            HL.linked_completion(result, len(self.image), output_bytes=T.META_BYTES)
+            self._check_reservation(sealed)
+
+        t0 = time.perf_counter()
+        res = self.dev._submit(
+            self.loader,
+            RL.payload(plan),
+            opcode=RL.RS_OPCODE,
+            params=(1, job.first, job.end, 0, 0, 0),
+            output_size=T.META_BYTES,
+            use_direct=True,
+            _completion_validator=validate,
+            _prepare=lambda t: self._check_reservation(sealed),
+        )
+        wall = time.perf_counter() - t0
+        m = struct.unpack_from("<256I", res.output)
+        ref = res.kernel_reference_ticks
+        n = job.end - job.first
+        ticks = list(m[96 : 96 + n])
+        if (
+            not HL.IMAGE_CACHED <= m[1] < HL.IMAGE_CACHED + len(self.image)
+            or any(m[64:96])
+            or m[0] != RL.RS_MAGIC
+            or m[2] != n
+            or any(m[12:64])
+            or any(m[96 + n :])
+            or any(b < a for a, b in zip(ticks, ticks[1:]))
+            or not 0 < ticks[-1] <= ref
+            or sum(m[3:12]) > ticks[-1]
+        ):
+            raise ValueError(f"{job.ops}: profiled resident metadata differs")
+        per = [b - a for a, b in zip([0] + ticks, ticks)]
+        return {
+            "kind": "rs",
+            "wall_ms": wall * 1e3,
+            "wrapper_ms": ref / 19200,
+            "body_ms": ticks[-1] / 19200,
+            "op_us": [x / 19.2 for x in per],
+            "pw_profile_us": dict(zip(PW_BUCKETS, (x / 19.2 for x in m[3:12]))),
+        }
 
     def get(self, off, n):
         return bytes(self.mem[off : off + n])
@@ -312,7 +382,11 @@ def summarize(crops, merged_ops):
     wrap = [f["wrapper_ms"] for r in rows for f in r["frames"][1:]]
     wall = [f["host_wall_ms"] for r in rows for f in r["frames"][1:]]
     per_op = np.median([f["op_us"] for r in rows for f in r["frames"][1:]], axis=0)
+    prof = [f["pw_profile_us"] for r in rows for f in r["frames"][1:] if "pw_profile_us" in f]
     s = {
+        "pw_profile_us_median": {k: float(np.median([p[k] for p in prof])) for k in PW_BUCKETS}
+        if prof
+        else None,
         "cases": len(rows),
         "max_bound_ratio": max(r["qualify"]["max_bound_ratio"] for r in rows),
         "merged_bit_identical_to_qualify": True,
@@ -364,6 +438,7 @@ def main():
     ):
         p.error("--jobs must be a --stride2 --s2-even linked build without heads/stem")
     s2_direct = bool(link_record.get("s2_direct"))
+    profile = bool(link_record.get("pw_profile"))
     model = mercury.load_keypoint(args.model)
     manifest = json.loads((args.cases / "manifest.json").read_text())
     if manifest["model_sha256"] != model.sha256 or manifest["host_prefix"] != ML.HOST_PREFIX:
@@ -387,6 +462,8 @@ def main():
         + ", host hint and heads",
         "prefix": args.prefix,
         "s2_direct": s2_direct,
+        "pw_profile": profile,
+        "pw_fast": bool(link_record.get("pw_fast")),
         "stop_after": args.stop_after,
         "builds": {"loader": link_record["loader"], "linked": link_record["linked"]},
         "model_sha256": model.sha256,
@@ -415,7 +492,9 @@ def main():
                 retired, unsafe = True, False
                 try:
                     with audited_device(power, report["audits"])(dispatch="direct") as dev:
-                        runner = MercuryRunner(dev, dev._transport.memory, loader_job, image)
+                        runner = MercuryRunner(
+                            dev, dev._transport.memory, loader_job, image, profile
+                        )
                         try:
                             report["seal_wrapper_ms"] = runner.seal()
                             report["cases"], report["plans"] = run(

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Added a [fast 1x1 post](docs/MERCURY.md#fast-1x1-post)
+  (`build_teacher_link.py --pw-fast`, new image; existing images byte-identical
+  and frozen in tests). It keeps the overflow flags in a register instead of
+  a read-modify-write per output vector next to the HMX output page, which a
+  new phase profiler (`--pw-profile`) showed to be the main 1x1 cost. Mercury
+  1x1 layers drop from 8.77 to 3.64 ms, and the whole request from 11.15 to
+  6.03 ms. Final tensors are bit-identical on all 16 cases.
 - Added a [direct stride-2 depthwise](docs/MERCURY.md#direct-stride-2-depthwise)
   (`build_teacher_link.py --s2-direct`, new image; existing images
   byte-identical). It computes only the kept outputs, dealing input rows into

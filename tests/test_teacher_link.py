@@ -78,6 +78,29 @@ class TeacherLinkBuild(unittest.TestCase):
             "3d11cee3f26c441490f094735956bcd6102dfc2ad59e01225e8c54d32c97aa8e",
         )
 
+    def test_mercury_images_frozen(self):
+        # Device-qualified Mercury images (evidence/mercury-*.json): even-phase
+        # stride 2, direct stride 2, and direct stride 2 with the fast 1x1 post.
+        frozen = {
+            (): "d0427fb0137f4d34d4a1046c1a4bced7af582e618c279b8468c171cfb6b39e0b",
+            ("s2_direct",): "58c5ec58ac5df03982d416e1f08640c929fcc36c517ffdb848005b1e0e987916",
+            ("s2_direct", "pw_fast"): (
+                "e7b064418102b2da41a34b9ef76aa3df89762fbcc196afa8ca68171e0e14d04f"
+            ),
+        }
+        for i, (flags, digest) in enumerate(frozen.items()):
+            r = self.BL.build(
+                self.out / f"merc{i}", stride2=True, s2_even=True, **dict.fromkeys(flags, True)
+            )
+            self.assertEqual(r["linked"]["sha256"], digest, flags)
+            self.assertLessEqual(r["linked"]["bytes"], 0x3F80)
+            self.assertEqual(r["loader"], self.record["loader"])
+
+    def test_pw_options_need_stride2(self):
+        for flag in ("pw_fast", "pw_profile"):
+            with self.assertRaises(ValueError):
+                self.BL.build(self.out / f"bad-{flag}", **{flag: True})
+
     def test_loader_checks_reject_a_wrong_seal_constant(self):
         text = (self.out / "link/loader/disassembly.txt").read_text()
         from check_resident_link import _symbols

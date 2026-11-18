@@ -354,12 +354,71 @@ The largest remaining items are the HMX pointwise layers: the six `Conv_10`
 groups alone are 3.48 ms. Next is the host overhead of about 7.4 ms per
 request.
 
+## Fast 1x1 post
+
+After the direct stride-2 kernel, the HMX 1x1 layers were 8.77 of the 11.15 ms.
+A timing-only build, `--pw-profile`, adds tick totals for each phase of the
+1x1 loop: parameter copy, output zeroing, B gather, HMX, post, and barriers
+inserted at chosen points. Arithmetic and outputs are unchanged. The first
+profile showed that the MACs were not the problem:
+
+- With the original post loop
+  ([profile](../evidence/mercury-pw-profile-before.json)), HMX work is about
+  0.2 µs per 16-row tile. A barrier placed right after a tile's post loop
+  waits about 2.8 µs, though (5.70 ms over the request). That wait is roughly
+  fixed per barrier, not per store.
+- A barrier right after the HMX store costs nothing. Without the extra
+  barriers, the same wait lands on the next barrier or the next HMX op
+  instead. The gather's stores drain at once.
+- The post loop does a read-modify-write of the overflow-flag slot
+  `RS_FLAGS` (`LV(62)`) for every output vector. That slot is in the same
+  8 KiB scratch block as the HMX output tile `LV(0)`. Why these stores drain
+  so slowly is not established; the measured fact is that removing the
+  per-vector update removes most of the wait.
+
+The new build option `--pw-fast` (`RS_PW_FAST`, image `e7b06441…`, 6,128 B)
+replaces the 1x1 post with `rs_pw_post`, which handles one tile per call. It
+runs the same operations as `rs_post` in the same order, hoists the descriptor
+fields, and keeps the flags in a register, so `RS_FLAGS` is updated once per
+tile. The disassembly confirms that both FP16 roundings, after the bias and
+after the residual, stay separate ops. A per-op flag update would make the
+compiler spill the vector to the stack, which the link check rejects. All
+earlier images are byte-identical and frozen in `tests/test_teacher_link.py`.
+The depthwise and stem paths still use `rs_post`.
+
+With the fast post ([profile](../evidence/mercury-pw-profile-after.json)), the
+post-loop wait falls from 5.70 to 1.36 ms, and the post itself from 1.32 to
+0.90 ms. The remaining wait (0.67 µs per tile) is still the largest single
+item. Whether the one per-tile `RS_FLAGS` update causes it is untested.
+
+Device ([fast post](../evidence/mercury-pw-fast-device.json), after a
+[pilot through `Conv_18`](../evidence/mercury-pw-fast-pilot.json)): the same
+16 cases × 5 rounds as the direct stride-2 run.
+
+| | Direct stride 2 (`58c5ec58`) | + fast 1x1 post (`e7b06441`) |
+|---|---:|---:|
+| `Conv_0` / `Conv_10` group (64x64, 16→16) | 579 µs | 226 µs |
+| `Conv_19` / `Conv_29` (32x32, 16→96) | 748 µs | 251 µs |
+| All 1x1 ops | 8.77 ms | 3.64 ms |
+| Depthwise / stride 2 / load+store | 1.54 / 0.68 / 0.17 ms | unchanged |
+| **DSP request body, median** | 11.15 ms | **6.03 ms** |
+| Host wall per request, median | 18.5 ms | 13.5 ms |
+| Final tensor vs the other image | | **bit-identical, 16/16 cases** |
+
+Bounds (worst 0.394), keypoint drift, controls, the 969 restoration audits and
+the arena hash are all unchanged. DSP-bound throughput is about 165 crops/s.
+
 ## Next steps
 
-- **Pointwise cost.** HMX 1x1 layers are now 8.77 of the 11.15 ms (depthwise
-  1.54, stride 2 0.68, load/store 0.17). The
-  per-row post-processing (bias, clip, mask, store per output vector)
-  dominates, not the MACs (see the forecast fit).
+- **Remaining 1x1 cost.** 3.64 ms. After the fast post, the largest items
+  are the per-tile barrier wait (~1.4 ms), the post (~0.9 ms) and the
+  parameter copy from DDR (~0.72 ms, 7,024 vectors per request). Next
+  experiment: a flags slot outside the HMX scratch block, to test whether the
+  per-tile update causes the remaining wait. The parameter copy is about 900 KB
+  and does not fit in VTCM next to the peak plan, so overlapping it with
+  compute is the lever there.
+- **Host overhead** is now the larger share of a request: 13.5 ms wall
+  against 6.0 ms on the DSP.
 - **Step 2c: heatmap heads on the DSP** (the two dense 3x3 convolutions and
   the 2x2 transposed convolution). Then batch 2 crops per request and time
   the stack's seam (`MercuryKeypoint.run`) end to end.
@@ -396,4 +455,5 @@ sudo python tests/hardware_mercury.py --run-on-device --jobs /tmp/mercury/jobs \
   --output result.json --rounds 5 [--stop-after Conv_33 --max-cases 1]
 # step 2b: the same, plus --prefix (pilot: --prefix --stop-after Conv_18 --max-cases 1)
 # direct stride 2: build with --stride2 --s2-even --s2-direct; compare final_sha256 per case
+# fast 1x1 post: add --pw-fast (timing breakdown: also --pw-profile, 1 case x 3 rounds)
 ~~~
