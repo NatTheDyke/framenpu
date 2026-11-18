@@ -129,6 +129,6 @@ mutations, all pairwise buffer aliases, sigmoid accuracy, full-tail planning
 and numerical simulation, unchanged reference builds, diagnostic dispatch,
 and uncertain-completion resource retention.
 
-The next implementation is the banded RGB/112x112 prefix, including the
-max-pool skip branch that produces blob 10 alongside blob 8. Start with a
-separate request feeding this qualified tail-plus-heads request.
+The optional [banded RGB/112x112 prefix](TEACHER_STEM.md) now produces both
+tail inputs in a separate request feeding this tail-plus-heads request.
+Its full-model measurements and precision contract are documented separately.

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Added a qualified [banded RGB prefix](docs/TEACHER_STEM.md), including the
+  max-pool skip branch, feeding the resident tail and heads in two requests.
+  Prefix depthwise reductions and original biases use QFloat32 arithmetic
+  with FP16 tensor storage. Median DSP time is 15.71 + 16.73 ms; complete
+  normalized-RGB-to-head host wall is 56.75 ms. All frozen accuracy ceilings,
+  384 restoration audits and 276 offline tests pass.
 - Added optional resident global-average pooling and four FP32 heads
   ([TEACHER_HEADS.md](docs/TEACHER_HEADS.md)). The qualified tail stays in one
   request and returns 512 bytes; DSP time is 16.74 ms. Host wall through all

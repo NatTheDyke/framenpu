@@ -48,6 +48,9 @@ SOURCES = (
     TESTS / "teacher_heads.c",
     TESTS / "teacher_heads_check.h",
     TESTS / "teacher_heads_layout.py",
+    TESTS / "teacher_stem_check.h",
+    TESTS / "teacher_stem_impl.h",
+    TESTS / "teacher_stem_layout.py",
     TESTS / "landmark_common.h",
     TESTS / "teacher_tail_layout.py",
     TESTS / "teacher_resident_layout.py",
@@ -78,7 +81,9 @@ def verify_loader(text, symbols):
         raise ValueError("loader must not publish or clean the code slot")
 
 
-def build(output, *, stride2=False, dw_blocks=2, heads=False):
+def build(output, *, stride2=False, dw_blocks=2, heads=False, stem=False):
+    if stem and not heads:
+        raise ValueError("resident stem requires the heads linked build")
     if heads and not stride2:
         raise ValueError("resident heads require the stride-2 linked build")
     if dw_blocks not in (2, 4) or (dw_blocks == 4 and not stride2):
@@ -153,6 +158,7 @@ def build(output, *, stride2=False, dw_blocks=2, heads=False):
             *(["-DRS_STRIDE2"] if stride2 else []),
             *(["-DRS_DW_BLOCKS=4"] if dw_blocks == 4 else []),
             *(["-DRS_HEADS"] if heads else []),
+            *(["-DRS_STEM"] if stem else []),
         ),
         compile_(folder, 2, TESTS / "teacher_dw_probe.c", "-Dframe_job=tl_dw"),
         compile_(folder, 3, SDK / "hmx.S"),
@@ -171,6 +177,7 @@ def build(output, *, stride2=False, dw_blocks=2, heads=False):
         "stride2": stride2,
         "dw_blocks": dw_blocks,
         "heads": heads,
+        "stem": stem,
         "loader": {"bytes": len(loader.code), "sha256": _sha(loader.code), "name": LOADER_NAME},
         "linked": {"bytes": len(image), "sha256": _sha(image)},
         "reservation": {"code": f"{CODE:#x}", "bytes": CODE_BYTES, "seal_vector": f"{SEAL_AT:#x}"},
@@ -193,8 +200,15 @@ def main():
     )
     p.add_argument("--dw-blocks", type=int, choices=(2, 4), default=2)
     p.add_argument("--heads", action="store_true")
+    p.add_argument("--stem", action="store_true")
     args = p.parse_args()
-    r = build(args.output, stride2=args.stride2, dw_blocks=args.dw_blocks, heads=args.heads)
+    r = build(
+        args.output,
+        stride2=args.stride2,
+        dw_blocks=args.dw_blocks,
+        heads=args.heads,
+        stem=args.stem,
+    )
     print(
         json.dumps(
             {k: r[k] for k in ("loader", "linked")}

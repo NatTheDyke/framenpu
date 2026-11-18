@@ -30,6 +30,9 @@
  * words 15..20 are output nbin, blk0, ws, h, w and temporary vector offset.
  * The ordinary 4 KiB reference build does not include this extension. */
 #include "landmark_common.h"
+#ifdef RS_STEM
+#include "teacher_stem_check.h"
+#endif
 #ifdef RS_HEADS
 #include "teacher_heads_check.h"
 void th_run(const fnpu_u32 *, const fnpu_context *);
@@ -96,6 +99,12 @@ static __attribute__((noinline)) void rs_zero(volatile HVX_Vector *to, fnpu_u32 
 /* Fetch descriptor i into d; nonzero if any index it implies leaves bounds. */
 static __attribute__((noinline)) fnpu_u32 rs_get(fnpu_u32 tab, fnpu_u32 i, rs_op *d) {
     rs_copy(RS_DESC, (const volatile HVX_Vector *)(RS_DDR + tab) + i, 1);
+#ifdef RS_STEM
+    if (((const volatile fnpu_u32 *)RS_DESC)[0] == TS_KIND) {
+        d->kind = TS_KIND;
+        return ts_bad((const fnpu_u32 *)RS_DESC);
+    }
+#endif
 #ifdef RS_HEADS
     if (((const volatile fnpu_u32 *)RS_DESC)[0] == TH_KIND) {
         fnpu_u32 *row = (fnpu_u32 *)d;
@@ -158,11 +167,26 @@ static __attribute__((noinline)) void rs_post(const rs_op *d, HVX_Vector v, fnpu
     fnpu_u32 at = pr * d->nbin + d->blk0 + j;
     HVX_Vector exp = Q6_V_vsplat_R(0x7c007c00u), flags = RS_FLAGS[0];
     flags = Q6_V_vor_VV(flags, Q6_V_vand_QR(Q6_Q_vcmp_eq_VhVh(Q6_V_vand_VV(v, exp), exp), -1));
+#ifdef RS_STEM
+    if (!d->dpar) {
+        /* Prefix-only: early-layer rounding propagates through the whole
+         * graph. Add half bias through QFloat32, keeping FP16 storage. */
+        HVX_Vector one = Q6_V_vsplat_R(0x3c003c00);
+        HVX_VectorPair x = Q6_Wqf32_vmpy_VhfVhf(v,one);
+        v = Q6_Vhf_equals_Wqf32(Q6_W_vcombine_VV(
+            Q6_Vqf32_vadd_Vqf32Vsf(Q6_V_hi_W(x),P(bias)[2*pr+1]),
+            Q6_Vqf32_vadd_Vqf32Vsf(Q6_V_lo_W(x),P(bias)[2*pr])));
+    } else
+#endif
     v = Q6_Vhf_equals_Vqf16(Q6_Vqf16_vadd_VhfVhf(v, P(bias)[pr]));
     if (d->clip) v = Q6_Vhf_vmin_VhfVhf(Q6_Vhf_vmax_VhfVhf(v, Q6_V_vzero()), Q6_V_vsplat_R(0x46004600u));
     if (d->vres) v = Q6_Vhf_equals_Vqf16(Q6_Vqf16_vadd_VhfVhf(v, P(vres)[at]));
     RS_FLAGS[0] = Q6_V_vor_VV(flags, Q6_V_vand_QR(Q6_Q_vcmp_eq_VhVh(Q6_V_vand_VV(v, exp), exp), -1));
+#ifdef RS_STEM
+    P(vout)[at] = Q6_V_vand_VV(v, P(bias)[(d->dpar ? d->cpo : 2*d->cpo) + j]);
+#else
     P(vout)[at] = Q6_V_vand_VV(v, P(bias)[d->cpo + j]);
+#endif
 }
 
 static __attribute__((noinline)) void rs_pw(const rs_op *d) {
@@ -250,6 +274,10 @@ static __attribute__((noinline)) void rs_s2(rs_op *d) {
 }
 #endif
 
+#ifdef RS_STEM
+#include "teacher_stem_impl.h"
+#endif
+
 fnpu_u32 frame_job(const fnpu_context *c) {
     const volatile fnpu_u32 *in = fnpu_input(c);
     fnpu_u32 tab = in[1], n = in[2], a = c->params[1], b = c->params[2], i;
@@ -272,6 +300,11 @@ fnpu_u32 frame_job(const fnpu_context *c) {
 #pragma clang loop unroll(disable)
     for (i = a; i < b; i++) {
         if (rs_get(tab, i, d)) return FNPU_BAD_ARGUMENT;
+#ifdef RS_STEM
+        if (d->kind == TS_KIND) {
+            if (!ts_run(c, (const fnpu_u32 *)RS_DESC, t0)) break;
+        } else {
+#endif
         volatile HVX_Vector *v = FR(d->vpar), *m = (volatile HVX_Vector *)(RS_DDR + d->dpar);
         if (d->kind == 4) rs_copy(m, v, d->npar);
         else rs_copy(v, m, d->npar);
@@ -283,6 +316,9 @@ fnpu_u32 frame_job(const fnpu_context *c) {
 #endif
 #ifdef RS_HEADS
         if (d->kind == TH_KIND) th_run((const fnpu_u32 *)RS_DESC, c);
+#endif
+#ifdef RS_STEM
+        }
 #endif
         fnpu_u32 t = rs_ticks() - t0;
         meta[96 + i - a] = t;

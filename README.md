@@ -295,6 +295,11 @@ preserving the frozen rules. See
 [HAND_TRACKING.md](docs/HAND_TRACKING.md) for the roadmap and
 [HMX_THROUGHPUT.md](docs/HMX_THROUGHPUT.md) for research context.
 
+The optional [banded teacher path](docs/TEACHER_STEM.md) now runs from normalized
+RGB through all four heads in two DSP requests, returning 512 bytes. Four-crop
+qualification passes the existing accuracy ceilings. Median DSP time is
+32.44 ms total; host wall through the audited Python harness is 56.75 ms.
+
 [CONTRIBUTING.md](CONTRIBUTING.md) explains development and kernel changes.
 The project is [MIT-licensed](LICENSE); see
 [third-party provenance](THIRD_PARTY_NOTICES.md). This independent research

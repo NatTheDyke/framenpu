@@ -516,6 +516,7 @@ def main():
     p.add_argument("--rounds", type=int, default=5)
     p.add_argument("--stride2", action="store_true")
     p.add_argument("--heads", action="store_true")
+    p.add_argument("--stem", action="store_true")
     p.add_argument("--dw-blocks", type=int, choices=(2, 4), default=2)
     p.add_argument("--split-after", help="split merged execution after this layer (two requests)")
     args = p.parse_args()
@@ -529,10 +530,14 @@ def main():
         p.error("--dw-blocks must agree with the linked build")
     if args.heads != link_record.get("heads", False):
         p.error("--heads must agree with the linked build")
+    if args.stem != link_record.get("stem", False) or (args.stem and not args.heads):
+        p.error("--stem requires --heads and a matching linked build")
     if args.heads and (not args.stride2 or args.split_after):
         p.error("heads currently require one merged stride-2 request")
     if args.heads:
         import hardware_teacher_heads as HH
+    if args.stem:
+        import hardware_teacher_stem as HS
     if args.split_after and not args.stride2:
         p.error("--split-after requires --stride2")
     graph = load_landmark_graph(args.model / "hand.ncnn.param", args.model / "hand.ncnn.bin")
@@ -544,7 +549,12 @@ def main():
     ):
         p.error("corpus/model mismatch")
     report = {
-        "format": "framenpu-teacher-heads-run" if args.heads else "framenpu-teacher-link-run",
+        "format": "framenpu-teacher-stem-run"
+        if args.stem
+        else "framenpu-teacher-heads-run"
+        if args.heads
+        else "framenpu-teacher-link-run",
+        "stem": args.stem,
         "heads": args.heads,
         "stride2": args.stride2,
         "dw_blocks": args.dw_blocks,
@@ -572,6 +582,11 @@ def main():
             n: digest(ROOT / n)
             for n in ("tests/hardware_teacher_heads.py", "tests/teacher_heads_layout.py")
         }
+    if args.stem:
+        report["source_sha256"] |= {
+            n: digest(ROOT / n)
+            for n in ("tests/hardware_teacher_stem.py", "tests/teacher_stem_layout.py")
+        }
     lease = _lease()
     try:
         with PowerSnapshot() as power:
@@ -590,7 +605,13 @@ def main():
                 unsafe = False
                 try:
                     with audited_device(power, report["audits"])(dispatch="direct") as dev:
-                        runner = (HH.HeadsRunner if args.heads else LinkRunner)(
+                        runner = (
+                            HS.StemRunner
+                            if args.stem
+                            else HH.HeadsRunner
+                            if args.heads
+                            else LinkRunner
+                        )(
                             dev,
                             dev._transport.memory,
                             jobs,
@@ -604,7 +625,7 @@ def main():
                         )
                         try:
                             report["crops"], report["seal_wrapper_ms"] = (
-                                HH.run if args.heads else run
+                                HS.run if args.stem else HH.run if args.heads else run
                             )(runner, args.corpus, manifest, args.rounds)
                         except RecoveryRequired:
                             unsafe = True
@@ -623,7 +644,9 @@ def main():
                         )  # unsealed: loader refuses
                         report["unsealed_request_refused"] = True
                         report["summary"] = (
-                            HH.summarize(report["crops"])
+                            HS.summarize(report["crops"])
+                            if args.stem
+                            else HH.summarize(report["crops"])
                             if args.heads
                             else summarize(report["crops"], runner.plans["resident"], plan)
                         )
