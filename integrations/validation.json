@@ -2,7 +2,7 @@
   "format": "framenpu-tracker-integration-validation",
   "upstream": "https://github.com/spyjacob/steam-frame-hand-tracking",
   "base_commit": "8852ec9bdd4f81fb5a359e5bf88ed25f0e6fc89e",
-  "patch_sha256": "e28f90536cabd8cd49818e8250f9dec84d9ff10b86078f07507b248005ef543c",
+  "patch_sha256": "2109b2e205b67ca998b1d6c851b017af7df11071fcf35db37e04b004fcfa05de",
   "cpu_default": true,
   "accelerator_failure_latched_to_cpu": true,
   "request_crop_counts": [
@@ -23,7 +23,7 @@
   "sustained_thermal_and_pc_rendering_validated": false,
   "live_evidence": "evidence/mercury-live-validation.json",
   "live_evidence_sha256": "cc43b9e5482304b3908d48f0a6b3e7e538b72439df08304ee1480654c98ed390",
-  "tracker_commit": "17c8fa9be1dff61efdcf540d061b5b7472687b80",
+  "tracker_commit": "2608879d391763dabb35d42e2a74f450a8453c66",
   "tracker_fork": "https://github.com/NatTheDyke/steam-frame-hand-tracking",
   "tracker_branch": "framenpu-inference",
   "capture_submitted_at_most_once": true,

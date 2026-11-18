@@ -14,4 +14,4 @@ Neither weights nor camera data are included.
 
 The committed integration is also available on the
 [framenpu-inference branch](https://github.com/NatTheDyke/steam-frame-hand-tracking/tree/framenpu-inference)
-of the tracker fork (commit `17c8fa9be1dff61efdcf540d061b5b7472687b80`).
+of the tracker fork (commit `2608879d391763dabb35d42e2a74f450a8453c66`).

@@ -1,5 +1,5 @@
 diff --git a/README.md b/README.md
-index 8e1d009..8f85496 100644
+index 8e1d009..d7690e1 100644
 --- a/README.md
 +++ b/README.md
 @@ -26,6 +26,13 @@ back on the controller.**
@@ -16,6 +16,30 @@ index 8e1d009..8f85496 100644
  ## The panel
  
  ![Hand Tracking panel](overlay/panel_preview.png)
+@@ -103,12 +110,22 @@ vrpathreg adddriver <repo>\pcdriver\framehands
+ Set `headsetHost` in `pcdriver\framehands\framehands_live.ini` to the Frame's IP, then restart
+ SteamVR. The driver DLL can only be replaced while PC SteamVR is closed.
+ 
++### PC (Linux SteamVR)
++
++```
++pcdriver/build.sh                                      # g++; framehands/bin/linux64/driver_framehands.so
++~/.local/share/Steam/steamapps/common/SteamVR/bin/vrpathreg.sh adddriver <repo>/pcdriver/framehands
++```
++
++Same settings file and `headsetHost`; restart SteamVR after building. Proton games use the native
++Linux SteamVR, so they see the hands too.
++
+ ### Removing it
+ 
+ - Headset: panel → both hands OFF (or `~/handtrack/stop.sh`); `capture/uninstall.sh` removes the
+   layer; `overlay/install_overlay.sh --remove` removes the panel; `headset/rollback.sh` removes the
+   `camera/enableCamera` setting an early probe added.
+-- PC: `vrpathreg removedriver <repo>\pcdriver\framehands`.
++- PC: `vrpathreg removedriver <repo>\pcdriver\framehands` (Linux: `vrpathreg.sh removedriver ...`).
+ 
+ ---
+ 
 diff --git a/REPORT.md b/REPORT.md
 index ab64100..04a0775 100644
 --- a/REPORT.md
@@ -1035,6 +1059,167 @@ index 22e55ce..bf824b6 100644
  names="live ptgrab"
  [ "$1" = "--from-watchdog" ] || names="$names watchdog"
  for n in $names; do f=$R/$n.pid; [ -f $f ] && kill "$(cat $f)" 2>/dev/null; rm -f $f; done
+diff --git a/pcdriver/build.sh b/pcdriver/build.sh
+new file mode 100755
+index 0000000..b3f55fd
+--- /dev/null
++++ b/pcdriver/build.sh
+@@ -0,0 +1,10 @@
++#!/bin/sh
++# Build driver_framehands.so into framehands/bin/linux64 for Linux SteamVR (needs g++).
++set -e
++cd "$(dirname "$0")"
++mkdir -p build framehands/bin/linux64
++g++ -O2 -std=c++17 -shared -fPIC -fvisibility=hidden -Wall -Wno-unused-function \
++  -Iopenvr -Ithird_party/openvr_handsim \
++  src/driver_framehands.cpp third_party/openvr_handsim/hand_simulation.cpp \
++  -o framehands/bin/linux64/driver_framehands.so -pthread -static-libstdc++ -static-libgcc
++echo built framehands/bin/linux64/driver_framehands.so
+diff --git a/pcdriver/src/driver_framehands.cpp b/pcdriver/src/driver_framehands.cpp
+index bdf7f45..6497bc6 100644
+--- a/pcdriver/src/driver_framehands.cpp
++++ b/pcdriver/src/driver_framehands.cpp
+@@ -23,11 +23,26 @@
+ // expected to be used.
+ #include <openvr_driver.h>
+ 
++#ifdef _WIN32
+ #define NOMINMAX
+ #define WIN32_LEAN_AND_MEAN
+ #include <winsock2.h>
+ #include <ws2tcpip.h>
+ #include <windows.h>
++#define FH_EXPORT extern "C" __declspec(dllexport)
++#else   // Linux SteamVR: POSIX sockets, built as framehands/bin/linux64/driver_framehands.so
++#include <arpa/inet.h>
++#include <dlfcn.h>
++#include <netinet/in.h>
++#include <sys/socket.h>
++#include <sys/stat.h>
++#include <sys/time.h>
++#include <unistd.h>
++typedef int SOCKET;
++#define INVALID_SOCKET (-1)
++#define closesocket close
++#define FH_EXPORT extern "C" __attribute__((visibility("default")))
++#endif
+ 
+ #include <algorithm>
+ #include <atomic>
+@@ -43,7 +58,9 @@
+ #include <thread>
+ #include <vector>
+ 
++#ifdef _WIN32
+ #pragma comment(lib, "ws2_32.lib")
++#endif
+ 
+ using namespace vr;
+ 
+@@ -149,13 +166,19 @@ static Config cfg() {
+ }
+ 
+ static std::string driverDir() {
++#ifdef _WIN32
+     HMODULE h = nullptr;
+     GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                        (LPCSTR)&driverDir, &h);
+     char p[MAX_PATH] = {};
+     GetModuleFileNameA(h, p, MAX_PATH);
+     std::string s(p);
+-    for (int i = 0; i < 3; i++) s = s.substr(0, s.find_last_of("\\/"));   // ...\framehands\bin\win64\x.dll
++#else
++    Dl_info info{};
++    dladdr((void *)&driverDir, &info);
++    std::string s(info.dli_fname ? info.dli_fname : "");   // .../framehands/bin/linux64/x.so
++#endif
++    for (int i = 0; i < 3; i++) s = s.substr(0, s.find_last_of("\\/"));   // ...\framehands\bin\win64\x.dll (Windows)
+     return s;
+ }
+ 
+@@ -638,11 +661,13 @@ class Provider : public IServerTrackedDeviceProvider {
+ public:
+     EVRInitError Init(IVRDriverContext *ctx) override {
+         VR_INIT_SERVER_DRIVER_CONTEXT(ctx);
+-        livePath_ = driverDir() + "\\framehands_live.ini";
++        livePath_ = driverDir() + "/framehands_live.ini";
+         loadLiveConfig(livePath_, true);
+         Log("framehands v3: live config %s", livePath_.c_str());
++#ifdef _WIN32
+         WSADATA w;
+         WSAStartup(MAKEWORD(2, 2), &w);
++#endif
+         for (int i = 0; i < 2; i++) {
+             hands_[i] = new HandController(i);
+             VRServerDriverHost()->TrackedDeviceAdded(i ? "framehands-right" : "framehands-left",
+@@ -656,7 +681,9 @@ public:
+         running_ = false;
+         if (sock_ != INVALID_SOCKET) closesocket(sock_);
+         if (net_.joinable()) net_.join();
++#ifdef _WIN32
+         WSACleanup();
++#endif
+     }
+     const char *const *GetInterfaceVersions() override { return k_InterfaceVersions; }
+ 
+@@ -665,9 +692,15 @@ public:
+         // live config, once a second
+         if (now - lastCfgCheck_ > 1000000000LL) {
+             lastCfgCheck_ = now;
++#ifdef _WIN32
+             WIN32_FILE_ATTRIBUTE_DATA fa;
+             if (GetFileAttributesExA(livePath_.c_str(), GetFileExInfoStandard, &fa)) {
+                 uint64_t mt = (uint64_t(fa.ftLastWriteTime.dwHighDateTime) << 32) | fa.ftLastWriteTime.dwLowDateTime;
++#else
++            struct stat st;
++            if (stat(livePath_.c_str(), &st) == 0) {
++                uint64_t mt = uint64_t(st.st_mtim.tv_sec) * 1000000000ull + uint64_t(st.st_mtim.tv_nsec);
++#endif
+                 if (mt != cfgMtime_) {
+                     cfgMtime_ = mt;
+                     loadLiveConfig(livePath_, true);
+@@ -767,7 +800,11 @@ public:
+ private:
+     void netLoop() {
+         sock_ = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
++#ifdef _WIN32
+         DWORD tmo = 20;
++#else
++        timeval tmo{0, 20000};
++#endif
+         setsockopt(sock_, SOL_SOCKET, SO_RCVTIMEO, (const char *)&tmo, sizeof tmo);
+         int64_t lastPing = 0;
+         bool logged = false;
+@@ -775,7 +812,7 @@ private:
+             Config c = cfg();
+             sockaddr_in hs{};
+             hs.sin_family = AF_INET;
+-            hs.sin_port = htons((u_short)c.port);
++            hs.sin_port = htons((uint16_t)c.port);
+             inet_pton(AF_INET, c.headsetHost.c_str(), &hs.sin_addr);
+             int64_t now = nowNs();
+             if (now - lastPing > 100000000LL) {   // ping (and subscribe) every 100 ms
+@@ -785,7 +822,11 @@ private:
+             }
+             char buf[512];
+             sockaddr_in from{};
++#ifdef _WIN32
+             int fl = sizeof from;
++#else
++            socklen_t fl = sizeof from;
++#endif
+             int n = recvfrom(sock_, buf, sizeof buf, 0, (sockaddr *)&from, &fl);
+             int64_t rxNs = nowNs();
+             if (n < 12 || from.sin_addr.s_addr != hs.sin_addr.s_addr) continue;   // only the configured headset
+@@ -836,7 +877,7 @@ private:
+ 
+ static Provider g_provider;
+ 
+-extern "C" __declspec(dllexport) void *HmdDriverFactory(const char *name, int *ret) {
++FH_EXPORT void *HmdDriverFactory(const char *name, int *ret) {
+     if (!strcmp(name, IServerTrackedDeviceProvider_Version)) return &g_provider;
+     if (ret) *ret = VRInitError_Init_InterfaceNotFound;
+     return nullptr;
 diff --git a/tests/test_inference.py b/tests/test_inference.py
 new file mode 100644
 index 0000000..db67e80
