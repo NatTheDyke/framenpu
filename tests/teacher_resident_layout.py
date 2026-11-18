@@ -418,13 +418,17 @@ def payload(plan):
 # ---------------------------------------------------------------- lane-level simulator
 
 
-def simulate(plan, window):
+def simulate(plan, window, *, s2_phase=1):
     """Run a plan against `window` (bytearray covering WIN_LO..WIN_HI) with the
     kernel's addressing; VTCM starts each resident job filled with NaN. The
     caller performs setup_writes(plan) first, exactly as the harness does; the
-    table is read back from the window for every job."""
+    table is read back from the window for every job. s2_phase 1 is the
+    teacher's (2y+1, 2x+1) decimation; 0 is the RS_S2_EVEN (Mercury) build."""
     import numpy as np
     from hmx_block_layout import unpack
+
+    if s2_phase not in (0, 1):
+        raise ValueError("s2_phase must be 0 or 1")
 
     def vecs(off, n):
         return np.frombuffer(
@@ -534,7 +538,7 @@ def simulate(plan, window):
                 if kind == 5:
                     target = vt[dst : dst + cpo * onb].reshape(cpo, onb * 32, 2)
                     for y in range(oh):
-                        start = 32 * blk0 + (2 * y + 1) * ws + 3
+                        start = 32 * blk0 + (2 * y + s2_phase) * ws + 2 + s2_phase
                         to = 32 * oblk + y * ows + 2
                         target[:, to : to + ow] = flat[:, start : start + 2 * ow : 2]
     return window

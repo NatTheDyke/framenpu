@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+- Ran the [whole Mercury convolution network on the DSP](docs/MERCURY.md#step-2b-the-whole-convolution-network-on-the-dsp)
+  (step 2b): `Conv_0 .. Conv_139` as one 55-descriptor request on the same
+  image. The stem runs as an HMX pointwise over host im2col columns, and the
+  64x64 expansion is banded by channel groups instead of rows. 15.14 ms DSP
+  body per crop. All 16 cases stay within the per-op FP16 bound (worst 0.39),
+  and merged frames are bit-identical to per-op qualification. Against FP32,
+  keypoints drift 0.185 px median / 0.669 px max with no `is_hand` flips. The
+  first pilot stopped on a depthwise bound failure (1.26). The cause is the
+  kernel's qf16 accumulation flushing sub-2^-14 products, and the depthwise
+  bound now carries that absolute term (18·2^-14).
+- Ran the [Mercury keypoint backbone on the DSP](docs/MERCURY.md#step-2a-backbone-on-the-dsp)
+  (step 2a): `Conv_19 .. Conv_139` (36 ops, 32x32 to 160x8x8) as one
+  resident request through the linked image, with an even-phase stride-2
+  build option (`--s2-even`, new image only; teacher images unchanged) and a
+  zero-copy hint concat. 6.58 ms DSP body per crop (forecast 8.59 ms). All
+  16 private cases stay within the per-op FP16 bound (worst 0.73); merged
+  frames are bit-identical to per-op qualification; keypoints with host heads
+  drift 0.147 px median / 0.491 px max from FP32, with no `is_hand` flips.
+  All 677 restoration audits pass. The 64x64 prefix still runs on the host.
 - Started the [Mercury keypoint](docs/MERCURY.md) port (offline step 1): a
   dependency-free ONNX reader, a validated lowering of Monado's pinned
   `grayscale_keypoint_jan18.onnx` (FP32 matches ONNX Runtime within 7.6e-6),

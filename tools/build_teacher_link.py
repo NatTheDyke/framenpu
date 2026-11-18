@@ -8,6 +8,7 @@ operator image for the reservation at 0x1ff0000: tests/teacher_link.c at
 offset zero, then tests/teacher_resident_probe.c and tests/teacher_dw_probe.c
 compiled as tl_rs and tl_dw. --stride2 enables the resident stride-2 extension
 in tl_rs only; --dw-blocks 4 restores four-block coefficient sharing there.
+--s2-even (Mercury, with --stride2 only) keeps the even stride-2 phase.
 The two 4 KiB qualification kernels remain unchanged.
 
 Checks: PC-relative C relocations only, no vector stack accesses, the loader's
@@ -94,7 +95,10 @@ def build(
     stem_profile=False,
     stem_vector=False,
     stem_gray=False,
+    s2_even=False,
 ):
+    if s2_even and (not stride2 or heads or stem or dw_blocks != 2):
+        raise ValueError("even-phase stride 2 is the Mercury build: stride2 only")
     if stem_gray and (not stem or stem_profile):
         raise ValueError("grayscale requires the stem build without profiling")
     if stem_vector and not stem:
@@ -181,6 +185,7 @@ def build(
             *(["-DRS_STEM_PROFILE"] if stem_profile else []),
             *(["-DRS_STEM_VECTOR"] if stem_vector else []),
             *(["-DRS_STEM_GRAY"] if stem_gray else []),
+            *(["-DRS_S2_EVEN"] if s2_even else []),
         ),
         compile_(folder, 2, TESTS / "teacher_dw_probe.c", "-Dframe_job=tl_dw"),
         compile_(folder, 3, SDK / "hmx.S"),
@@ -203,6 +208,7 @@ def build(
         "stem_profile": stem_profile,
         "stem_vector": stem_vector,
         "stem_gray": stem_gray,
+        "s2_even": s2_even,
         "loader": {"bytes": len(loader.code), "sha256": _sha(loader.code), "name": LOADER_NAME},
         "linked": {"bytes": len(image), "sha256": _sha(image)},
         "reservation": {"code": f"{CODE:#x}", "bytes": CODE_BYTES, "seal_vector": f"{SEAL_AT:#x}"},
@@ -229,6 +235,7 @@ def main():
     p.add_argument("--stem-profile", action="store_true")
     p.add_argument("--stem-vector", action="store_true")
     p.add_argument("--stem-gray", action="store_true")
+    p.add_argument("--s2-even", action="store_true", help="Mercury: even stride-2 phase")
     args = p.parse_args()
     r = build(
         args.output,
@@ -239,6 +246,7 @@ def main():
         stem_profile=args.stem_profile,
         stem_vector=args.stem_vector,
         stem_gray=args.stem_gray,
+        s2_even=args.s2_even,
     )
     print(
         json.dumps(

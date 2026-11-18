@@ -7,8 +7,9 @@ That stack already runs Mercury on the Frame CPU through ONNX Runtime. Its
 report names CPU heat as the binding limit and asks for 4–8x more Mercury
 throughput.
 
-Everything here is **offline**. There was no DSP access, no device run and no
-kernel change. Two results follow:
+Step 1 (lowering, contract, forecast) is **offline**: no DSP access, no device
+run, no kernel change. Step 2a, [below](#step-2a-backbone-on-the-dsp), runs the
+backbone on the DSP. Two step-1 results:
 
 - The model lowers onto the operator family framenpu already runs. FP16 on
   HMX and HVX is numerically adequate.
@@ -75,7 +76,9 @@ The contract follows the qualified teacher tail:
 
 - **HMX:** FP16 inputs and weights, FP16-rounded accumulator, then FP16 bias,
   clip and residual.
-- **HVX depthwise:** FP32 tap accumulation, then FP16 rounding.
+- **HVX depthwise:** FP32 tap accumulation, then FP16 rounding. (The resident
+  kernel actually multiplies and accumulates in HVX qf16; see step 2b. The
+  emulator keeps FP32 accumulation as its reference model.)
 - **FP32 tail:** pooling and heads run in FP32 on FP16 activations.
 
 **Corpus:** 4 recorded fisheye frames from the existing private corpus. Each
@@ -158,12 +161,144 @@ roughly 50–70 crops/s. That would put both hands at 25–35 Hz with Mercury
 fully off the CPU. Going higher needs per-op efficiency the teacher work has
 not yet shown.
 
+## Step 2a: backbone on the DSP
+
+Step 2a runs `Conv_19 .. Conv_139` on the DSP: 36 operations, 20 pointwise on
+HMX and 16 depthwise on HVX (2 at stride 2), from 32x32x32 down to 160x8x8. They run as **one
+resident request** through the sealed linked image. The 64x64 prefix
+(`Conv_0 .. Conv_18`) runs in FP32 on the host, and so do the hint branch,
+pooling and heads. Evidence: [device run](../evidence/mercury-backbone-device.json),
+[early-layer pilot](../evidence/mercury-backbone-pilot.json).
+
+Kernel and plan:
+
+- **Even-phase stride 2.** `tools/build_teacher_link.py --stride2 --s2-even`
+  builds a new image (`d0427fb0…`, 5,488 B) whose stride-2 gather starts at
+  stride-1 word (0, 0) instead of (1, 1). The default build and every
+  qualified teacher image are byte-identical to before (stride-2 image
+  `ef5721f8…`, loader `72280ad9`).
+- **Free concat.** `Conv_56` writes its 64 channels into the first 32 channel
+  pairs of the 96-channel tensor. The host-computed hint plane (Gemm, reshape,
+  scale by `useLastKeypoints`, FP16) is staged right after it in the window
+  and loaded into the last 16 pairs, so nothing is copied.
+- **Plan** (`tests/mercury_layout.py`): 39 descriptors (input load, 36 ops,
+  hint load, final store), peak VTCM 10,911 of 15,296 vectors, window
+  `0x1a40000..0x1b65800`. Qualification splits into two per-op segments at
+  the concat, and the device's own bytes are carried across the split.
+
+Offline, the lane-level simulator of the kernel addressing (now with a
+decimation-phase parameter) reproduces the FP16 contract bit-exactly on all
+24 checked crops. With the teacher's odd phase it does not. The harness itself
+is tested end to end against that simulator (`tests/test_mercury_layout.py`).
+
+Device run (`tests/hardware_mercury.py`): 16 private cases, which are the 4
+corpus frames x 2 orientations x {no hint, self-hint}. Each case is qualified
+per op, then gets 5 merged frames. This was preceded by a pilot through
+`Conv_33`.
+
+| Result | Value |
+|---|---:|
+| Worst per-op ratio to the FP16 bound (from the device's own inputs) | 0.73 (`Conv_42`) |
+| Merged frames bit-identical to per-op qualification | 16 / 16 cases |
+| DSP request body, median | **6.58 ms** (forecast 8.59 ms) |
+| of which pointwise / depthwise / stride-2 depthwise / load-store | 3.96 / 1.36 / 1.09 / 0.16 ms |
+| Host wall per request (stage, submit, read back), median | 13.9 ms |
+| Host FP32 pooling and heads (NumPy, on the Frame), median | 2.8 ms |
+| Keypoints vs FP32, worst joint: median / p95 / max | 0.147 / 0.486 / 0.491 px |
+| `is_hand` acceptance flips at 0.97; curls max drift | 0; 0.0159 |
+| Controls: guarded fault, descriptor rejection, 12 stride-2 field rejections, second seal, unsealed request | all refused natively; clean frame after |
+| Restoration: window, reservation, whole-arena hash, service | unchanged (677 audits) |
+
+The device is **not bit-identical to the host FP16 emulator** (0 of 16). The
+lane simulator is, because it uses the same arithmetic model. The device and
+emulator keypoints differ by at most 0.35 px. Both drift the same amount from
+FP32: a median worst joint of 0.147 px on the device against 0.159 px for the
+emulator. So the hardware rounding differs from the contract model in detail
+but stays well inside the bound. The acceptance criterion is the per-op bound
+check, as it was for the teacher. Step 2b found the cause: the depthwise
+kernel accumulates in qf16, not FP32.
+
+The 2a report pins the harness and planner as they were before step 2b. The
+current planner emits a byte-identical backbone plan (descriptors, parameter
+images and window layout, checked), and only the depthwise bound has
+changed since.
+
+The most expensive ops are the 32x32 stage: `Conv_33` (stride 2, 0.94 ms) and
+the two 32→192 expansions `Conv_19` and `Conv_29` (0.75 ms each). They make up
+37% of the request.
+
+## Step 2b: the whole convolution network on the DSP
+
+Step 2b moves the 64x64 prefix onto the DSP, so `Conv_0 … Conv_139` (52
+resident ops) runs as **one request** of the same qualified image
+(`d0427fb0…`). There is no kernel change. The host now only im2cols the FP16
+image for the stem, computes the hint plane, and runs pooling and the heads.
+Evidence: [device run](../evidence/mercury-network-device.json),
+[pilot](../evidence/mercury-network-pilot.json),
+[first pilot, stopped](../evidence/mercury-network-pilot-flush-failure.json).
+
+The prefix needs three rewrites (`tests/mercury_layout.py`, `prefix=True`):
+
+- **Stem as a pointwise.** The 1-channel 3x3 stride-2 stem becomes a K=10 HMX
+  pointwise over host im2col columns (9 taps plus a zero plane, 64x64). The
+  host does data movement only. The columns are 93 KB per crop against 32 KB
+  for the image. Its arithmetic is identical to the dense stem (tested).
+- **Banding by channels, not rows.** The 192x64x64 expansion (`Conv_10`)
+  would need 13,728 vectors of the 15,296-vector VTCM span. A depthwise
+  layer is per-channel, so `Conv_10` and the stride-2 depthwise `Conv_14`
+  run as six 32-channel groups. Each group's output is a view into its slice
+  of the 192x32x32 `Conv_14` tensor, the same free-composite mechanism as
+  the hint concat. There are no halos and no recompute.
+- **Plan:** 55 descriptors, peak VTCM 11,289 vectors, window up to
+  `0x1bb8800`. Qualification runs in 4 segments, split at the two
+  composites.
+
+**The first pilot stopped on a bound failure.** `Conv_14.g1` reached 1.26x
+the allowance, at 1 value out of 32,768 (evidence above). A private dump of
+that op showed the device returned exactly the FP16 bias where the exact
+result added one tap product of 2.07e-5. That product is below FP16's normal
+range, and the kernel's depthwise multiplies and accumulates in HVX **qf16**,
+which flushes such values to zero. The FP32-accumulation model behind the
+bound didn't cover this.
+
+The depthwise bound now adds an absolute 18·2^-14 ≈ 1.1e-3 (9 products plus
+9 partial sums, each losing at most 2^-14). That is about one FP16 ulp at
+1.0, against activations in [0, 6]; the relative terms are unchanged. A
+regression test rebuilds the observed case and fails with the old floor.
+This also explains why the device was never bit-identical to the emulator
+in 2a. After the fix, the same pilot and then the full run passed.
+
+Device run: the same 16 private cases, compared against the **full** FP16
+contract with no FP32 host prefix.
+
+| Result | Value |
+|---|---:|
+| Worst per-op ratio to the FP16 bound | 0.39 (`Conv_52`) |
+| Merged frames bit-identical to per-op qualification | 16 / 16 cases |
+| DSP request body, median | **15.14 ms** (20 ms native budget) |
+| of which `Conv_10` groups / `Conv_14` groups / rest of prefix / backbone / load-store | 3.48 / 3.59 / 1.50 / 6.41 / 0.17 ms |
+| Host wall per request (columns, hint, submit, read back), median | 22.7 ms |
+| Host FP32 pooling and heads (NumPy, on the Frame), median | 2.8 ms |
+| Keypoints vs FP32, worst joint: median / p95 / max | 0.185 / 0.396 / 0.669 px |
+| `is_hand` flips at 0.97; curls max drift | 0; 0.0156 |
+| Controls: guarded fault, descriptor rejection, 48 stride-2 field rejections, second seal, unsealed request | all refused natively; clean frame after |
+| Restoration: window, reservation, whole-arena hash, service | unchanged (969 audits) |
+
+All the convolutions of the model now run on the DSP at about **66 crops/s**
+if DSP-bound. That is slower per crop than the stack's hot CPU path
+(11.3 ms), but takes the convolutions off the CPU. The expansion and
+stride-2 pair at 64² is 47% of the request. The kernel's stride-2 path
+computes the full stride-1 result and then decimates, so a direct stride-2
+depthwise would remove about three quarters of `Conv_14`. The 7.5 ms of host
+overhead per request is the other large item.
+
 ## Next steps
 
-- **Step 2: Mercury on the DSP.** Build banded 64² and resident 32²→8²
-  stages plus the heatmap-head convolutions, using the qualified HMX/HVX
-  kernels. Qualify on the decoded keypoints against this reference, then time
-  1 and 2 crops per request.
+- **Direct stride-2 depthwise** in the kernel: `Conv_14` is 3.6 ms, of which
+  roughly 3/4 is stride-1 work that the decimation throws away.
+- **Step 2c: heatmap heads on the DSP** (the two dense 3x3 convolutions and
+  the 2x2 transposed convolution). Then batch 2 crops per request and time
+  the stack's seam (`MercuryKeypoint.run`) end to end.
 - **Corpus.** Collect real Mercury tracking crops on the headset, using the
   stack's local-only `validate_mercury.py`. Do this before freezing accuracy
   ceilings; the affine crops here are only a numerical stand-in.
@@ -187,4 +322,13 @@ python tools/mercury_reference.py --model /tmp/mercury/grayscale_keypoint_jan18.
   --corpus /tmp/framenpu-convolution/corpus --output evidence/mercury-keypoint-reference.json
 python tools/mercury_forecast.py --model /tmp/mercury/grayscale_keypoint_jan18.onnx \
   --teacher-model /tmp/framenpu-convolution/model --output evidence/mercury-keypoint-forecast.json
+# step 2a: offline plan/simulator/harness tests, then the device run (root on the Frame)
+FNPU_MERCURY_MODEL=/tmp/mercury/grayscale_keypoint_jan18.onnx python -m unittest tests.test_mercury_layout
+python tools/build_teacher_link.py --stride2 --s2-even --output /tmp/mercury/jobs
+python tools/mercury_device_cases.py --model /tmp/mercury/grayscale_keypoint_jan18.onnx \
+  --corpus /tmp/framenpu-convolution/corpus --output /tmp/mercury/cases   # private, never commit
+sudo python tests/hardware_mercury.py --run-on-device --jobs /tmp/mercury/jobs \
+  --model /tmp/mercury/grayscale_keypoint_jan18.onnx --cases /tmp/mercury/cases \
+  --output result.json --rounds 5 [--stop-after Conv_33 --max-cases 1]
+# step 2b: the same, plus --prefix (pilot: --prefix --stop-after Conv_18 --max-cases 1)
 ~~~

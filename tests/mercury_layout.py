@@ -1,0 +1,578 @@
+"""Host side of the Mercury keypoint network on the resident kernel (steps 2a, 2b).
+
+Step 2a runs ``Conv_19 .. Conv_139`` of the lowered Mercury graph (the 32x32
+stage to the 160x8x8 feature map); step 2b (``prefix=True``) also runs the
+64x64 prefix ``Conv_0 .. Conv_18``. Both use tests/teacher_resident_probe.c
+built with RS_STRIDE2 and RS_S2_EVEN, through the linked operator image. The
+42->8192 hint branch, pooling and all heads stay on the host. Opens no device.
+
+Layout and descriptors are those of tests/teacher_resident_layout.py: every
+tensor uses the shared grid of tests/teacher_tail_layout.py, 128-byte
+descriptors (kinds 1 = 1x1, 2 = depthwise, 3 = load, 4 = store, 5 = stride 2)
+and the same parameter images. Mercury-specific placement:
+
+* Composite tensors are free: their parts are pair-offset views of one VTCM
+  (and window) tensor. The ``Concat`` of the 64 feature channels and the
+  host-staged 32-channel hint plane is one; in step 2b the 192-channel
+  ``Conv_14`` output, written by six 32-channel groups, is the other.
+* Step 2b bands the 64x64 expansion by channels, not rows: ``Conv_10`` and
+  the stride-2 depthwise ``Conv_14`` run per 32-channel group, so the
+  192x64x64 tensor (13,728 vectors) never exists; there are no halos.
+* The 1-channel 3x3 stride-2 stem runs on HMX as a K=10 pointwise over host
+  im2col columns of the FP16 image (data movement only on the host).
+* Stride-2 depthwise uses the even decimation phase (symmetric padding).
+
+Plan modes: "merged" runs every op in one request with tensors resident in
+VTCM and stores only the final tensor; "qualify" runs one op per request and
+stores every output, for per-layer FP16 bound checks against the device's own
+inputs (composites are staged whole from the device's part bytes).
+``start``/``stop_after`` truncate either mode (early-layer pilots).
+"""
+
+from dataclasses import dataclass, replace
+
+from hmx_block_layout import pack
+import teacher_resident_layout as RL
+import teacher_tail_layout as T
+
+FIRST, LAST = "Conv_19", "Conv_139"
+DSP_FIRST = "Conv_0"  # first op with prefix=True
+HOST_PREFIX = "Conv_18"  # last op computed by the host before a backbone-only request
+INPUT = "input.44"  # Conv_18 output, 32 x 32 x 32
+STEM_COLS = "stem.cols"  # host im2col of the FP16 image: 9 taps + 1 zero plane, 64 x 64
+HINT = "onnx::Concat_382"  # hint plane after the useLastKeypoints scale, 32 x 16 x 16
+FEATURES = "onnx::Concat_369"  # Conv_56 (+ residual) output, 64 x 16 x 16
+CONCAT = "input.144"
+EXPAND = "onnx::Conv_311"  # Conv_10 output, 192 x 64 x 64 (only ever per group)
+DOWN = "onnx::Conv_316"  # Conv_14 output, 192 x 32 x 32 (composite of the groups)
+OUTPUT = "input.336"  # Conv_139 output, 160 x 8 x 8
+HOST_HINT_OPS = ("Gemm_58", "Reshape_63", "Mul_70", "Concat_71")
+GROUP = 32  # channels per Conv_10/Conv_14 group
+S2_PHASE = 0  # even: symmetric (1, 1) padding
+MAX_DESCRIPTORS = 160
+UNDERFLOW_DW = 18 * 2.0**-14  # qf16 flush-to-zero allowance per depthwise output
+
+
+def grid(shape):
+    return T.Grid(shape[2], shape[1])
+
+
+def _part(name, k):
+    return f"{name}.g{k}"
+
+
+def _prefix_ops(model):
+    """Conv_0 .. Conv_18 rewritten for the resident kernel (see module docstring)."""
+    import numpy as np
+
+    stem, expand, down = model.op("Conv_0"), model.op("Conv_10"), model.op("Conv_14")
+    names = [op.name for op in model.ops]
+    if names[:6] != ["Conv_0", "Conv_4", "Conv_8", "Conv_10", "Conv_14", "Conv_18"]:
+        raise ValueError("unexpected Mercury prefix")
+    if (
+        stem.params["weight"].shape != (32, 1, 3, 3)
+        or stem.params["stride"] != (2, 2)
+        or stem.params["pads"] != (1, 1, 1, 1)
+        or stem.inputs != ("inputImg",)
+        or expand.output != EXPAND
+        or down.inputs != (EXPAND,)
+        or down.output != DOWN
+        or down.params["stride"] != (2, 2)
+        or expand.shape[0] % GROUP
+    ):
+        raise ValueError("unexpected Mercury prefix geometry")
+    w = np.zeros((32, 10, 1, 1), np.float32)
+    w[:, :9, 0, 0] = stem.params["weight"].reshape(32, 9)
+    ops = [
+        replace(
+            stem,
+            inputs=(STEM_COLS,),
+            params=stem.params | {"weight": w, "stride": (1, 1), "pads": (0, 0, 0, 0)},
+        ),
+        model.op("Conv_4"),
+        model.op("Conv_8"),
+    ]
+    for k in range(expand.shape[0] // GROUP):
+        sl = slice(GROUP * k, GROUP * (k + 1))
+        ops.append(
+            replace(
+                expand,
+                name=_part("Conv_10", k),
+                output=_part(EXPAND, k),
+                params=expand.params
+                | {"weight": expand.params["weight"][sl], "bias": expand.params["bias"][sl]},
+                shape=(GROUP, *expand.shape[1:]),
+            )
+        )
+        ops.append(
+            replace(
+                down,
+                name=_part("Conv_14", k),
+                inputs=(_part(EXPAND, k),),
+                output=_part(DOWN, k),
+                params=down.params
+                | {
+                    "weight": down.params["weight"][sl],
+                    "bias": down.params["bias"][sl],
+                    "group": GROUP,
+                },
+                shape=(GROUP, *down.shape[1:]),
+            )
+        )
+    ops.append(model.op("Conv_18"))
+    return ops
+
+
+def composites(model, prefix):
+    """parent -> [(part, source)]; parts are pair-major slices in order."""
+    out = {CONCAT: [(FEATURES, "device"), (HINT, "host")]}
+    if prefix:
+        n = model.op("Conv_10").shape[0] // GROUP
+        out[DOWN] = [(_part(DOWN, k), "device") for k in range(n)]
+    return out
+
+
+def shapes(model, prefix=False):
+    shape = {op.output: op.shape for op in model.ops}
+    shape[INPUT] = model.op(HOST_PREFIX).shape
+    if prefix:
+        shape[STEM_COLS] = (10, *model.op("Conv_0").shape[1:])
+        for op in _prefix_ops(model):
+            shape[op.output] = op.shape
+    return shape
+
+
+def _check(op):
+    if op.kind != "conv" or op.conv_class not in ("pointwise", "depthwise"):
+        raise ValueError(f"{op.name}: not a resident op")
+    if op.conv_class == "depthwise":
+        if op.params["weight"].shape[2:] != (3, 3) or op.params["act"] != "relu6":
+            raise ValueError(f"{op.name}: resident depthwise is 3x3 + ReLU6")
+        if op.params["pads"] != (1, 1, 1, 1) or len(op.inputs) != 1:
+            raise ValueError(f"{op.name}: unexpected depthwise padding or residual")
+    elif op.params["weight"].shape[1] % 2 or op.shape[0] % 2:
+        raise ValueError(f"{op.name}: odd channel count")
+
+
+def device_ops(model, stop_after=LAST, start=None, prefix=False):
+    """The resident ops of the request (prefix ops rewritten), checked."""
+    names = [op.name for op in model.ops]
+    lo, last = names.index(FIRST), names.index(LAST)
+    skipped = [op.name for op in model.ops[lo : last + 1] if op.kind != "conv"]
+    if tuple(skipped) != HOST_HINT_OPS:
+        raise ValueError(f"unexpected non-conv ops in the backbone: {skipped}")
+    program = (_prefix_ops(model) if prefix else []) + [
+        op for op in model.ops[lo : last + 1] if op.kind == "conv"
+    ]
+    order = [op.name for op in program]
+    start = start or order[0]
+    if start not in order or stop_after not in order:
+        raise ValueError(f"start/stop_after must name resident ops in {order[0]}..{LAST}")
+    a, b = order.index(start), order.index(stop_after)
+    if a > b:
+        raise ValueError("start after stop_after")
+    for op in program[a : b + 1]:
+        _check(op)
+    return program[a : b + 1]
+
+
+# ---------------------------------------------------------------- parameter images
+
+
+def pw_image(op, gin):
+    import numpy as np
+
+    w = op.params["weight"]
+    cout, cin = w.shape[:2]
+    m16 = np.asarray(w.reshape(cout, cin), np.float16)
+    nk, no = -(-cin // 32), -(-cout // 32)
+    m = np.zeros((no * 32, nk * 32), np.float16)
+    m[:cout, :cin] = m16
+    tiles = b"".join(
+        pack(m[32 * o : 32 * o + 32, 32 * t : 32 * t + 32]).tobytes()
+        for o in range(no)
+        for t in range(nk)
+    )
+    image = tiles + RL._splat_pairs(op.params["bias"], cout // 2) + gin.mask_bytes()[: gin.nj * 128]
+    image += bytes(-len(image) % 2048)
+    return image, nk * 16
+
+
+def dw_image(op, gin):
+    import numpy as np
+
+    w, b = op.params["weight"], op.params["bias"]
+    c = w.shape[0]
+    kk = 9
+    h = np.asarray(w.reshape(c, kk), np.float16).view("<u2").astype("<u4")
+    coef = np.zeros(((c // 2 * kk + 31) // 32) * 32, "<u4")
+    coef[: c // 2 * kk] = (h[0::2] | (h[1::2] << 16)).reshape(-1)
+    image = coef.tobytes() + RL._splat_pairs(b, c // 2) + gin.mask_bytes()
+    return image, c // 2 * kk
+
+
+# ---------------------------------------------------------------- plan
+
+
+@dataclass
+class MercuryPlan:
+    mode: str
+    plan: RL.Plan  # jobs/table/table_at as the teacher simulator and harness expect
+    ops: list  # resident ops in request order
+    final: str
+    where: dict  # tensor -> window offset (inputs, host parts, stored tensors)
+    shape: dict  # tensor -> (C, H, W)
+    vtcm_peak: int
+    descriptors: int
+    external: list  # tensors the host stages whole into the window before the request
+    host_parts: list  # composite parts the host stages into their parent's window slot
+    composites: dict  # parent -> [(part, source)] for every composite of the network
+    prefix: bool
+
+    def grid(self, name):
+        return grid(self.shape[name])
+
+    @property
+    def needs_hint(self):
+        return HINT in self.host_parts
+
+
+def build_plan(model, mode="merged", stop_after=LAST, start=None, prefix=False):
+    if mode not in ("merged", "qualify"):
+        raise ValueError(mode)
+    ops = device_ops(model, stop_after, start, prefix)
+    final = ops[-1].output
+    shape = shapes(model, prefix)
+    pairs = lambda b: shape[b][0] // 2  # noqa: E731
+    vec = lambda b: pairs(b) * grid(shape[b]).nbin  # noqa: E731
+    comps = composites(model, prefix)
+    produced = {op.output for op in ops}
+    consumed = {i for op in ops for i in op.inputs}
+    # parent -> {part: vector offset}; merged mode keeps a composite free when the
+    # request produces one of its device parts (qualify always stages it whole).
+    free = {}
+    for parent, parts in comps.items():
+        dev = [n for n, src in parts if src == "device"]
+        made = [n for n in dev if n in produced]
+        if mode != "merged" or not made:
+            continue
+        if parent in consumed and len(made) != len(dev):
+            raise ValueError(f"{parent}: request produces only some of its parts")
+        if sum(pairs(n) for n, _ in parts) != pairs(parent) or any(
+            shape[n][1:] != shape[parent][1:] for n, _ in parts
+        ):
+            raise ValueError(f"{parent}: composite shapes differ")
+        offsets, at = {}, 0
+        for n, _ in parts:
+            offsets[n] = at
+            at += vec(n)
+        free[parent] = offsets
+    parent_of = {n: par for par, offs in free.items() for n in offs}
+    host_parts = [n for par in free for n, src in comps[par] if src == "host"]
+    made = produced | set(free) | set(host_parts)
+    external = [b for b in dict.fromkeys(i for op in ops for i in op.inputs) if b not in made]
+
+    images = {}
+    for op in ops:
+        gin = grid(shape[op.inputs[0]])
+        images[op.name] = pw_image(op, gin) if op.conv_class == "pointwise" else dw_image(op, gin)
+
+    # window: table | parameter images | tensors (each 4 KiB aligned, never reused)
+    table_at = T.WIN_LO
+    cursor = RL._al(table_at + 128 * MAX_DESCRIPTORS * (len(ops) if mode == "qualify" else 1), 4096)
+    par_at, fixed = {}, {}
+    for op in ops:
+        par_at[op.name] = cursor
+        fixed[cursor] = images[op.name][0]
+        cursor = RL._al(cursor + len(images[op.name][0]))
+    stored = [final] if mode == "merged" else [op.output for op in ops]
+    with_host = [par for par in free if any(src == "host" for _, src in comps[par])]
+    where = {}
+    for name in dict.fromkeys(external + with_host + stored):
+        if name in parent_of and parent_of[name] in with_host:
+            continue  # inside its parent's slot
+        cursor = RL._al(cursor, 4096)
+        where[name] = cursor
+        cursor += vec(name) * 128
+    for par in with_host:
+        for n, off in free[par].items():
+            where[n] = where[par] + 128 * off
+    if cursor > T.WIN_HI:
+        raise ValueError(f"window plan ends at {cursor:#x}")
+
+    table, jobs = [], []
+    peak = 0
+
+    def words(*w):
+        table.append(RL._words(*w))
+
+    def load(name, to):
+        words(RL.KIND["load"], 0, 0, 0, 0, 0, 0, 0, 0, where[name], vec(name), 0, 0, 0, to)
+
+    def store(name, frm):
+        words(RL.KIND["store"], 0, 0, 0, 0, 0, 0, 0, 0, where[name], vec(name), 0, 0, 0, frm)
+
+    def emit(op, at, vt):
+        src = op.inputs[0]
+        res = op.inputs[1] if len(op.inputs) > 1 else None
+        dst = op.output
+        gin, gout = grid(shape[src]), grid(shape[dst])
+        image, scratch = images[op.name]
+        npar = len(image) // 128
+        pw = op.conv_class == "pointwise"
+        vpar = vt.take(npar + scratch, align=16 if pw else 1)
+        s2 = not pw and op.params["stride"] == (2, 2)
+        tmp = vt.take(vec(src)) if s2 else None
+        if pw:
+            cout, cin = op.params["weight"].shape[:2]
+            words(
+                RL.KIND["pw"],
+                cin // 2,
+                cout // 2,
+                (cin // 2 + 15) >> 4,
+                int(op.params["act"] == "relu6"),
+                gin.nbin,
+                gin.blk0,
+                gin.nj,
+                gin.ws,
+                par_at[op.name],
+                npar,
+                at[src],
+                at[dst],
+                at[res] if res else 0,
+                vpar,
+            )
+        else:
+            cp = pairs(src)
+            extra = (gout.nbin, gout.blk0, gout.ws, gout.h, gout.w, tmp) if s2 else ()
+            words(
+                RL.KIND["s2" if s2 else "dw"],
+                cp,
+                cp,
+                3,
+                1,
+                gin.nbin,
+                gin.blk0,
+                gin.nj4,
+                gin.ws,
+                par_at[op.name],
+                npar,
+                at[src],
+                at[dst],
+                0,
+                vpar,
+                *extra,
+            )
+        vt.give(vpar, npar + scratch)
+        if tmp is not None:
+            vt.give(tmp, vec(src))
+
+    if mode == "merged":
+        # a part's uses are its parent's uses
+        key = lambda b: parent_of.get(b, b)  # noqa: E731
+        last_use = {}
+        for i, op in enumerate(ops):
+            for b in op.inputs:
+                last_use[key(b)] = i
+        vt, at = RL._Vtcm(), {}
+        for b in external:
+            at[b] = vt.take(vec(b))
+            load(b, at[b])
+        for i, op in enumerate(ops):
+            dst = op.output
+            par = parent_of.get(dst)
+            if par is not None:
+                if par not in at:
+                    at[par] = vt.take(vec(par), top=len(free[par]) > 2)
+                    for n, off in free[par].items():
+                        at[n] = at[par] + off
+            else:
+                later = [k for k in range(i + 1, len(ops)) if dst in ops[k].inputs]
+                at[dst] = vt.take(vec(dst), top=bool(later) and later[-1] > i + 1)
+            emit(op, at, vt)
+            if par is not None:
+                dev = [n for n, src in comps[par] if src == "device"]
+                if dst == dev[-1]:
+                    for n, src in comps[par]:
+                        if src == "host":
+                            load(n, at[n])
+            if dst == final:
+                store(final, at[final])
+            for b in set(op.inputs):
+                if last_use.get(key(b)) == i:
+                    k = key(b)
+                    if k in at:
+                        vt.give(at.pop(k), vec(k))
+                        for n in free.get(k, {}):
+                            at.pop(n, None)
+            k = key(dst)
+            if k not in last_use and k in at and (par is None or dst == final):
+                vt.give(at.pop(k), vec(k))
+        job = RL.Job("rs", first=0, end=len(table), ops=[op.name for op in ops], stores=[final])
+        job.vtcm_peak = peak = vt.peak
+        jobs.append(job)
+    else:
+        for op in ops:
+            first = len(table)
+            vt, at = RL._Vtcm(), {}
+            for b in dict.fromkeys(op.inputs):
+                at[b] = vt.take(vec(b))
+                load(b, at[b])
+            at[op.output] = vt.take(vec(op.output))
+            emit(op, at, vt)
+            store(op.output, at[op.output])
+            job = RL.Job("rs", first=first, end=len(table), ops=[op.name], stores=[op.output])
+            job.vtcm_peak = vt.peak
+            peak = max(peak, vt.peak)
+            jobs.append(job)
+    if any(j.end - j.first > MAX_DESCRIPTORS for j in jobs):
+        raise ValueError("a request exceeds 160 descriptors")
+    blob = b"".join(table)
+    plan = RL.Plan(mode, jobs, blob, table_at, fixed, where, cursor, ops, shape)
+    return MercuryPlan(
+        mode, plan, ops, final, where, shape, peak, len(table), external, host_parts, comps, prefix
+    )
+
+
+def qualify_segments(model, stop_after=LAST, prefix=False):
+    """Greedy split of the request range into qualify plans that each fit the window.
+    A segment never both produces a part of a composite and consumes the composite:
+    the host stages the composite whole from the device's part bytes."""
+    ops = device_ops(model, stop_after, prefix=prefix)
+    parts = {par: {n for n, _ in v} for par, v in composites(model, prefix).items()}
+    names = [op.name for op in ops]
+    plans, i = [], 0
+    while i < len(names):
+        best = None
+        for j in range(i, len(names)):
+            made = {o.output for o in ops[i:j]}
+            if any(b in parts and parts[b] & made for b in ops[j].inputs):
+                break
+            try:
+                best = build_plan(model, "qualify", names[j], names[i], prefix)
+            except ValueError as exc:
+                if "window plan" not in str(exc) or best is None:
+                    raise
+                break
+        plans.append(best)
+        i += len(best.ops)
+    return plans
+
+
+# ---------------------------------------------------------------- tensors in the window
+
+
+def tensor_bytes(mplan, name, tensor):
+    import numpy as np
+
+    return mplan.grid(name).to_bytes(np.asarray(tensor, np.float16))
+
+
+def compose(mplan, parent, parts):
+    """Window bytes of a composite from its parts (bytes or arrays), pair-major."""
+    return b"".join(
+        v if isinstance(v, bytes) else tensor_bytes(mplan, n, v)
+        for n, v in ((n, parts[n]) for n, _ in mplan.composites[parent])
+    )
+
+
+def stem_columns(image):
+    """Host im2col of the FP16 128x128 image for the stride-2 stem (even phase):
+    plane dy*3+dx holds image[2y-1+dy, 2x-1+dx] (zero outside); plane 9 is zero."""
+    import numpy as np
+
+    img = np.asarray(image, np.float16).reshape(128, 128)
+    pad = np.zeros((131, 131), np.float16)
+    pad[1:129, 1:129] = img
+    cols = np.zeros((10, 64, 64), np.float16)
+    for dy in range(3):
+        for dx in range(3):
+            cols[3 * dy + dx] = pad[dy : dy + 128 : 2, dx : dx + 128 : 2]
+    return cols
+
+
+def expected_tensors(model, t):
+    """Add the prefix's rewritten tensors (columns, group slices) to an emulator run."""
+    import numpy as np
+
+    t = dict(t)
+    t[STEM_COLS] = stem_columns(t["inputImg"]).astype(np.float32)
+    for k in range(model.op("Conv_10").shape[0] // GROUP):
+        sl = slice(GROUP * k, GROUP * (k + 1))
+        t[_part(EXPAND, k)] = t[EXPAND][sl]
+        t[_part(DOWN, k)] = t[DOWN][sl]
+    return t
+
+
+def stage_inputs(mplan, put, tensors):
+    """put(window_address, bytes) for every external tensor and host composite part.
+    A tensors value may be an array or the raw grid bytes read back from the device."""
+    for name in mplan.external + mplan.host_parts:
+        v = tensors[name]
+        put(mplan.where[name], v if isinstance(v, bytes) else tensor_bytes(mplan, name, v))
+
+
+def read_tensor(mplan, get, name):
+    """get(window_address, n) -> bytes. Returns ([C, H, W] float64, stray nonzero padding)."""
+    g, c = mplan.grid(name), mplan.shape[name][0]
+    return g.from_bytes(get(mplan.where[name], g.tensor_bytes(c)), c)
+
+
+def simulate(mplan, tensors):
+    """Lane-level simulation; returns {stored tensor: (array, stray)}."""
+    window = bytearray(T.WIN_HI - T.WIN_LO)
+
+    def put(off, data):
+        window[off - T.WIN_LO : off - T.WIN_LO + len(data)] = data
+
+    def get(off, n):
+        return bytes(window[off - T.WIN_LO : off - T.WIN_LO + n])
+
+    for off, data in RL.setup_writes(mplan.plan).items():
+        put(off, data)
+    stage_inputs(mplan, put, tensors)
+    RL.simulate(mplan.plan, window, s2_phase=S2_PHASE)
+    return {b: read_tensor(mplan, get, b) for job in mplan.plan.jobs for b in job.stores}
+
+
+# ---------------------------------------------------------------- FP16 bounds
+
+
+def exact(op, x, res=None):
+    """FP32-weight, FP64-accumulated result of one op from the device's input."""
+    import numpy as np
+    from framenpu import mercury
+
+    return mercury._conv(op, np.asarray(x, np.float32), res, "fp32").astype(np.float64)
+
+
+def bound(op, x, res=None):
+    """Per-value FP16 allowance for one device op given its actual input
+    (the formulas of tests/teacher_tail_layout.py bound_pw / bound_dw)."""
+    import numpy as np
+
+    w = np.abs(np.asarray(op.params["weight"], np.float16).astype(np.float64))
+    b = np.abs(np.asarray(op.params["bias"], np.float64))
+    ax = np.abs(np.asarray(x, np.float64))
+    e = 2.0**-10
+    if op.conv_class == "pointwise":
+        cout, cin = w.shape[:2]
+        mag = (w.reshape(cout, cin) @ ax.reshape(cin, -1)).reshape(cout, *ax.shape[1:])
+        allow = 4 * e * mag + 3 * e * (mag + b[:, None, None]) + 2.0**-20
+        if res is not None:
+            allow = allow + 2 * e * np.abs(np.asarray(res, np.float64))
+        return allow
+    c, h, wd = ax.shape
+    pad = np.zeros((c, h + 2, wd + 2))
+    pad[:, 1:-1, 1:-1] = ax
+    mag = np.zeros((c, h, wd))
+    for dy in range(3):
+        for dx in range(3):
+            mag += w[:, 0, dy, dx, None, None] * pad[:, dy : dy + h, dx : dx + wd]
+    # The resident depthwise multiplies and accumulates in HVX qf16, which flushes values
+    # below the FP16 normal range (2^-14) to zero: each of the 9 products and 9 partial
+    # sums may lose up to 2^-14 (observed: Mercury Conv_14, a 2.07e-5 product dropped).
+    allow = 13 * e * mag + 3 * e * b[:, None, None] + UNDERFLOW_DW
+    if op.params["stride"] == (2, 2):
+        allow = allow[:, ::2, ::2]
+    return allow

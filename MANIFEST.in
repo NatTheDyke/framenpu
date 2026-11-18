@@ -66,4 +66,9 @@ include evidence/teacher-grayscale.json
 include evidence/teacher-resolution-drift.json
 include evidence/mercury-keypoint-reference.json
 include evidence/mercury-keypoint-forecast.json
+include evidence/mercury-backbone-pilot.json
+include evidence/mercury-backbone-device.json
+include evidence/mercury-network-pilot-flush-failure.json
+include evidence/mercury-network-pilot.json
+include evidence/mercury-network-device.json
 include evidence/ncnn-cpu-baseline.json

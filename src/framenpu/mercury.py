@@ -349,7 +349,8 @@ def load_keypoint(path, *, require_pin=True):
 def _f16(x):
     import numpy as np
 
-    return np.asarray(x, np.float32).astype(np.float16).astype(np.float32)
+    # Round once, from the exact (FP64) value: no FP32 double rounding.
+    return np.asarray(x, np.float64).astype(np.float16).astype(np.float32)
 
 
 def _im2col(x, kh, kw, pads, stride):
@@ -450,13 +451,17 @@ def _deconv(op, x, numerics):
     return v
 
 
-def run(model, feeds, numerics="fp32", keep=False):
+def run(model, feeds, numerics="fp32", keep=False, host_prefix=None):
     """Evaluate the lowered graph for one crop.
 
     ``feeds`` maps ONNX input names to arrays (batch dimension optional).
     ``numerics`` is ``"fp32"`` (exact reference, FP64 accumulation) or
     ``"fp16"`` (device contract). Returns the four outputs with batch 1, and
     with ``keep=True`` also every intermediate tensor.
+
+    ``host_prefix`` names the last op of an FP32 host prefix: ops up to and
+    including it run as ``"fp32"``, and FP16 ops after it round their inputs
+    to FP16 (the staging of a CPU prefix output into the device grid).
     """
     import numpy as np
 
@@ -467,40 +472,67 @@ def run(model, feeds, numerics="fp32", keep=False):
     flag = np.asarray(feeds["useLastKeypoints"], np.float32).reshape(1)
     if not (np.isfinite(img).all() and np.isfinite(hint).all() and np.isfinite(flag).all()):
         raise ValueError("non-finite input")
+    if host_prefix is not None and host_prefix not in {op.name for op in model.ops}:
+        raise ValueError(f"unknown host_prefix op {host_prefix!r}")
+    mode = "fp32" if host_prefix is not None else numerics
     t = {
-        "inputImg": _f16(img) if numerics == "fp16" else img,
+        "inputImg": _f16(img) if mode == "fp16" else img,
         "lastKeypoints": hint,
         "useLastKeypoints": flag,
     }
     for op in model.ops:
-        x = t[op.inputs[0]]
-        if op.kind == "conv":
-            v = _conv(op, x, t[op.inputs[1]] if len(op.inputs) > 1 else None, numerics)
-        elif op.kind == "deconv2x2":
-            v = _deconv(op, x, numerics)
-        elif op.kind == "dense":
-            w, b = op.params["weight"], op.params["bias"]
-            v = (w.astype(np.float64) @ x.astype(np.float64) + b).astype(np.float32)
-            if op.params["act"] == "relu6":
-                v = np.clip(v, 0, 6)
-        elif op.kind == "avgpool":
-            kh, kw = op.params["kernel"]
-            c, oh, ow = op.shape
-            crop = x[:, : oh * kh, : ow * kw].astype(np.float64)
-            v = crop.reshape(c, oh, kh, ow, kw).mean(axis=(2, 4)).astype(np.float32)
-        elif op.kind == "reshape":
-            v = x.reshape(op.shape)
-        elif op.kind == "scale":
-            v = (x * t[op.inputs[1]][0]).astype(np.float32)
-            if numerics == "fp16":
-                v = _f16(v)  # the hint plane enters the FP16 activation grid
-        elif op.kind == "concat":
-            v = np.concatenate([t[i] for i in op.inputs], axis=0)
-        else:  # pragma: no cover - lower() only emits the kinds above
-            raise AssertionError(op.kind)
-        t[op.output] = v
+        t[op.output] = _step(op, t, mode, numerics)
+        if op.name == host_prefix:
+            mode = numerics
     outs = {k: t[k].reshape(OUTPUTS[k]).astype(np.float32) for k in OUTPUTS}
     return (outs, t) if keep else outs
+
+
+def _step(op, t, mode, numerics):
+    """One lowered op on the tensors in ``t`` (``mode`` is the op's arithmetic)."""
+    import numpy as np
+
+    x = t[op.inputs[0]]
+    res = t[op.inputs[1]] if op.kind == "conv" and len(op.inputs) > 1 else None
+    if mode == "fp16" and op.kind in ("conv", "deconv2x2") and unit(op) != "fp32":
+        x = _f16(x)
+        res = None if res is None else _f16(res)
+    if op.kind == "conv":
+        return _conv(op, x, res, mode)
+    if op.kind == "deconv2x2":
+        return _deconv(op, x, mode)
+    if op.kind == "dense":
+        w, b = op.params["weight"], op.params["bias"]
+        v = (w.astype(np.float64) @ x.astype(np.float64) + b).astype(np.float32)
+        return np.clip(v, 0, 6) if op.params["act"] == "relu6" else v
+    if op.kind == "avgpool":
+        kh, kw = op.params["kernel"]
+        c, oh, ow = op.shape
+        crop = x[:, : oh * kh, : ow * kw].astype(np.float64)
+        return crop.reshape(c, oh, kh, ow, kw).mean(axis=(2, 4)).astype(np.float32)
+    if op.kind == "reshape":
+        return x.reshape(op.shape)
+    if op.kind == "scale":
+        v = (x * t[op.inputs[1]][0]).astype(np.float32)
+        return _f16(v) if numerics == "fp16" else v  # the hint plane enters the FP16 grid
+    if op.kind == "concat":
+        return np.concatenate([t[i] for i in op.inputs], axis=0)
+    raise AssertionError(op.kind)  # pragma: no cover - lower() only emits the kinds above
+
+
+def run_tail(model, tensors, after, numerics="fp16"):
+    """Finish the graph on the host from given tensors: every op after ``after``
+    runs with ``numerics`` and may read any tensor in ``tensors`` (for example a
+    device-produced feature map). Returns the four outputs with batch 1."""
+    import numpy as np
+
+    names = [op.name for op in model.ops]
+    if after not in names:
+        raise ValueError(f"unknown op {after!r}")
+    t = dict(tensors)
+    for op in model.ops[names.index(after) + 1 :]:
+        t[op.output] = _step(op, t, numerics, numerics)
+    return {k: t[k].reshape(OUTPUTS[k]).astype(np.float32) for k in OUTPUTS}
 
 
 # ---------------------------------------------------------------- decode

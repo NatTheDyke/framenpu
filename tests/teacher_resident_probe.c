@@ -28,6 +28,8 @@
 /* RS_STRIDE2 adds kind 5: full-resolution depthwise into a temporary grid,
  * then the qualified scalar (2*y+1, 2*x+1) decimation into vout. Descriptor
  * words 15..20 are output nbin, blk0, ws, h, w and temporary vector offset.
+ * RS_S2_EVEN (Mercury linked image) keeps (2*y, 2*x) instead, the phase of
+ * symmetric (1,1) padding; the bounds checks cover both phases.
  * The ordinary 4 KiB reference build does not include this extension. */
 #include "landmark_common.h"
 #ifdef RS_STEM
@@ -259,7 +261,12 @@ static __attribute__((noinline)) void rs_s2(rs_op *d) {
     d->vout = d->tmp;
     rs_dw(d);
     d->vout = dst;
+#ifdef RS_S2_EVEN
+    /* Symmetric (1,1) padding (PyTorch/Mercury): keep stride-1 word (0, 0). */
+    const volatile fnpu_u32 *s0 = (const volatile fnpu_u32 *)d->tmp + 32 * d->blk0 + 2;
+#else
     const volatile fnpu_u32 *s0 = (const volatile fnpu_u32 *)d->tmp + 32 * d->blk0 + d->ws + 3;
+#endif
     volatile fnpu_u32 *t0 = (volatile fnpu_u32 *)dst + 32 * d->oblk0 + 2;
 #pragma clang loop unroll(disable)
     for (fnpu_u32 c = 0; c < d->cpo; c++, s0 += 32 * d->nbin, t0 += 32 * d->onbin) {
