@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Evaluated [128/160/192 crop inputs](docs/TEACHER_RESOLUTION.md) against the
+  unchanged strict FP32 224 teacher. On the only presence-positive crop,
+  128 input lowers presence from 0.999938 to 0.255875 and shifts landmarks
+  by 28.50 px mean. Added a CPU-only reproducible runner, resampling control,
+  statistics and tests. These are output-drift measurements without labeled
+  ground truth; the DSP implementation and default input resolution are unchanged.
 - Added optional [single-plane 224x224 grayscale input](docs/TEACHER_GRAYSCALE.md)
   via `--stem-gray`. Input transfer falls from 301,056 to 100,352 bytes with
   byte-identical prefix outputs and heads. Paired DSP prefix time falls from
