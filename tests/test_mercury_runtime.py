@@ -214,6 +214,31 @@ class MercurySessionTests(unittest.TestCase):
             )
         return session, lease
 
+    def test_retrained_weights_need_the_explicit_opt_in(self):
+        import dataclasses
+        from unittest.mock import patch
+        from framenpu import onnx_graph
+        from framenpu.errors import InvalidModel
+
+        # same graph, other weights: only the file hash differs from the pinned Mercury model
+        retrained = dataclasses.replace(onnx_graph.load(MODEL), sha256="0" * 64)
+        lease = _Lease()
+        with patch.object(mercury.onnx_graph, "load", return_value=retrained), \
+                patch.object(M, "_lease", return_value=lease):
+            with self.assertRaises(InvalidModel):
+                M.MercurySession(
+                    MODEL, JOBS, _device_factory=_Device, _lease_factory=lambda: lease
+                )
+            session = M.MercurySession(
+                MODEL,
+                JOBS,
+                require_pin=False,
+                _device_factory=_Device,
+                _lease_factory=lambda: lease,
+            )
+        self.assertFalse(session.model.pinned)
+        self.assertTrue(self.session()[0].model.pinned)
+
     @staticmethod
     def feeds(seed):
         import numpy as np

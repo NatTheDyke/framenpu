@@ -128,8 +128,12 @@ class MercurySession:
     device bytes and cannot reopen. The caller may use an independent CPU path.
     """
 
-    def __init__(self, model_path, jobs, *, _device_factory=Device, _lease_factory=_lease):
-        self.model = mercury.load_keypoint(model_path)
+    def __init__(
+        self, model_path, jobs, *, require_pin=True, _device_factory=Device, _lease_factory=_lease
+    ):
+        # require_pin=False accepts retrained weights for the same graph: lower() still validates
+        # the structure, shapes and operators, and every plan row is bounds-checked below.
+        self.model = mercury.load_keypoint(model_path, require_pin=require_pin)
         self.loader, self.image = load_jobs(jobs)
         self.plan = L.build_plan(self.model, prefix=True, batch=3, replay=True, pw_group=8)
         for k in range(3):
