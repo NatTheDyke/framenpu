@@ -37,7 +37,8 @@ namespaces = false
 
 [tool.setuptools.package-data]
 framenpu = [
-    "data/*.bin", "data/*.json",
+    "data/*.bin", "data/*.json", "data/*.so",
+    "host/*.c",
     "sdk/*.S", "sdk/*.c", "sdk/*.ld", "sdk/include/*.h",
 ]
 

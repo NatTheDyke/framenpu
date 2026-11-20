@@ -5,3 +5,4 @@
 
 # Patch context lines intentionally contain a single space.
 integrations/*.patch -whitespace
+*.so binary

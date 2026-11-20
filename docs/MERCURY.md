@@ -694,6 +694,37 @@ On the device, against the current image on 96 real tracking crops
 | Host CPU, 1 crop | 4.5 ms | 2.3 ms |
 | Host CPU, 2 crops | 4.0 ms | 2.0 ms |
 
+## Native host path
+
+With the heads image, the CPU side of a request runs in a small C library
+(`src/framenpu/host/fnpu_host.c`, through ctypes). It covers input checks,
+FP16 conversion, the stem columns, the hint layer (`Gemm_58` → scale →
+FP16), grid staging and readback with the padding checks, and the pooled
+vector heads.
+
+- **Bundled build:** `data/host_aarch64.so`, built by
+  `tools/build_host_native.py` and recorded in `data/host_aarch64.json`
+  (bytes, SHA-256, source hash, flags, toolchain). It is freestanding (no
+  libc, no Python API) and rebuilds byte-identical.
+- **Loading:** only on aarch64, and only after its hash matches the
+  manifest. `MercurySession(native=...)` picks the path: `None` (default)
+  uses the library when available, `False` always uses NumPy, and `True`
+  requires the library.
+- **Numerics:**
+  - FP32 → FP16 rounding matches NumPy on all 2³² inputs.
+  - Staged bytes are identical to the NumPy path.
+  - The dense heads are bit-identical (FP64 sums of exact FP32 products, in
+    the same order).
+  - `Conv_143`, which the reference runs as an FP32 BLAS matmul, is summed in
+    FP64. It differs by at most 2.4e-7 on 96 real crops.
+
+On the device, session CPU per crop fell from 1.76 to 1.56 ms (1 crop), 1.49
+to 1.26 ms (2 crops) and 1.40 to 1.17 ms (3 crops)
+([evidence](../evidence/mercury-native-host-device.json)). The kernels run
+about twice as slowly right after the ~5 ms DSP wait as back to back, even
+with no other load, so host work after the wait costs about double its
+hot-cache time.
+
 ## Next steps
 
 - **Remaining DSP time** (4.92 ms per crop): 1x1 3.18 ms, of which HMX
@@ -710,10 +741,10 @@ On the device, against the current image on 96 real tracking crops
   per request), the staging in NumPy (about 0.55 ms per crop) and the gate
   claim and acknowledge. Part of the last is the harness audit, which a
   runtime would not repeat on every request.
-- **Host CPU after step 2c** (about 2.2 ms per crop in the NPU service): the
-  remaining cost is mostly per-request Python around the DSP call (gate
-  claim, reservation checks, power verification, completion polling) plus
-  staging and readback.
+- **Host CPU after the native path** (about 1.6 ms per 1-crop request): about
+  0.75 ms is Python bookkeeping around the DSP call (backup and restore,
+  gate, reservation and power checks, polling). The host kernels take about
+  1.1 ms in-session, half of it the slowdown after the DSP wait.
 - **Corpus.** Collect real Mercury tracking crops on the headset, using the
   stack's local-only `validate_mercury.py`. Do this before freezing accuracy
   ceilings; the affine crops here are only a numerical stand-in.

@@ -15,6 +15,8 @@ import threading
 from . import mercury
 from . import _mercury_common as C
 from . import _mercury_layout as L
+from . import _native
+from ._mercury_host import NativeRequest
 from .device import Device
 from .errors import InvalidModel, RecoveryRequired
 from .job import Job
@@ -134,8 +136,18 @@ class MercurySession:
     """
 
     def __init__(
-        self, model_path, jobs, *, require_pin=True, _device_factory=Device, _lease_factory=_lease
+        self,
+        model_path,
+        jobs,
+        *,
+        require_pin=True,
+        native=None,
+        _device_factory=Device,
+        _lease_factory=_lease,
     ):
+        """native: None uses the bundled host kernels when this platform and image allow
+        (else NumPy), False always uses NumPy, True requires the kernels, and a
+        _native.Host instance uses that library (tests)."""
         # require_pin=False accepts retrained weights for the same graph: lower() still validates
         # the structure, shapes and operators, and every plan row is bounds-checked below.
         self.model = mercury.load_keypoint(model_path, require_pin=require_pin)
@@ -157,6 +169,18 @@ class MercurySession:
                     )
                 if not ok:
                     raise InvalidModel("Mercury plan exceeds native bounds")
+        self.native = None
+        if native is not False:
+            host = native if isinstance(native, _native.Host) else _native.bundled()
+            if host is None:
+                if native is True:
+                    raise InvalidModel("the native host kernels are not available here")
+            else:
+                try:
+                    self.native = NativeRequest(host, self.model, self.plan, self.heads)
+                except ValueError as exc:
+                    if native is not None:
+                        raise InvalidModel(f"native host path: {exc}") from exc
         self._device_factory, self._lease_factory = _device_factory, _lease_factory
         self.device = self.lease = self.power = None
         self.closed = self.owned = self.sealed = False
@@ -273,7 +297,7 @@ class MercurySession:
         if not 1 <= len(feeds) <= 3:
             raise ValueError("Mercury requests carry one to three crops")
         prepared = []
-        for feed in feeds:
+        for feed in feeds if self.native is None else ():
             ts = {}
             for name, shape in mercury.INPUTS.items():
                 v = np.asarray(feed[name], np.float32)
@@ -288,6 +312,8 @@ class MercurySession:
             if not np.isfinite(ts[L.HINT]).all():
                 raise ValueError("hint exceeds FP16 storage")
             prepared.append({L.STEM_COLS: L.stem_columns(ts["inputImg"]), L.HINT: ts[L.HINT]})
+        if self.native is not None:
+            prepared = [self.native.prepare(feed) for feed in feeds]
         with self.lock:
             self._open()
             if self.power is None:
@@ -296,6 +322,9 @@ class MercurySession:
 
             def stage(mem):
                 self._reservation(True)
+                if self.native is not None:
+                    self.native.stage(mem, prepared)
+                    return
                 for k, ts in enumerate(prepared):
                     L.stage_inputs(
                         self.plan.crop(k),
@@ -313,6 +342,12 @@ class MercurySession:
                 )
                 get = lambda at, n: bytes(self.device._transport.memory[at : at + n])  # noqa: E731
                 for k in range(count):
+                    if self.native is not None:
+                        maps = self.native.read(get, k)
+                        if maps is None:
+                            raise RecoveryRequired("Mercury output has invalid padding or values")
+                        result_maps.append(maps)
+                        continue
                     maps = {}
                     for name in (L.OUTPUT, L.HEATMAP) if self.heads else (L.OUTPUT,):
                         out, stray = L.read_tensor(self.plan.crop(k), get, name)
@@ -334,6 +369,8 @@ class MercurySession:
                 _expect_s=0.8e-3 * self.crop_ms * count,
             )
             self.crop_ms = self.last_timing["body_ms"] / count
+            if self.native is not None:
+                return [self.native.finish(m) for m in result_maps]
             if not self.heads:
                 return [mercury.run_tail(self.model, m, L.LAST) for m in result_maps]
             # the heatmap head ran on the DSP: only the pooled vector heads remain

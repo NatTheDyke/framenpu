@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Added a [native host path](docs/MERCURY.md#native-host-path) for Mercury
+  requests: a freestanding C library (bundled for aarch64, hash-pinned,
+  reproducible) for input checks, staging, readback and the host heads. It
+  matches the NumPy path (staging byte-identical, one FP32-BLAS layer within
+  2.4e-7), and session CPU per crop on the Frame fell by about 0.2 ms
+  (1.76 → 1.56 ms for 1-crop requests, 1.40 → 1.17 ms for 3-crop requests).
+
 - Moved the [Mercury heatmap head onto the DSP](docs/MERCURY.md#step-2c-heatmap-head-on-the-dsp)
   (`--mheads` image `582d79ce…`): two new descriptor kinds, regrid and 3x3 on
   HMX. On 96 real crops the outputs match the current image to FP16 rounding.

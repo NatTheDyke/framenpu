@@ -1,5 +1,7 @@
 """Offline publication checks: paths, secrets, docs, payload provenance, examples."""
 
+import hashlib
+import json
 from pathlib import Path
 import re
 import subprocess
@@ -27,9 +29,23 @@ BINARY_FILES = {
     "src/framenpu/data/runtime.bin",
     "src/framenpu/data/dispatch.bin",
     "src/framenpu/data/dispatch_patch.bin",
+    "src/framenpu/data/host_aarch64.so",
     "examples/vector_add.fjob",
     "examples/xor.fnpu",
 }
+
+
+def verify_host_native(package):
+    """The bundled host library matches its manifest, and the manifest its source."""
+    record = json.loads((package / "data/host_aarch64.json").read_text())
+    lib = (package / "data/host_aarch64.so").read_bytes()
+    if record.get("bytes") != len(lib) or record.get("sha256") != hashlib.sha256(lib).hexdigest():
+        raise ValueError("bundled host library does not match host_aarch64.json")
+    for name, digest in record.get("source_sha256", {}).items():
+        if hashlib.sha256((package / name).read_bytes()).hexdigest() != digest:
+            raise ValueError(f"{name} changed; run python tools/build_host_native.py")
+    if list(record.get("source_sha256", {})) != ["host/fnpu_host.c"]:
+        raise ValueError("host library manifest lists unexpected sources")
 
 
 def public_files(root=ROOT):
@@ -89,7 +105,7 @@ def check(root=ROOT):
             if re.search(pattern, raw):
                 # Do not echo the offending content.
                 raise ValueError(f"{label} found in {name}")
-        if path.suffix in (".bin", ".fjob", ".fnpu") and name not in BINARY_FILES:
+        if path.suffix in (".bin", ".fjob", ".fnpu", ".so") and name not in BINARY_FILES:
             raise ValueError(f"unreviewed binary: {name}")
         if path.suffix == ".md":
             for match in re.finditer(r"\[[^\]]+\]\(([^)\s]+)\)", raw.decode()):
@@ -108,6 +124,7 @@ def check(root=ROOT):
     if "pull_request_target" in ci:
         raise ValueError("untrusted PR code must not run in a privileged workflow")
     verify_kernel(root / "src/framenpu")
+    verify_host_native(root / "src/framenpu")
     Job.load(root / "examples/vector_add.fjob")
     Model.load(root / "examples/xor.fnpu").plan(4)
     print(
