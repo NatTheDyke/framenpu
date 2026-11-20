@@ -102,9 +102,11 @@ class Grid:
 
         c = tensor.shape[0]
         idx, _ = _grid_index(self.w, self.h)
-        flat = np.zeros((c, self.nbin * 32), np.float16)
-        flat[:, idx] = np.asarray(tensor).reshape(c, -1)
-        return planar(flat, self.nbin, 0).tobytes()
+        # one u32 word per (pair, position): channel 2i+j is half j of the words of pair i
+        pairs = np.asarray(tensor, "<f2").reshape(c // 2, 2, -1).transpose(0, 2, 1).copy()
+        out = np.zeros((c // 2, self.nbin * 32), "<u4")
+        out[:, idx] = pairs.view("<u4")[..., 0]
+        return out.tobytes()
 
     def from_bytes(self, raw, channels):
         """-> ([C, h, w] float64, count of nonzero non-interior halves)."""

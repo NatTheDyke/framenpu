@@ -488,6 +488,24 @@ def run(model, feeds, numerics="fp32", keep=False, host_prefix=None):
     return (outs, t) if keep else outs
 
 
+_W64 = {}
+
+
+def _float64(w):
+    """FP64 copy of a dense weight, converted once per weight array (the hint Gemm alone is
+    344K values, converted on every request otherwise). Keyed by identity; the entry keeps
+    the source array alive, so an id is never reused while cached."""
+    import numpy as np
+
+    hit = _W64.get(id(w))
+    if hit is None or hit[0] is not w:
+        if len(_W64) > 64:
+            _W64.clear()
+        hit = _W64[id(w)] = (w, np.asarray(w, np.float64))
+        hit[1].setflags(write=False)
+    return hit[1]
+
+
 def _step(op, t, mode, numerics):
     """One lowered op on the tensors in ``t`` (``mode`` is the op's arithmetic)."""
     import numpy as np
@@ -503,7 +521,7 @@ def _step(op, t, mode, numerics):
         return _deconv(op, x, mode)
     if op.kind == "dense":
         w, b = op.params["weight"], op.params["bias"]
-        v = (w.astype(np.float64) @ x.astype(np.float64) + b).astype(np.float32)
+        v = (_float64(w) @ x.astype(np.float64) + b).astype(np.float32)
         return np.clip(v, 0, 6) if op.params["act"] == "relu6" else v
     if op.kind == "avgpool":
         kh, kw = op.params["kernel"]
