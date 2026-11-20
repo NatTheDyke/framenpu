@@ -97,6 +97,9 @@ class TeacherLinkBuild(unittest.TestCase):
             ("s2_direct", "pw_fast", "dw_fast", ("pw_group", 8), "replay"): (
                 "d7a78a81469c10acaf193b0d99cc0415f92d1de845a7a9aa292a7a1ebe691819"
             ),
+            ("s2_direct", "pw_fast", "dw_fast", ("pw_group", 8), "replay", "mheads"): (
+                "582d79ce821304ab90b48d18c5e9d7c5e4396614b9c6eb70bf2e7b6febf114d3"
+            ),
         }
         for i, (flags, digest) in enumerate(frozen.items()):
             kw = dict(f if isinstance(f, tuple) else (f, True) for f in flags)
@@ -106,7 +109,7 @@ class TeacherLinkBuild(unittest.TestCase):
             self.assertEqual(r["loader"], self.record["loader"])
 
     def test_pw_options_need_stride2(self):
-        for flag in ("pw_fast", "pw_profile", "dw_fast", "replay"):
+        for flag in ("pw_fast", "pw_profile", "dw_fast", "replay", "mheads"):
             with self.assertRaises(ValueError):
                 self.BL.build(self.out / f"bad-{flag}", **{flag: True})
         for group, fast in ((8, False), (3, True), (16, True)):

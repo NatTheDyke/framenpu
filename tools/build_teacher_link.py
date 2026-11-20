@@ -18,6 +18,8 @@ before their posts; 1x1 scratch grows to N * (nk + no) * 16 vectors.
 --pw-fast (stride2 only) posts each 1x1 HMX tile with hoisted fields and
 register-held overflow flags (same arithmetic).
 --pw-profile adds 1x1 phase tick totals in meta words 3..11 (timing only).
+--mheads (stride2, no heads/stem) adds kinds 7 (regrid) and 8 (3x3 HMX) for
+the Mercury heatmap head.
 --s2-direct (with --stride2 only) computes stride-2 outputs directly (no
 stride-1 temporary or scalar decimation); results are bit-identical.
 The two 4 KiB qualification kernels remain unchanged.
@@ -113,7 +115,10 @@ def build(
     pw_group=1,
     dw_fast=False,
     replay=False,
+    mheads=False,
 ):
+    if mheads and (not stride2 or heads or stem):
+        raise ValueError("the Mercury heatmap head is a stride2 build without heads/stem")
     if replay and (not stride2 or heads or stem):
         raise ValueError("crop replay is a stride2 build without heads/stem")
     if dw_fast and (not stride2 or heads or stem or dw_blocks != 2):
@@ -221,6 +226,7 @@ def build(
             *([f"-DRS_PW_GROUP={pw_group}"] if pw_group > 1 else []),
             *(["-DRS_DW_FAST"] if dw_fast else []),
             *(["-DRS_REPLAY"] if replay else []),
+            *(["-DRS_MHEADS"] if mheads else []),
         ),
         compile_(folder, 2, TESTS / "teacher_dw_probe.c", "-Dframe_job=tl_dw"),
         compile_(folder, 3, SDK / "hmx.S"),
@@ -250,6 +256,7 @@ def build(
         "pw_group": pw_group,
         "dw_fast": dw_fast,
         "replay": replay,
+        "mheads": mheads,
         "loader": {"bytes": len(loader.code), "sha256": _sha(loader.code), "name": LOADER_NAME},
         "linked": {"bytes": len(image), "sha256": _sha(image)},
         "reservation": {"code": f"{CODE:#x}", "bytes": CODE_BYTES, "seal_vector": f"{SEAL_AT:#x}"},
@@ -285,6 +292,9 @@ def main():
     p.add_argument(
         "--replay", action="store_true", help="up to 3 crops per request, one descriptor table"
     )
+    p.add_argument(
+        "--mheads", action="store_true", help="Mercury heatmap head: regrid and 3x3 HMX kinds"
+    )
     args = p.parse_args()
     r = build(
         args.output,
@@ -302,6 +312,7 @@ def main():
         pw_group=args.pw_group,
         dw_fast=args.dw_fast,
         replay=args.replay,
+        mheads=args.mheads,
     )
     print(
         json.dumps(

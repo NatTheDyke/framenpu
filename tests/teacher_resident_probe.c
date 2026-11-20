@@ -37,6 +37,25 @@
  * validated). Lanes past the row are stored as zero onto pad words or words a
  * later row rewrites; extra checks bound the reads and that spill.
  * The ordinary 4 KiB reference build does not include this extension. */
+/* RS_MHEADS (Mercury heatmap head, stride-2 builds) adds two kinds:
+ * kind 7 (regrid) is an exact word copy between grids. Words: 7, pairs per
+ * phase np, phases nph (1..9), oh, ow, source nbin, destination nbin, vin,
+ * vout (VTCM vector offsets), source row stride, destination row and column
+ * steps, flags (bit 0: the source pair advances by np per phase, bit 1: the
+ * destination pair does), 0, then (source word, destination word) of each
+ * phase in words 14..31. The destination is zeroed first; phase t copies
+ * dst[dbase + y*drow + x*dcol] = src[sbase + y*sws + x] for every pair.
+ * kind 8 is a 3x3 (padding 1, same grid) convolution on HMX: kind 1 with K =
+ * 9 taps x cpi pairs, where B row t*cpi + p is pair p shifted by
+ * (t/3 - 1) * ws + t%3 - 1 words (unaligned vector loads). The reads are
+ * bounded like the depthwise reach. Same post, parameters and scratch as 1x1. */
+#ifdef RS_MHEADS
+#if !defined(RS_STRIDE2) || defined(RS_STEM) || defined(RS_HEADS)
+#error "RS_MHEADS is a stride-2 Mercury option (no stem prefix, no teacher heads)"
+#endif
+#define RG_KIND 7u
+#define P3_KIND 8u
+#endif
 #include "landmark_common.h"
 #ifdef RS_STEM
 #include "teacher_stem_check.h"
@@ -142,6 +161,52 @@ static __attribute__((noinline)) void rs_zero(volatile HVX_Vector *to, fnpu_u32 
     for (fnpu_u32 i = 0; i < n; i++) to[i] = Q6_V_vzero();
 }
 
+#ifdef RS_MHEADS
+/* Kind 7 bounds: every word read lies in the source tensor's pairs and every
+ * word written in the destination's (sizes < 2^14, so products cannot wrap). */
+static __attribute__((noinline)) fnpu_u32 rg_bad(const volatile fnpu_u32 *r) {
+    fnpu_u32 w[32], big = 0;
+#pragma clang loop unroll(disable)
+    for (fnpu_u32 i = 0; i < 32; i++) big |= w[i] = r[i];
+    fnpu_u32 np = w[1], nph = w[2], oh = w[3], ow = w[4], snb = w[5], dnb = w[6], vin = w[7], vout = w[8];
+    fnpu_u32 sws = w[9], drow = w[10], dcol = w[11], fl = w[12];
+    if ((big > 0x3fff) | (np == 0) | (nph == 0) | (nph > 9) | (oh == 0) | (ow == 0) | (snb == 0) | (dnb == 0) |
+        (vin == 0) | (vout == 0) | (fl > 3) | (w[13] != 0) | (dcol == 0))
+        return 1;
+    fnpu_u32 sp = (fl & 1) ? nph * np : np, dp = (fl & 2) ? nph * np : np;
+    fnpu_u32 bad = (vin + sp * snb > SPAN) | (vout + dp * dnb > SPAN) |
+                   ((vin < vout + dp * dnb) & (vout < vin + sp * snb)); /* no overlap */
+#pragma clang loop unroll(disable)
+    for (fnpu_u32 t = 0; t < nph; t++)
+        bad |= (w[14 + 2 * t] + (oh - 1) * sws + ow > 32 * snb) |
+               (w[15 + 2 * t] + (oh - 1) * drow + (ow - 1) * dcol >= 32 * dnb);
+    return bad;
+}
+
+static __attribute__((noinline)) void rg_run(const volatile fnpu_u32 *r) {
+    const fnpu_u32 np = r[1], nph = r[2], oh = r[3], ow = r[4], snb = r[5], dnb = r[6], sws = r[9];
+    const fnpu_u32 drow = r[10], dcol = r[11], fl = r[12];
+    const volatile fnpu_u32 *src = (const volatile fnpu_u32 *)FR(r[7]);
+    volatile fnpu_u32 *dst = (volatile fnpu_u32 *)FR(r[8]);
+    rs_zero((volatile HVX_Vector *)dst, ((fl & 2) ? nph * np : np) * dnb);
+#pragma clang loop unroll(disable)
+    for (fnpu_u32 t = 0; t < nph; t++) {
+        const fnpu_u32 sb = r[14 + 2 * t], db = r[15 + 2 * t];
+        const fnpu_u32 sp0 = (fl & 1) ? t * np : 0, dp0 = (fl & 2) ? t * np : 0;
+#pragma clang loop unroll(disable)
+        for (fnpu_u32 p = 0; p < np; p++) {
+            const volatile fnpu_u32 *s = src + 32 * snb * (sp0 + p) + sb;
+            volatile fnpu_u32 *o = dst + 32 * dnb * (dp0 + p) + db;
+#pragma clang loop unroll(disable)
+            for (fnpu_u32 y = 0; y < oh; y++, s += sws, o += drow) {
+#pragma clang loop unroll(disable)
+                for (fnpu_u32 x = 0; x < ow; x++) o[x * dcol] = s[x];
+            }
+        }
+    }
+}
+#endif
+
 /* Fetch descriptor i into d; nonzero if any index it implies leaves bounds. */
 #ifdef RS_REPLAY
 static __attribute__((noinline)) fnpu_u32 rs_get(fnpu_u32 tab, fnpu_u32 i, rs_op *d, fnpu_u32 off) {
@@ -163,6 +228,12 @@ static __attribute__((noinline)) fnpu_u32 rs_get(fnpu_u32 tab, fnpu_u32 i, rs_op
         return th_bad((const fnpu_u32 *)RS_DESC);
     }
 #endif
+#ifdef RS_MHEADS
+    if (((const volatile fnpu_u32 *)RS_DESC)[0] == RG_KIND) {
+        d->kind = RG_KIND; /* runs from the raw descriptor in RS_DESC */
+        return rg_bad((const volatile fnpu_u32 *)RS_DESC);
+    }
+#endif
     fnpu_u32 *t = (fnpu_u32 *)d, big = 0;
 #pragma clang loop unroll(disable)
     for (fnpu_u32 w = 0; w < 15; w++) big |= (t[w] = ((const volatile fnpu_u32 *)RS_DESC)[w]) & -(w != 9);
@@ -175,9 +246,17 @@ static __attribute__((noinline)) fnpu_u32 rs_get(fnpu_u32 tab, fnpu_u32 i, rs_op
     fnpu_u32 s2 = d->kind == 5;
 #endif
     /* every word but dpar < 2^14: no product or sum below can wrap */
+#ifdef RS_MHEADS
+    fnpu_u32 p3 = d->kind == P3_KIND;
+    fnpu_u32 cpi = d->cpi, cpo = d->cpo, nb = d->nbin, nj = d->nj, k = d->nk, pw = (d->kind == 1) | p3;
+    fnpu_u32 bad = (big > 0x3fff) | ((d->kind - 1 >= RS_MAX_KIND) & !p3) | (d->vpar + d->npar > SPAN) |
+                   ((d->dpar | ((d->vpar | d->npar) << 3 & -pw)) & 127) |
+#else
     fnpu_u32 cpi = d->cpi, cpo = d->cpo, nb = d->nbin, nj = d->nj, k = d->nk, pw = d->kind == 1;
     fnpu_u32 bad = (big > 0x3fff) | (d->kind - 1 >= RS_MAX_KIND) | (d->vpar + d->npar > SPAN) |
-                   ((d->dpar | ((d->vpar | d->npar) << 3 & -(d->kind == 1))) & 127) | /* 1x1: tiles 2 KiB aligned */ (d->dpar - RS_WIN_LO + 128 * d->npar > RS_WIN_HI - RS_WIN_LO);
+                   ((d->dpar | ((d->vpar | d->npar) << 3 & -(d->kind == 1))) & 127) |
+#endif
+                   /* 1x1: tiles 2 KiB aligned */ (d->dpar - RS_WIN_LO + 128 * d->npar > RS_WIN_HI - RS_WIN_LO);
     bad |= d->vpar == 0;
 #ifdef RS_STRIDE2
     bad |= (d->dpar < RS_WIN_LO) | (d->dpar > RS_WIN_HI) |
@@ -214,7 +293,14 @@ static __attribute__((noinline)) fnpu_u32 rs_get(fnpu_u32 tab, fnpu_u32 i, rs_op
     bad |= (cpi == 0) | (nj == 0) | (d->vin == 0) | (d->vout == 0) | (d->clip > 1) |
            (d->blk0 + nj > nb) | (d->vin + cpi * nb > SPAN) | (d->vout + cpo * out_nb > SPAN) |
            (d->vres + cpo * nb > SPAN) | (d->bias + cpo + nj > d->scr) | (d->scr + (pw ? RS_PW_SCR(k, no) : cpi * kk) > SPAN);
-    bad |= pw ? (k != (cpi + 15) >> 4)
+#ifdef RS_MHEADS
+    /* kind 8: K = 9 taps x cpi pairs; tap reads reach ws + 1 words either side */
+    bad |= p3 ? (k != (9 * cpi + 15) >> 4) | (32 * d->blk0 < d->ws + 1) | (32 * (d->blk0 + nj) + d->ws + 1 > 32 * nb)
+         :
+#else
+    bad |=
+#endif
+           pw ? (k != (cpi + 15) >> 4)
               : (cpi != cpo) | ((k != 3) & (k != 5)) | (nj & (RS_DW_BLOCKS - 1)) | (32 * d->blk0 < reach) |
                     (32 * (d->blk0 + nj) + reach > 32 * nb);
     /* compute ops: offsets -> VTCM addresses, except vpar (kept as an offset) */
@@ -290,6 +376,33 @@ static __attribute__((noinline)) void rs_pw_post(const rs_op *d, fnpu_u32 o, fnp
 }
 #undef RS_TILE
 #endif
+#ifdef RS_MHEADS
+/* B tile rows for block src (= vin + blk0 + j): kind 1 takes pair p at the
+ * block itself; kind 8 takes tap t of pair p, shifted (t/3-1)*ws + t%3-1 words. */
+static __attribute__((noinline)) void rs_gather(const rs_op *d, volatile HVX_Vector *b, const volatile HVX_Vector *src) {
+    fnpu_u32 p = 0;
+#ifdef RS_MHEADS
+    if (d->kind == P3_KIND) {
+#pragma clang loop unroll(disable)
+        for (fnpu_u32 t = 0; t < 9; t++) {
+            const int off = ((int)(t / 3) - 1) * (int)d->ws + (int)(t % 3) - 1;
+            const char *s = (const char *)src + 4 * off;
+#pragma clang loop unroll(disable)
+            for (fnpu_u32 q = 0; q < d->cpi; q++, p++) b[p] = *(const rs_uv *)(s + 128 * d->nbin * q);
+        }
+    } else
+#endif
+#pragma clang loop unroll(disable)
+    for (; p < d->cpi; p++) b[p] = src[p * d->nbin];
+#pragma clang loop unroll(disable)
+    for (; p < d->nk * 16; p++) b[p] = LV(57)[0]; /* zero */
+}
+#define RS_GATHER(b, src) rs_gather(d, b, src)
+#else
+#define RS_GATHER(b, src) \
+    _Pragma("clang loop unroll(disable)") for (fnpu_u32 p = 0; p < nk * 16; p++) (b)[p] = p < d->cpi ? (src)[p * d->nbin] : LV(57)[0] /* zero */
+#endif
+
 #ifdef RS_PW_GROUP
 #ifndef RS_PW_FAST
 #error "RS_PW_GROUP builds on RS_PW_FAST"
@@ -320,8 +433,7 @@ static __attribute__((noinline)) void rs_pw(const rs_op *d) {
         for (fnpu_u32 jj = 0; jj < g; jj++) {
             const volatile HVX_Vector *src = P(vin) + d->blk0 + j0 + jj;
             volatile HVX_Vector *b = bt + jj * nk * 16;
-#pragma clang loop unroll(disable)
-            for (fnpu_u32 p = 0; p < nk * 16; p++) b[p] = p < d->cpi ? src[p * d->nbin] : LV(57)[0]; /* zero */
+            RS_GATHER(b, src);
         }
         RS_PADD(2, tg);
         RS_PT(tb);
@@ -365,8 +477,7 @@ static __attribute__((noinline)) void rs_pw(const rs_op *d) {
         }
 #endif
         RS_PT(tg);
-#pragma clang loop unroll(disable)
-        for (fnpu_u32 p = 0; p < nk * 16; p++) bt[p] = p < d->cpi ? src[p * d->nbin] : LV(57)[0]; /* zero */
+        RS_GATHER(bt, src);
         RS_PADD(2, tg);
         RS_PT(tb);
         __asm__ volatile("barrier" ::: "memory");
@@ -656,6 +767,11 @@ fnpu_u32 frame_job(const fnpu_context *c) {
             if (!ts_run(c, (const fnpu_u32 *)RS_DESC, t0)) break;
         } else {
 #endif
+#ifdef RS_MHEADS
+        if (d->kind == RG_KIND) {
+            rg_run((const volatile fnpu_u32 *)RS_DESC);
+        } else {
+#endif
         volatile HVX_Vector *v = FR(d->vpar), *m = (volatile HVX_Vector *)(RS_DDR + d->dpar);
         RS_PT(tc);
         if (d->kind == 4) rs_copy(m, v, d->npar);
@@ -664,17 +780,28 @@ fnpu_u32 frame_job(const fnpu_context *c) {
         if (d->kind == 1) RS_PADD(0, tc);
 #endif
         RS_PT(tz);
+#ifdef RS_MHEADS
+        if ((d->kind < 3) | (d->kind == P3_KIND)) rs_zero(P(vout), d->cpo * d->nbin);
+#else
         if (d->kind < 3) rs_zero(P(vout), d->cpo * d->nbin);
+#endif
 #ifdef RS_PW_PROFILE
         if (d->kind == 1) RS_PADD(1, tz);
 #endif
+#ifdef RS_MHEADS
+        if ((d->kind == 1) | (d->kind == P3_KIND)) rs_pw(d);
+#else
         if (d->kind == 1) rs_pw(d);
+#endif
         if (d->kind == 2) rs_dw(d);
 #ifdef RS_STRIDE2
         if (d->kind == 5) rs_s2(d);
 #endif
 #ifdef RS_HEADS
         if (d->kind == TH_KIND) th_run((const fnpu_u32 *)RS_DESC, c);
+#endif
+#ifdef RS_MHEADS
+        }
 #endif
 #ifdef RS_STEM
         }

@@ -648,6 +648,52 @@ and unsealed-request controls also pass. All 972 restoration audits pass;
 window, reservation, whole-arena hash, firmware/power state and DSP service
 are unchanged.
 
+## Step 2c: heatmap head on the DSP
+
+`--mheads` on `build_teacher_link.py` (`RS_MHEADS`) adds two descriptor kinds
+to the replay image (`582d79ce…`, 8,016 B). Every other image, including
+`d7a78a81…`, stays byte-identical.
+
+- **Kind 7, regrid:** an exact word copy between grids, with per-phase source
+  and destination bases and destination row/column steps. The destination is
+  zeroed first.
+- **Kind 8, 3x3 on HMX:** kind 1 with K = 9 taps × `cpi` pairs. B row
+  `t·cpi + p` is pair `p` read unaligned at word offset
+  `(t/3 − 1)·ws + t%3 − 1`, and the reads are bounded like the depthwise reach.
+  The post, parameters and scratch are those of 1x1.
+
+`build_plan(heads=True)` appends five ops after `Conv_139`:
+
+1. Regrid the 8x8 map into a 10x10 grid with a zero ring. A padding-2 3x3
+   then becomes padding 1 on the same grid.
+2. Run `Conv_159` as kind 8 (63 → 64 channels).
+3. Run `ConvTranspose_163` as a 1x1 to 168 channels, phase-major
+   (`(2a + b)·42 + c`).
+4. Regrid with 4 phases at column/row step 2 to pixel-shuffle the result
+   straight into the ring of a 22x22 grid.
+5. Run `Conv_164` as kind 8 (21 → 22 channels).
+
+The plan stores `input.336` as well, because the pooled vector heads (depth,
+extras, curls) stay on the host (`run_tail(..., skip=HEAD_OPS)`). It has 61
+descriptors, and VTCM peaks at 11.3K vectors.
+
+The FP16 contract is unchanged, since the contract already ran these ops as
+HMX. The simulator matches the host emulator exactly.
+
+On the device, against the current image on 96 real tracking crops
+([evidence](../evidence/mercury-heads-device.json)):
+
+- **Heatmap:** differs by at most 0.001.
+- **Keypoints:** the worst joint moves 0.005 px median and 0.19 px max.
+- **Other outputs:** identical.
+
+| Per crop | Current | Heads on DSP |
+|---|---:|---:|
+| DSP body | 4.93 ms | 4.64 ms |
+| Session wall, 1 crop | 10.6 ms | 8.0 ms |
+| Host CPU, 1 crop | 4.5 ms | 2.3 ms |
+| Host CPU, 2 crops | 4.0 ms | 2.0 ms |
+
 ## Next steps
 
 - **Remaining DSP time** (4.92 ms per crop): 1x1 3.18 ms, of which HMX
@@ -664,10 +710,10 @@ are unchanged.
   per request), the staging in NumPy (about 0.55 ms per crop) and the gate
   claim and acknowledge. Part of the last is the harness audit, which a
   runtime would not repeat on every request.
-- **Step 2c: heatmap heads on the DSP** (the two dense 3x3 convolutions and
-  the 2x2 transposed convolution). Then time the stack's seam
-  (`MercuryKeypoint.run`) end to end, with held power and both hands per
-  request.
+- **Host CPU after step 2c** (about 2.2 ms per crop in the NPU service): the
+  remaining cost is mostly per-request Python around the DSP call (gate
+  claim, reservation checks, power verification, completion polling) plus
+  staging and readback.
 - **Corpus.** Collect real Mercury tracking crops on the headset, using the
   stack's local-only `validate_mercury.py`. Do this before freezing accuracy
   ceilings; the affine crops here are only a numerical stand-in.

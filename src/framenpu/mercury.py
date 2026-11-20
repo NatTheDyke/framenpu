@@ -520,17 +520,21 @@ def _step(op, t, mode, numerics):
     raise AssertionError(op.kind)  # pragma: no cover - lower() only emits the kinds above
 
 
-def run_tail(model, tensors, after, numerics="fp16"):
+def run_tail(model, tensors, after, numerics="fp16", skip=()):
     """Finish the graph on the host from given tensors: every op after ``after``
     runs with ``numerics`` and may read any tensor in ``tensors`` (for example a
-    device-produced feature map). Returns the four outputs with batch 1."""
+    device-produced feature map). Ops named in ``skip`` are not run; ``tensors``
+    must then hold whatever of their outputs is needed (for example a
+    device-produced heatmap). Returns the four outputs with batch 1."""
     import numpy as np
 
     names = [op.name for op in model.ops]
-    if after not in names:
-        raise ValueError(f"unknown op {after!r}")
+    if after not in names or any(n not in names for n in skip):
+        raise ValueError(f"unknown op {after!r} or skip {skip!r}")
     t = dict(tensors)
     for op in model.ops[names.index(after) + 1 :]:
+        if op.name in skip:
+            continue
         t[op.output] = _step(op, t, numerics, numerics)
     return {k: t[k].reshape(OUTPUTS[k]).astype(np.float32) for k in OUTPUTS}
 

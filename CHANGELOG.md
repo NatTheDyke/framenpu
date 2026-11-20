@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Moved the [Mercury heatmap head onto the DSP](docs/MERCURY.md#step-2c-heatmap-head-on-the-dsp)
+  (`--mheads` image `582d79ce…`): two new descriptor kinds, regrid and 3x3 on
+  HMX. On 96 real crops the outputs match the current image to FP16 rounding.
+  Host CPU per crop fell from 4.5 to 2.3 ms, and session wall time from 10.6
+  to 8.0 ms, with DSP body time 4.64 ms. `MercurySession` accepts either image.
+
 - The tracker fork now [defaults to cores 5–6](docs/MERCURY_LIVE.md#heat-and-cpu-placement).
   A follow-up session showed the frequency cap adds little on those cores
   (about 0.2 W saved, 2–3 ms slower), and a 5-minute run stayed steady.

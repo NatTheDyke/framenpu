@@ -51,6 +51,19 @@ HOST_HINT_OPS = ("Gemm_58", "Reshape_63", "Mul_70", "Concat_71")
 GROUP = 32  # channels per Conv_10/Conv_14 group
 S2_PHASE = 0  # even: symmetric (1, 1) padding
 MAX_DESCRIPTORS = 160
+# Step 2c (RS_MHEADS builds, heads=True): the heatmap head after LAST on the DSP.
+# Both padding-2 3x3 convolutions become padding-1 kind-8 ops on a grid with a
+# one-pixel zero ring (kind-7 regrid embeds the input); the 2x2 stride-2
+# transposed convolution is a 1x1 to phase-major channels, then a kind-7
+# pixel shuffle straight into the next ring grid. The pooled vector heads stay
+# on the host, so LAST's output is stored as well.
+HEAD_OPS = ("Conv_159", "ConvTranspose_163", "Conv_164")
+E1 = "heads.e1"  # LAST output (160 x 8 x 8) inside a 10x10 grid with a zero ring
+H1 = "heads.h1"  # Conv_159 output, 63 channels + 1 zero channel, 10 x 10
+DEC = "heads.dec"  # ConvTranspose_163 as 1x1: 168 channels, phase (2a + b) major, 10 x 10
+E2 = "heads.e2"  # shuffled transposed convolution (42 x 20 x 20) inside a 22x22 ring grid
+HEATMAP = "heads.hm"  # Conv_164 output, 21 channels + 1 zero channel, 22 x 22
+KIND_RG, KIND_P3 = 7, 8
 UNDERFLOW_DW = 18 * 2.0**-14  # qf16 flush-to-zero allowance per depthwise output
 
 
@@ -133,14 +146,86 @@ def composites(model, prefix):
     return out
 
 
-def shapes(model, prefix=False):
+def shapes(model, prefix=False, heads=False):
     shape = {op.output: op.shape for op in model.ops}
+    if heads:
+        for op in head_ops(model):
+            shape[op.output] = op.shape
     shape[INPUT] = model.op(HOST_PREFIX).shape
     if prefix:
         shape[STEM_COLS] = (10, *model.op("Conv_0").shape[1:])
         for op in _prefix_ops(model):
             shape[op.output] = op.shape
     return shape
+
+
+def head_ops(model):
+    """Step 2c ops after LAST, rewritten for kinds 1, 7 and 8 (module constants)."""
+    import numpy as np
+
+    c159, dec, c164 = (model.op(n) for n in HEAD_OPS)
+    c, h, w = model.op(LAST).shape
+    if (
+        c159.inputs != (OUTPUT,)
+        or c159.params["weight"].shape != (63, c, 3, 3)
+        or c159.params["pads"] != (2, 2, 2, 2)
+        or c159.params["stride"] != (1, 1)
+        or c159.params["act"] != "relu6"
+        or c159.shape != (63, h + 2, w + 2)
+        or dec.inputs != (c159.output,)
+        or dec.params["weight"].shape != (63, 42, 2, 2)
+        or dec.shape != (42, 2 * h + 4, 2 * w + 4)
+        or c164.inputs != (dec.output,)
+        or c164.params["weight"].shape != (21, 42, 3, 3)
+        or c164.params["pads"] != (2, 2, 2, 2)
+        or c164.params["stride"] != (1, 1)
+        or c164.params["act"] != "relu6"
+        or c164.shape != (21, 2 * h + 6, 2 * w + 6)
+    ):
+        raise ValueError("unexpected Mercury heatmap head geometry")
+
+    def tap3(op, cin, cout, src, dst):
+        """3x3 weights as a (cout, 9 * cin) matrix, K tap-major (t = 3 dy + dx)."""
+        wt, b = op.params["weight"], op.params["bias"]
+        co, ci = wt.shape[:2]
+        m = np.zeros((cout, 9, cin), np.float32)
+        m[:co, :, :ci] = wt.reshape(co, ci, 9).transpose(0, 2, 1)
+        bias = np.zeros(cout, np.float32)
+        bias[:co] = b
+        params = dict(op.params, weight=m.reshape(cout, 9 * cin, 1, 1), bias=bias)
+        params.update(pads=(0, 0, 0, 0), taps=9)
+        return replace(op, inputs=(src,), output=dst, params=params, shape=(cout, *op.shape[1:]))
+
+    wd, bd = dec.params["weight"], dec.params["bias"]  # (cin, cout, 2, 2)
+    m = np.zeros((4 * 42, 64), np.float32)
+    m[:, :63] = wd.transpose(2, 3, 1, 0).reshape(4 * 42, 63)  # row (2a + b) * 42 + c
+    dparams = {"weight": m.reshape(168, 64, 1, 1), "bias": np.tile(bd, 4).astype(np.float32)}
+    dparams.update(group=1, pads=(0, 0, 0, 0), stride=(1, 1), act=None)
+    return [
+        replace(c159, name="heads.embed", kind="regrid", inputs=(OUTPUT,), output=E1,
+                params={"mode": "embed"}, shape=(c, h + 2, w + 2)),
+        tap3(c159, c, 64, E1, H1),
+        replace(dec, name=dec.name, kind="conv", inputs=(H1,), output=DEC, params=dparams,
+                shape=(168, h + 2, w + 2)),
+        replace(dec, name="heads.shuffle", kind="regrid", inputs=(DEC,), output=E2,
+                params={"mode": "shuffle"}, shape=(42, 2 * h + 6, 2 * w + 6)),
+        tap3(c164, 42, 22, E2, HEATMAP),
+    ]
+
+
+def regrid_words(op, gin, gout, vin, vout):
+    """Kind-7 descriptor words of a head regrid op (see tests/teacher_resident_probe.c)."""
+    if op.params["mode"] == "embed":
+        pairs, oh, ow = op.shape[0] // 2, gin.h, gin.w
+        return [KIND_RG, pairs, 1, oh, ow, gin.nbin, gout.nbin, vin, vout, gin.ws, gout.ws, 1,
+                0, 0, gin.word(0, 0), gout.word(1, 1)]
+    pairs, oh, ow = op.shape[0] // 2, gin.h, gin.w  # 21 pairs per phase, 10 x 10 sources
+    phases = []
+    for a in (0, 1):
+        for b in (0, 1):
+            phases += [gin.word(0, 0), gout.word(1 + a, 1 + b)]
+    return [KIND_RG, pairs, 4, oh, ow, gin.nbin, gout.nbin, vin, vout, gin.ws, 2 * gout.ws, 2,
+            1, 0, *phases]
 
 
 def _check(op):
@@ -155,8 +240,9 @@ def _check(op):
         raise ValueError(f"{op.name}: odd channel count")
 
 
-def device_ops(model, stop_after=LAST, start=None, prefix=False):
-    """The resident ops of the request (prefix ops rewritten), checked."""
+def device_ops(model, stop_after=LAST, start=None, prefix=False, heads=False):
+    """The resident ops of the request (prefix ops rewritten, then with heads the
+    step 2c head ops), checked."""
     names = [op.name for op in model.ops]
     lo, last = names.index(FIRST), names.index(LAST)
     skipped = [op.name for op in model.ops[lo : last + 1] if op.kind != "conv"]
@@ -165,6 +251,13 @@ def device_ops(model, stop_after=LAST, start=None, prefix=False):
     program = (_prefix_ops(model) if prefix else []) + [
         op for op in model.ops[lo : last + 1] if op.kind == "conv"
     ]
+    if heads:
+        if stop_after != LAST:
+            raise ValueError("the heads follow the whole network")
+        for op in program:
+            _check(op)
+        program = program + head_ops(model)
+        stop_after = program[-1].name
     order = [op.name for op in program]
     start = start or order[0]
     if start not in order or stop_after not in order:
@@ -173,7 +266,8 @@ def device_ops(model, stop_after=LAST, start=None, prefix=False):
     if a > b:
         raise ValueError("start after stop_after")
     for op in program[a : b + 1]:
-        _check(op)
+        if op.kind != "regrid" and "taps" not in op.params and op.name not in HEAD_OPS:
+            _check(op)
     return program[a : b + 1]
 
 
@@ -267,6 +361,7 @@ def build_plan(
     batch=1,
     pw_group=1,
     replay=False,
+    heads=False,
 ):
     """batch > 1 (merged only): one request runs the merged sequence once per crop,
     each crop with its own input and final-tensor slots; parameter images are
@@ -284,9 +379,11 @@ def build_plan(
         raise ValueError("batch > 1 needs a merged plan")
     if replay and (mode != "merged" or batch > RL.MAX_CROPS):
         raise ValueError(f"replay is a merged plan of at most {RL.MAX_CROPS} crops")
-    ops = device_ops(model, stop_after, start, prefix)
+    if heads and (mode != "merged" or start is not None):
+        raise ValueError("heads are a whole-network merged plan")
+    ops = device_ops(model, stop_after, start, prefix, heads)
     final = ops[-1].output
-    shape = shapes(model, prefix)
+    shape = shapes(model, prefix, heads)
     pairs = lambda b: shape[b][0] // 2  # noqa: E731
     vec = lambda b: pairs(b) * grid(shape[b]).nbin  # noqa: E731
     comps = composites(model, prefix)
@@ -318,6 +415,8 @@ def build_plan(
 
     images = {}
     for op in ops:
+        if op.kind == "regrid":
+            continue
         gin = grid(shape[op.inputs[0]])
         images[op.name] = (
             pw_image(op, gin, pw_group) if op.conv_class == "pointwise" else dw_image(op, gin)
@@ -328,10 +427,12 @@ def build_plan(
     cursor = RL._al(table_at + 128 * MAX_DESCRIPTORS * (len(ops) if mode == "qualify" else 1), 4096)
     par_at, fixed = {}, {}
     for op in ops:
+        if op.kind == "regrid":
+            continue
         par_at[op.name] = cursor
         fixed[cursor] = images[op.name][0]
         cursor = RL._al(cursor + len(images[op.name][0]))
-    stored = [final] if mode == "merged" else [op.output for op in ops]
+    stored = ([OUTPUT, final] if heads else [final]) if mode == "merged" else [op.output for op in ops]
     with_host = [par for par in free if any(src == "host" for _, src in comps[par])]
     crops = []
     for _ in range(batch):
@@ -369,6 +470,9 @@ def build_plan(
         res = op.inputs[1] if len(op.inputs) > 1 else None
         dst = op.output
         gin, gout = grid(shape[src]), grid(shape[dst])
+        if op.kind == "regrid":
+            words(*regrid_words(op, gin, gout, at[src], at[dst]))
+            return
         image, scratch = images[op.name]
         npar = len(image) // 128
         pw = op.conv_class == "pointwise"
@@ -377,9 +481,10 @@ def build_plan(
         tmp = vt.take(vec(src)) if s2 else None
         if pw:
             cout, cin = op.params["weight"].shape[:2]
+            taps = op.params.get("taps", 1)
             words(
-                RL.KIND["pw"],
-                cin // 2,
+                KIND_P3 if taps == 9 else RL.KIND["pw"],
+                cin // taps // 2,
                 cout // 2,
                 (cin // 2 + 15) >> 4,
                 int(op.params["act"] == "relu6"),
@@ -444,8 +549,9 @@ def build_plan(
                 load,
                 store,
                 emit,
+                stored,
             )
-        job = RL.Job("rs", first=0, end=len(table), ops=[op.name for op in ops], stores=[final])
+        job = RL.Job("rs", first=0, end=len(table), ops=[op.name for op in ops], stores=stored)
         job.vtcm_peak = peak = vt.peak
         jobs.append(job)
     else:
@@ -502,9 +608,11 @@ def build_plan(
 
 
 def _merged_crop(
-    ops, external, free, comps, parent_of, final, last_use, key, vec, vt, load, store, emit
+    ops, external, free, comps, parent_of, final, last_use, key, vec, vt, load, store, emit,
+    stores=None,
 ):
     """One crop of a merged request; every VTCM block it takes is given back."""
+    stores = stores or [final]
     at = {}
     for b in external:
         at[b] = vt.take(vec(b))
@@ -527,8 +635,8 @@ def _merged_crop(
                 for n, src in comps[par]:
                     if src == "host":
                         load(n, at[n])
-        if dst == final:
-            store(final, at[final])
+        if dst in stores:
+            store(dst, at[dst])
         for b in set(op.inputs):
             if last_use.get(key(b)) == i:
                 k = key(b)
@@ -537,7 +645,7 @@ def _merged_crop(
                     for n in free.get(k, {}):
                         at.pop(n, None)
         k = key(dst)
-        if k not in last_use and k in at and (par is None or dst == final):
+        if k not in last_use and k in at and (par is None or dst in stores):
             vt.give(at.pop(k), vec(k))
     if at:
         raise ValueError(f"crop leaves VTCM blocks held: {sorted(at)}")

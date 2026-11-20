@@ -19,16 +19,17 @@ from framenpu.resident_landmark import CONTROL
 
 MODEL = os.environ.get("FNPU_MERCURY_MODEL")
 JOBS = os.environ.get("FNPU_MERCURY_JOBS")
+HEADS_JOBS = os.environ.get("FNPU_MERCURY_HEADS_JOBS")  # a --mheads build of the same image
 
 
 class ReplayCompletionTests(unittest.TestCase):
     @staticmethod
-    def result(count=3):
+    def result(count=3, n=55):
         words = [0] * 256
-        words[:3] = [C.RS_MAGIC, M.IMAGE_CACHED + 4, 55 * count]
+        words[:3] = [C.RS_MAGIC, M.IMAGE_CACHED + 4, n * count]
         if count > 1:
-            words[48 : 48 + count] = [550 * (k + 1) for k in range(count)]
-        words[96:151] = [(count - 1) * 550 + 10 * (k + 1) for k in range(55)]
+            words[48 : 48 + count] = [10 * n * (k + 1) for k in range(count)]
+        words[96 : 96 + n] = [(count - 1) * 10 * n + 10 * (k + 1) for k in range(n)]
         workers = []
         for i in range(3):
             row = [0] * 16
@@ -167,7 +168,7 @@ class _Device:
                 window = self._transport.memory[C.WIN_LO : C.WIN_HI]
                 oracle.simulate(p, window, s2_phase=0, s2_direct=True, crops=count)
                 self._transport.memory[C.WIN_LO : C.WIN_HI] = window
-                words, workers = ReplayCompletionTests.result(count)
+                words, workers = ReplayCompletionTests.result(count, len(p.table) // 128)
                 out = struct.pack("<256I", *words)
                 if self.fail:
                     workers[0] = tuple(list(workers[0][:2]) + [1] + list(workers[0][3:]))
@@ -290,3 +291,62 @@ class MercurySessionTests(unittest.TestCase):
         self.assertTrue(lease.closed)
         with self.assertRaises(RuntimeError):
             session.infer([self.feeds(31)])
+
+
+@unittest.skipUnless(MODEL and HEADS_JOBS, "FNPU_MERCURY_MODEL and FNPU_MERCURY_HEADS_JOBS required")
+class HeadsSessionTests(unittest.TestCase):
+    """The --mheads image: the heatmap head runs in the (simulated) kernel, and
+    every output still equals the FP16 contract (the simulator is exact)."""
+
+    def test_heatmap_head_on_the_dsp_matches_the_contract(self):
+        import numpy as np
+        from unittest.mock import patch
+
+        lease = _Lease()
+        with patch.object(M, "_lease", return_value=lease):
+            session = M.MercurySession(
+                MODEL, HEADS_JOBS, _device_factory=_Device, _lease_factory=lambda: lease
+            )
+        self.assertTrue(session.heads)
+        rows = list(struct.iter_unpack("<32I", session.plan.plan.table))
+        self.assertEqual(sum(r[0] == L.KIND_RG for r in rows), 2)
+        self.assertEqual(sum(r[0] == L.KIND_P3 for r in rows), 2)
+        session.__enter__()
+        dev = session.device
+        dev.owner = session
+        with session:
+            for count in (1, 3, 2):
+                fs = [MercurySessionTests.feeds(k + 41) for k in range(count)]
+                for feed, out in zip(fs, session.infer(fs)):
+                    want = mercury.run(session.model, feed, "fp16")
+                    for name in mercury.OUTPUTS:
+                        np.testing.assert_array_equal(out[name], want[name])
+        self.assertEqual(dev.submitted, [1, 3, 2])
+        self.assertFalse(any(dev._transport.memory))
+
+    def test_regrid_and_tap_checks_refuse_out_of_bounds_rows(self):
+        lease = _Lease()
+        from unittest.mock import patch
+
+        with patch.object(M, "_lease", return_value=lease):
+            session = M.MercurySession(
+                MODEL, HEADS_JOBS, _device_factory=_Device, _lease_factory=lambda: lease
+            )
+        rows = [list(r) for r in struct.iter_unpack("<32I", session.plan.plan.table)]
+        rg = next(r for r in rows if r[0] == L.KIND_RG and r[2] == 4)
+        p3 = next(r for r in rows if r[0] == L.KIND_P3)
+        self.assertTrue(C.regrid_ok(rg))
+        for word, value in ((2, 10), (3, 40), (12, 4), (13, 1), (8, rg[7])):
+            bad = list(rg)
+            bad[word] = value
+            self.assertFalse(C.regrid_ok(bad), word)
+        bad = list(rg)
+        bad[15] += 32 * rg[6]  # phase 0 destination past its tensor
+        self.assertFalse(C.regrid_ok(bad))
+        self.assertTrue(C.native_ok(p3, s2_direct=0, pw_group=8, mheads=True))
+        self.assertFalse(C.native_ok(p3, s2_direct=0, pw_group=8))  # not an RS_MHEADS build
+        for word, value in ((3, p3[3] + 1), (6, 0), (7, p3[7] + 8)):
+            bad = list(p3)
+            bad[word] = value
+            self.assertFalse(C.native_ok(bad, s2_direct=0, pw_group=8, mheads=True), word)
+

@@ -22,6 +22,8 @@ from .resident_gemm import _lease, RECORD, SSR
 from .resident_landmark import CONTROL
 
 IMAGE_SHA256 = "d7a78a81469c10acaf193b0d99cc0415f92d1de845a7a9aa292a7a1ebe691819"
+# The same build with --mheads: the heatmap head (step 2c) runs on the DSP too.
+HEADS_IMAGE_SHA256 = "582d79ce821304ab90b48d18c5e9d7c5e4396614b9c6eb70bf2e7b6febf114d3"
 LOADER_SHA256 = "72280ad93eb4ffcf49e7de26908fa2d8f9056e0d9e1e8618f75eba867a7ba3f0"
 CODE, CODE_BYTES, SEAL_AT, SEAL = 0x1FF0000, 0x4000, 0x1FF3F80, 0x544C4E4B
 IMAGE_CACHED, SLOT_UNCACHED = 0x88FF0000, 0xF0A92000
@@ -29,15 +31,18 @@ ADMIN_MAGIC, ADMIN_OPCODE = 0x544C4144, 112
 
 
 def load_jobs(folder):
-    """Accept the qualified replay build only, including its existing loader."""
+    """Accept the qualified replay build only (with or without the DSP heatmap
+    head), including its existing loader. Returns (loader, image, heads)."""
     folder = Path(folder)
     record = json.loads((folder / "link.json").read_text())
     loader = Job.load(folder / "teacher_link_loader.fjob")
     image = (folder / "teacher_link.bin").read_bytes()
+    heads = bool(record.get("mheads"))
+    want = HEADS_IMAGE_SHA256 if heads else IMAGE_SHA256
     if (
-        hashlib.sha256(image).hexdigest() != IMAGE_SHA256
+        hashlib.sha256(image).hexdigest() != want
         or hashlib.sha256(loader.code).hexdigest() != LOADER_SHA256
-        or record["linked"]["sha256"] != IMAGE_SHA256
+        or record["linked"]["sha256"] != want
         or record["loader"]["sha256"] != LOADER_SHA256
         or loader.name != "teacher_link_loader_v1"
         or not loader.requires_hmx
@@ -50,7 +55,7 @@ def load_jobs(folder):
         or any(record.get(k) for k in ("heads", "stem", "pw_profile"))
     ):
         raise InvalidModel("Mercury requires the qualified replay image and loader")
-    return loader, image
+    return loader, image, heads
 
 
 def _completion(result, output_bytes):
@@ -134,18 +139,28 @@ class MercurySession:
         # require_pin=False accepts retrained weights for the same graph: lower() still validates
         # the structure, shapes and operators, and every plan row is bounds-checked below.
         self.model = mercury.load_keypoint(model_path, require_pin=require_pin)
-        self.loader, self.image = load_jobs(jobs)
-        self.plan = L.build_plan(self.model, prefix=True, batch=3, replay=True, pw_group=8)
+        self.loader, self.image, self.heads = load_jobs(jobs)
+        self.image_sha256 = HEADS_IMAGE_SHA256 if self.heads else IMAGE_SHA256
+        self.plan = L.build_plan(
+            self.model, prefix=True, batch=3, replay=True, pw_group=8, heads=self.heads
+        )
         for k in range(3):
             for row in struct.iter_unpack("<32I", self.plan.plan.table):
-                if not C.native_ok(
-                    C.replay_row(row, k, self.plan.plan.crop_stride), s2_direct=0, pw_group=8
-                ):
+                if row[0] == L.KIND_RG and self.heads:
+                    ok = C.regrid_ok(row)
+                else:
+                    ok = C.native_ok(
+                        C.replay_row(row, k, self.plan.plan.crop_stride),
+                        s2_direct=0,
+                        pw_group=8,
+                        mheads=self.heads,
+                    )
+                if not ok:
                     raise InvalidModel("Mercury plan exceeds native bounds")
         self._device_factory, self._lease_factory = _device_factory, _lease_factory
         self.device = self.lease = self.power = None
         self.closed = self.owned = self.sealed = False
-        self.marker = RECORD + secrets.token_bytes(16) + bytes.fromhex(IMAGE_SHA256)
+        self.marker = RECORD + secrets.token_bytes(16) + bytes.fromhex(self.image_sha256)
         self.saved = []
         self.lock = threading.RLock()
         self.last_timing = None
@@ -295,15 +310,15 @@ class MercurySession:
                 self.last_timing = replay_metadata(
                     result, count, job.end - job.first, len(self.image)
                 )
+                get = lambda at, n: bytes(self.device._transport.memory[at : at + n])  # noqa: E731
                 for k in range(count):
-                    out, stray = L.read_tensor(
-                        self.plan.crop(k),
-                        lambda at, n: bytes(self.device._transport.memory[at : at + n]),
-                        L.OUTPUT,
-                    )
-                    if stray or not np.isfinite(out).all():
-                        raise RecoveryRequired("Mercury output has invalid padding or values")
-                    result_maps.append(out.astype(np.float32))
+                    maps = {}
+                    for name in (L.OUTPUT, L.HEATMAP) if self.heads else (L.OUTPUT,):
+                        out, stray = L.read_tensor(self.plan.crop(k), get, name)
+                        if stray or not np.isfinite(out).all():
+                            raise RecoveryRequired("Mercury output has invalid padding or values")
+                        maps[name] = out.astype(np.float32)
+                    result_maps.append(maps)
 
             self.device._submit(
                 self.loader,
@@ -316,7 +331,18 @@ class MercurySession:
                 _completion_validator=_completion_guard(validate),
                 _held_power=self.power,
             )
-            return [mercury.run_tail(self.model, {L.OUTPUT: out}, L.LAST) for out in result_maps]
+            if not self.heads:
+                return [mercury.run_tail(self.model, m, L.LAST) for m in result_maps]
+            # the heatmap head ran on the DSP: only the pooled vector heads remain
+            return [
+                mercury.run_tail(
+                    self.model,
+                    {L.OUTPUT: m[L.OUTPUT], "heatmap_xy": m[L.HEATMAP][:21]},
+                    L.LAST,
+                    skip=L.HEAD_OPS,
+                )
+                for m in result_maps
+            ]
 
     def idle(self):
         """Release held clocks when tracking has no observations; keep the plan."""

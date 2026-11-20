@@ -548,7 +548,26 @@ def simulate(plan, window, *, s2_phase=1, s2_direct=False, crops=1):
                 vt[vpar : vpar + npar] = vecs(dpar, npar)
                 H.simulate_op(row, vt)
                 continue
-            if not native_ok(row, s2_direct=s2_phase if s2_direct else None):
+            if row[0] == 7:  # RS_MHEADS regrid: exact word copy between grids
+                if not regrid_ok(row):
+                    raise ValueError("invalid regrid descriptor")
+                w = [int(x) for x in row]
+                np_, nph, oh, ow, snb, dnb, vin, vout, sws, drow, dcol, fl = w[1:13]
+                dp = nph * np_ if fl & 2 else np_
+                vt[vout : vout + dp * dnb] = 0
+                words = vt.reshape(-1, 2)
+                for t in range(nph):
+                    sb, db = w[14 + 2 * t], w[15 + 2 * t]
+                    for q in range(np_):
+                        sp = t * np_ + q if fl & 1 else q
+                        dq = t * np_ + q if fl & 2 else q
+                        s0, d0 = 32 * (vin + sp * snb) + sb, 32 * (vout + dq * dnb) + db
+                        for y in range(oh):
+                            words[d0 + y * drow : d0 + y * drow + ow * dcol : dcol] = words[
+                                s0 + y * sws : s0 + y * sws + ow
+                            ]
+                continue
+            if not native_ok(row, s2_direct=s2_phase if s2_direct else None, mheads=True):
                 raise ValueError("invalid resident descriptor")
             kind, cpi, cpo, k, clip, nb, blk0, nj, ws, dpar, npar, vin, vout, vres, vpar = (
                 int(x) for x in row[:15]
@@ -569,7 +588,7 @@ def simulate(plan, window, *, s2_phase=1, s2_direct=False, crops=1):
                 vt[dst : dst + cpo * onb] = 0
             else:
                 vt[vout : vout + cpo * nb] = 0
-            if kind == 1:
+            if kind in (1, 8):
                 if (vpar | npar) % 16:
                     raise ValueError("HMX tiles not 2 KiB aligned")
                 no = (cpo + 15) >> 4
@@ -581,10 +600,20 @@ def simulate(plan, window, *, s2_phase=1, s2_direct=False, crops=1):
                         for o in range(no)
                     ]
                 )
+                words = vt.reshape(-1, 2)
                 for j in range(nj):
-                    blk = vt[vin + blk0 + j : vin + blk0 + j + cpi * nb : nb]  # [cpi, 32, 2]
                     B = np.zeros((k * 32, 32))
-                    B[: 2 * cpi] = blk.astype(np.float64).transpose(0, 2, 1).reshape(2 * cpi, 32)
+                    if kind == 8:  # tap t of pair q at word offset (t//3 - 1) ws + t%3 - 1
+                        rows = []
+                        for t in range(9):
+                            off = (t // 3 - 1) * ws + t % 3 - 1
+                            for q in range(cpi):
+                                at = 32 * (vin + q * nb + blk0 + j) + off
+                                rows.append(words[at : at + 32])
+                        blk = np.stack(rows)  # [9 cpi, 32, 2]
+                    else:
+                        blk = vt[vin + blk0 + j : vin + blk0 + j + cpi * nb : nb]  # [cpi, 32, 2]
+                    B[: 2 * len(blk)] = blk.astype(np.float64).transpose(0, 2, 1).reshape(2 * len(blk), 32)
                     acc = f16(A @ B)[: 2 * cpo].reshape(cpo, 2, 32).transpose(0, 2, 1)
                     v = f16(acc.astype(np.float64) + vt[bias : bias + cpo].astype(np.float64))
                     if clip:
@@ -633,11 +662,12 @@ def simulate(plan, window, *, s2_phase=1, s2_direct=False, crops=1):
 # ---------------------------------------------------------------- native check mirror
 
 
-def native_ok(row, *, dw_blocks=2, s2_direct=None, pw_group=1):
+def native_ok(row, *, dw_blocks=2, s2_direct=None, pw_group=1, mheads=False):
     """Mirror of rs_get in tests/teacher_resident_probe.c (True = accepted).
     s2_direct: the decimation phase (0 even, 1 odd) of an RS_S2_DIRECT build, which
     adds bounds on the direct kernel's reads and zero-lane store spill. pw_group: an
-    RS_PW_GROUP build's 1x1 scratch, pw_group * (nk + no) * 16 vectors."""
+    RS_PW_GROUP build's 1x1 scratch, pw_group * (nk + no) * 16 vectors. mheads: an
+    RS_MHEADS build, which also accepts kind 8 (3x3 HMX); kind 7 is regrid_ok."""
     if dw_blocks not in (2, 4):
         raise ValueError("dw_blocks must be 2 or 4")
     m = 0xFFFFFFFF
@@ -652,8 +682,9 @@ def native_ok(row, *, dw_blocks=2, s2_direct=None, pw_group=1):
         big |= int(x)
     if s2:
         onb, oblk, ows, oh, ow, tmp = (int(x) for x in row[15:21])
-    align = ((vpar | npar) << 3) if kind == 1 else 0
-    bad = (big > 0x3FFF) or (kind - 1) & m > 4 or vpar + npar > SPAN or (dpar | align) & 127
+    p3 = mheads and kind == 8
+    align = ((vpar | npar) << 3) if kind == 1 or p3 else 0
+    bad = (big > 0x3FFF) or ((kind - 1) & m > 4 and not p3) or vpar + npar > SPAN or (dpar | align) & 127
     bad = bad or ((dpar - T.WIN_LO) & m) + 128 * npar > T.WIN_HI - T.WIN_LO or vpar == 0
     bad = bad or dpar < T.WIN_LO or dpar > T.WIN_HI or npar > (T.WIN_HI - dpar) // 128
     if kind in (3, 4) or bad:
@@ -683,7 +714,7 @@ def native_ok(row, *, dw_blocks=2, s2_direct=None, pw_group=1):
             if 32 * oblk + 2 + (oh - 1) * ows + xl + 32 > 32 * onb:
                 return False
     kk, reach, no = k * k, (k >> 1) * (ws + 1), (cpo + 15) >> 4
-    pw = kind == 1
+    pw = kind == 1 or p3
     bias = vpar + (no * k * 16 if pw else (cpi * kk + 31) // 32)
     scr = vpar + npar
     bad = (
@@ -699,7 +730,9 @@ def native_ok(row, *, dw_blocks=2, s2_direct=None, pw_group=1):
         or bias + cpo + nj > scr
         or scr + ((pw_group * (k + no) if pw_group > 1 else k) * 16 if pw else cpi * kk) > SPAN
     )
-    if pw:
+    if p3:
+        bad = bad or k != (9 * cpi + 15) >> 4 or 32 * blk0 < ws + 1 or 32 * (blk0 + nj) + ws + 1 > 32 * nb
+    elif pw:
         bad = bad or k != (cpi + 15) >> 4
     else:
         bad = (
@@ -711,3 +744,29 @@ def native_ok(row, *, dw_blocks=2, s2_direct=None, pw_group=1):
             or 32 * (blk0 + nj) + reach > 32 * nb
         )
     return not bad
+
+
+def regrid_ok(row):
+    """Mirror of rg_bad in tests/teacher_resident_probe.c (True = accepted)."""
+    w = [int(x) for x in row[:32]]
+    big = 0
+    for x in w:
+        big |= x
+    np_, nph, oh, ow, snb, dnb, vin, vout, sws, drow, dcol, fl = w[1:13]
+    if (
+        w[0] != 7 or big > 0x3FFF or np_ == 0 or nph == 0 or nph > 9 or oh == 0 or ow == 0
+        or snb == 0 or dnb == 0 or vin == 0 or vout == 0 or fl > 3 or w[13] != 0 or dcol == 0
+    ):
+        return False
+    sp = nph * np_ if fl & 1 else np_
+    dp = nph * np_ if fl & 2 else np_
+    if vin + sp * snb > SPAN or vout + dp * dnb > SPAN:
+        return False
+    if vin < vout + dp * dnb and vout < vin + sp * snb:
+        return False
+    for t in range(nph):
+        if w[14 + 2 * t] + (oh - 1) * sws + ow > 32 * snb:
+            return False
+        if w[15 + 2 * t] + (oh - 1) * drow + (ow - 1) * dcol >= 32 * dnb:
+            return False
+    return True
