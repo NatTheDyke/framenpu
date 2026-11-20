@@ -12,6 +12,7 @@ dependency, so one build serves every Python on the Frame. Needs clang and ld.ll
 import argparse
 import hashlib
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -67,7 +68,7 @@ def build(target, out):
     data = out.read_bytes()
     return {
         "format": "framenpu-host-native",
-        "abi": 1,
+        "abi": int(re.search(r"fnpu_abi\(void\) \{ return (\d+); \}", src.read_text())[1]),
         "target": f"{target}-linux-gnu",
         "bytes": len(data),
         "sha256": hashlib.sha256(data).hexdigest(),

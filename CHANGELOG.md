@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- The native host kernels now process all crops of a request in one pass over
+  each weight matrix, with bit-identical results. CPU per crop on the Frame
+  fell from 1.24 to 1.17 ms for 2-crop requests and 1.16 to 1.04 ms for
+  3-crop requests.
+
 - Added a [native host path](docs/MERCURY.md#native-host-path) for Mercury
   requests: a freestanding C library (bundled for aarch64, hash-pinned,
   reproducible) for input checks, staging, readback and the host heads. It

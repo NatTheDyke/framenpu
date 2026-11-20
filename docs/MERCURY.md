@@ -725,6 +725,13 @@ about twice as slowly right after the ~5 ms DSP wait as back to back, even
 with no other load, so host work after the wait costs about double its
 hot-cache time.
 
+The hint layer and the pooled heads are bound by weight bandwidth, so the
+kernels process all crops of a request in one pass over each weight matrix.
+Each output keeps its summation order, so a batch equals its crops run one at
+a time, bit for bit. Measured against the single-crop kernels, CPU per crop
+fell from 1.24 to 1.17 ms (2 crops) and 1.16 to 1.04 ms (3 crops); 1-crop
+requests are unchanged ([evidence](../evidence/mercury-native-host-device.json)).
+
 ## Next steps
 
 - **Remaining DSP time** (4.92 ms per crop): 1x1 3.18 ms, of which HMX

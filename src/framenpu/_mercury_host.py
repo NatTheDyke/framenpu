@@ -95,36 +95,45 @@ class NativeRequest:
                 raise ValueError(f"{op.name}: no native kernel for {op.kind}")
 
     # ------------------------------------------------------------------ inputs
-    def prepare(self, feed):
-        """Checked, FP16 grid bytes for one crop: {name: uint16 array}."""
+    def prepare(self, feeds):
+        """Checked FP16 grid words for the 1..3 crops of a request: [{name: uint16 array}].
+        The hint layer reads its weights once for all crops."""
         import numpy as np
 
-        h = self.host
-        vals = {}
-        for name, shape in mercury.INPUTS.items():
-            v = np.ascontiguousarray(feed[name], np.float32)
-            if v.shape != shape or h.nonfinite(v.reshape(-1)):
-                raise ValueError(f"{name}: finite values of shape {shape} required")
-            vals[name] = v.reshape(-1)
-        img16 = np.empty(128 * 128, np.uint16)
-        if h.to_f16(vals["inputImg"], img16):
-            raise ValueError("image exceeds FP16 storage")
-        cols = np.empty(10 * 4096, np.uint16)
-        h.stem_columns(img16, cols)
-        hint16 = np.empty(8192, np.uint16)
-        tmp = np.empty(8192, np.float32)
-        acc = np.empty(8192, np.float64)
-        if h.hint(
-            self.hint_w, self.hint_b, vals["lastKeypoints"], vals["useLastKeypoints"][0],
-            self.hint_relu6, acc, tmp, hint16,
-        ):
-            raise ValueError("hint exceeds FP16 storage")
-        out = {}
-        for name, t16 in ((L.STEM_COLS, cols), (L.HINT, hint16)):
-            c, idx, nwords, _ = self.grids[name]
+        h, nb = self.host, len(feeds)
+        if not 1 <= nb <= 3:
+            raise ValueError("Mercury requests carry one to three crops")
+        kps = np.empty((nb, 42), np.float32)
+        flags = np.empty(nb, np.float32)
+        out = []
+        for k, feed in enumerate(feeds):
+            vals = {}
+            for name, shape in mercury.INPUTS.items():
+                v = np.ascontiguousarray(feed[name], np.float32)
+                if v.shape != shape or h.nonfinite(v.reshape(-1)):
+                    raise ValueError(f"{name}: finite values of shape {shape} required")
+                vals[name] = v.reshape(-1)
+            img16 = np.empty(128 * 128, np.uint16)
+            if h.to_f16(vals["inputImg"], img16):
+                raise ValueError("image exceeds FP16 storage")
+            cols = np.empty(10 * 4096, np.uint16)
+            h.stem_columns(img16, cols)
+            c, idx, nwords, _ = self.grids[L.STEM_COLS]
             buf = np.empty(c * nwords, np.uint16)
-            h.grid_pack(t16, c, idx, nwords, buf)
-            out[name] = buf
+            h.grid_pack(cols, c, idx, nwords, buf)
+            out.append({L.STEM_COLS: buf})
+            kps[k] = vals["lastKeypoints"]
+            flags[k] = vals["useLastKeypoints"][0]
+        hint16 = np.empty((nb, 8192), np.uint16)
+        tmp = np.empty(nb * 8192, np.float32)
+        acc = np.empty(nb * 8192, np.float64)
+        if h.hint(self.hint_w, self.hint_b, kps, flags, self.hint_relu6, acc, tmp, hint16):
+            raise ValueError("hint exceeds FP16 storage")
+        c, idx, nwords, _ = self.grids[L.HINT]
+        for k in range(nb):
+            buf = np.empty(c * nwords, np.uint16)
+            h.grid_pack(hint16[k], c, idx, nwords, buf)
+            out[k][L.HINT] = buf
         return out
 
     def stage(self, mem, prepared):
@@ -152,28 +161,37 @@ class NativeRequest:
             maps[name] = out
         return maps
 
-    def finish(self, maps):
-        """The four Mercury outputs from one crop's device maps."""
+    def finish(self, maps_list):
+        """The four Mercury outputs of each crop from its device maps; every tail layer
+        reads its weights once for all crops of the request."""
         import numpy as np
 
-        t = {L.OUTPUT: maps[L.OUTPUT]}
+        nb, h = len(maps_list), self.host
+        def batch(arrays):  # one crop: a view, no copy
+            return arrays[0][None] if nb == 1 else np.stack(arrays)
+
+        t = {L.OUTPUT: batch([m[L.OUTPUT] for m in maps_list])}
         if self.heads:
-            t["heatmap_xy"] = maps[L.HEATMAP][:21]
-        h = self.host
-        acc = np.empty(max(op.shape[0] for _, op, _ in self.tail), np.float64)
+            t["heatmap_xy"] = batch([m[L.HEATMAP][:21] for m in maps_list])
+        acc = np.empty(nb * max(op.shape[0] for _, op, _ in self.tail), np.float64)
         for kind, op, extra in self.tail:
             x = t[op.inputs[0]]
-            y = np.empty(op.shape, np.float32)
+            y = np.empty((nb, *op.shape), np.float32)
             if kind == "avgpool":
                 kh, kw = extra
-                h.avgpool(x, kh, kw, op.shape[1], op.shape[2], y)
+                for k in range(nb):
+                    h.avgpool(x[k], kh, kw, op.shape[1], op.shape[2], y[k])
             elif kind == "reshape":
-                y = x.reshape(op.shape)
+                y = x.reshape(nb, *op.shape)
             elif kind == "dense":
                 h.dense(extra[0], extra[1], x.reshape(-1), extra[2], acc[: y.size], y)
             else:
                 h.conv1x1(extra[0], extra[1], x.reshape(-1), extra[2], acc[: y.size], y)
             t[op.output] = y
-        return {
-            k: np.ascontiguousarray(t[k], np.float32).reshape(s) for k, s in mercury.OUTPUTS.items()
-        }
+        return [
+            {
+                name: np.ascontiguousarray(t[name][k], np.float32).reshape(shape)
+                for name, shape in mercury.OUTPUTS.items()
+            }
+            for k in range(nb)
+        ]

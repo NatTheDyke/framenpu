@@ -16,7 +16,7 @@ import platform
 from pathlib import Path
 
 DATA = Path(__file__).with_name("data")
-ABI = 1
+ABI = 2
 
 _i32, _f32, _p = ctypes.c_int32, ctypes.c_float, ctypes.c_void_p
 _SIGNATURES = {
@@ -27,10 +27,10 @@ _SIGNATURES = {
     "fnpu_stem_columns": (None, (_p, _p)),
     "fnpu_grid_pack": (None, (_p, _i32, _i32, _p, _i32, _p)),
     "fnpu_grid_unpack": (None, (_p, _i32, _i32, _p, _i32, _p, _p)),
-    "fnpu_dense": (None, (_p, _p, _p, _i32, _i32, _i32, _p, _p)),
-    "fnpu_conv1x1": (None, (_p, _p, _p, _i32, _i32, _i32, _p, _p)),
+    "fnpu_dense": (None, (_p, _p, _p, _i32, _i32, _i32, _i32, _p, _p)),
+    "fnpu_conv1x1": (None, (_p, _p, _p, _i32, _i32, _i32, _i32, _p, _p)),
     "fnpu_avgpool": (None, (_p, _i32, _i32, _i32, _i32, _i32, _i32, _i32, _p)),
-    "fnpu_hint": (_i32, (_p, _p, _p, _f32, _i32, _i32, _i32, _p, _p, _p)),
+    "fnpu_hint": (_i32, (_p, _p, _p, _p, _i32, _i32, _i32, _i32, _p, _p, _p)),
 }
 
 
@@ -108,20 +108,32 @@ class Host:
         return int(stats[0]), int(stats[1])
 
     # -------------------------------------------------------------- arithmetic
+    @staticmethod
+    def _batch(x, n_in):
+        nb = x.size // n_in if n_in else 0
+        if not 1 <= nb <= 3 or x.size != nb * n_in:
+            raise ValueError("native layers take one to three inputs of n_in values")
+        return nb
+
     def dense(self, wt32, b, x, relu6, acc, out):
-        """wt32: the FP32 weight transposed (n_in x n_out); acc: n_out FP64 scratch."""
+        """wt32: the FP32 weight transposed (n_in x n_out); x: nb x n_in (1..3 inputs);
+        acc: nb x n_out FP64 scratch; out: nb x n_out."""
         n_in, n_out = wt32.shape
+        nb = self._batch(x, n_in)
         self.lib.fnpu_dense(
-            _arr(wt32, "f4"), _arr(b, "f4", n_out), _arr(x, "f4", n_in), n_out, n_in,
-            int(bool(relu6)), _arr(acc, "f8", n_out, True), _arr(out, "f4", n_out, True),
+            _arr(wt32, "f4"), _arr(b, "f4", n_out), _arr(x, "f4"), nb, n_out, n_in,
+            int(bool(relu6)), _arr(acc, "f8", nb * n_out, True),
+            _arr(out, "f4", nb * n_out, True),
         )
 
     def conv1x1(self, wt32, b, x, relu6, acc, out):
-        """wt32: the FP32 weight transposed (n_in x n_out); acc: n_out FP64 scratch."""
+        """Same shapes as dense, for the FP32 1x1 convolution of a 1x1 map."""
         n_in, n_out = wt32.shape
+        nb = self._batch(x, n_in)
         self.lib.fnpu_conv1x1(
-            _arr(wt32, "f4"), _arr(b, "f4", n_out), _arr(x, "f4", n_in), n_out, n_in,
-            int(bool(relu6)), _arr(acc, "f8", n_out, True), _arr(out, "f4", n_out, True),
+            _arr(wt32, "f4"), _arr(b, "f4", n_out), _arr(x, "f4"), nb, n_out, n_in,
+            int(bool(relu6)), _arr(acc, "f8", nb * n_out, True),
+            _arr(out, "f4", nb * n_out, True),
         )
 
     def avgpool(self, x, kh, kw, oh, ow, out):
@@ -132,13 +144,15 @@ class Host:
             _arr(x, "f4"), c, h, w, kh, kw, oh, ow, _arr(out, "f4", c * oh * ow, True)
         )
 
-    def hint(self, wt32, b, kp, flag, relu6, acc, tmp, out):
-        """FP16 bits of FP32(relu6 dense(kp)) * flag; returns the non-finite count."""
+    def hint(self, wt32, b, kp, flags, relu6, acc, tmp, out):
+        """FP16 bits of FP32(relu6 dense(kp[b])) * flags[b] for nb = 1..3 crops (kp: nb x
+        n_in); returns the non-finite count."""
         n_in, n_out = wt32.shape
+        nb = self._batch(kp, n_in)
         return self.lib.fnpu_hint(
-            _arr(wt32, "f4"), _arr(b, "f4", n_out), _arr(kp, "f4", n_in), float(flag), n_out,
-            n_in, int(bool(relu6)), _arr(acc, "f8", n_out, True), _arr(tmp, "f4", n_out, True),
-            _arr(out, "u2", n_out, True),
+            _arr(wt32, "f4"), _arr(b, "f4", n_out), _arr(kp, "f4"), _arr(flags, "f4", nb), nb,
+            n_out, n_in, int(bool(relu6)), _arr(acc, "f8", nb * n_out, True),
+            _arr(tmp, "f4", nb * n_out, True), _arr(out, "u2", nb * n_out, True),
         )
 
 

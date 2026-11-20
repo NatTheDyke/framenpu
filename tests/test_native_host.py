@@ -145,7 +145,7 @@ class KernelTests(unittest.TestCase):
             for n in L.HOST_HINT_OPS[:3]:
                 op = model.op(n)
                 ts[op.output] = mercury._step(op, ts, "fp16", "fp16")
-            got = nr.prepare(feed)
+            got = nr.prepare([feed])[0]
             for name, ref in ((L.STEM_COLS, L.stem_columns(ts["inputImg"])), (L.HINT, ts[L.HINT])):
                 self.assertEqual(got[name].tobytes(), L.tensor_bytes(plan.crop(0), name, ref), name)
 
@@ -157,7 +157,7 @@ class KernelTests(unittest.TestCase):
             raw = {n: L.tensor_bytes(plan.crop(1), n, t) for n, t in ((L.OUTPUT, o), (L.HEATMAP, hm))}
             where = plan.crop(1).where
             maps = nr.read(lambda at, n: raw[next(k for k in raw if where[k] == at)], 1)
-            out = nr.finish(maps)
+            out = nr.finish([maps])[0]
             for name in ("heatmap_xy", "scalar_extras", "curls"):
                 np.testing.assert_array_equal(out[name], want[name], name)
             # Conv_143: the reference's FP32 BLAS sum vs the kernel's FP64 sum
@@ -168,9 +168,47 @@ class KernelTests(unittest.TestCase):
             raw[L.OUTPUT] = bytes(bad)
             self.assertIsNone(nr.read(lambda at, n: raw[next(k for k in raw if where[k] == at)], 1))
         with self.assertRaises(ValueError):
-            nr.prepare(dict(feed, inputImg=np.full((1, 1, 128, 128), 7e4, np.float32)))
+            nr.prepare([feed, dict(feed, inputImg=np.full((1, 1, 128, 128), 7e4, np.float32))])
         with self.assertRaises(ValueError):
-            nr.prepare(dict(feed, lastKeypoints=np.full((1, 42), np.nan, np.float32)))
+            nr.prepare([dict(feed, lastKeypoints=np.full((1, 42), np.nan, np.float32))])
+        with self.assertRaises(ValueError):
+            nr.prepare([feed] * 4)
+
+    @unittest.skipUnless(MODEL, "FNPU_MERCURY_MODEL required")
+    def test_a_batch_equals_its_crops_one_at_a_time(self):
+        import numpy as np
+        from framenpu import mercury, _mercury_layout as L
+        from framenpu._mercury_host import NativeRequest
+
+        model = mercury.load_keypoint(MODEL, require_pin=False)
+        plan = L.build_plan(model, prefix=True, batch=3, replay=True, pw_group=8, heads=True)
+        nr = NativeRequest(self.host, model, plan, True)
+        rng = np.random.default_rng(3)
+        feeds = [
+            {
+                "inputImg": rng.uniform(-1, 1, (1, 1, 128, 128)).astype(np.float32),
+                "lastKeypoints": rng.uniform(-1, 1, (1, 42)).astype(np.float32),
+                "useLastKeypoints": np.array([k % 2], np.float32),
+            }
+            for k in range(3)
+        ]
+        maps = [
+            {
+                L.OUTPUT: rng.uniform(0, 6, (160, 8, 8)).astype(np.float16).astype(np.float32),
+                L.HEATMAP: rng.uniform(0, 1, (22, 22, 22)).astype(np.float32),
+            }
+            for _ in range(3)
+        ]
+        for n in (2, 3):
+            got = nr.prepare(feeds[:n])
+            out = nr.finish(maps[:n])
+            for k in range(n):
+                one = nr.prepare([feeds[k]])[0]
+                for name in one:
+                    np.testing.assert_array_equal(got[k][name], one[name])
+                single = nr.finish([maps[k]])[0]
+                for name in single:
+                    np.testing.assert_array_equal(out[k][name], single[name])
 
     @unittest.skipUnless(MODEL and HEADS_JOBS, "FNPU_MERCURY_MODEL and FNPU_MERCURY_HEADS_JOBS required")
     def test_session_on_native_host_matches_the_contract(self):

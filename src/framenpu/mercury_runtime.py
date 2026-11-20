@@ -313,7 +313,7 @@ class MercurySession:
                 raise ValueError("hint exceeds FP16 storage")
             prepared.append({L.STEM_COLS: L.stem_columns(ts["inputImg"]), L.HINT: ts[L.HINT]})
         if self.native is not None:
-            prepared = [self.native.prepare(feed) for feed in feeds]
+            prepared = self.native.prepare(feeds)
         with self.lock:
             self._open()
             if self.power is None:
@@ -370,7 +370,7 @@ class MercurySession:
             )
             self.crop_ms = self.last_timing["body_ms"] / count
             if self.native is not None:
-                return [self.native.finish(m) for m in result_maps]
+                return self.native.finish(result_maps)
             if not self.heads:
                 return [mercury.run_tail(self.model, m, L.LAST) for m in result_maps]
             # the heatmap head ran on the DSP: only the pooled vector heads remain

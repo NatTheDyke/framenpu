@@ -100,7 +100,7 @@ static float relu6(float v) { return v < 0.0f ? 0.0f : (v > 6.0f ? 6.0f : v); }
 
 /* ---------------------------------------------------------------- exported */
 
-EXPORT i32 fnpu_abi(void) { return 1; }
+EXPORT i32 fnpu_abi(void) { return 2; }
 
 /* Count of non-finite values in x[0..n). */
 EXPORT i32 fnpu_nonfinite32(const float *x, i32 n) {
@@ -181,41 +181,62 @@ EXPORT void fnpu_grid_unpack(const u16 *raw, i32 c, i32 hw, const i32 *idx, i32 
     stats[1] = bad;
 }
 
-/* acc[i] = sum over k = 0 .. n_in-1, in order, of FP64(wt[k][i]) * FP64(x[k]); wt is FP32,
- * transposed (n_in x n_out). The product of two FP32 values is exact in FP64, so widening here
- * equals FP64 weights. The loop runs across outputs (it vectorizes); the order of each
- * output's sum is unchanged. (Holding blocks of outputs in registers measured slower on the
- * Frame: these layers are bound by weight bandwidth, not arithmetic.) */
-static void dot_columns(const float *wt, const float *x, i32 n_out, i32 n_in, double *acc) {
-    for (i32 i = 0; i < n_out; i++)
+/* For each of nb inputs (rows of x, n_in each): acc[b][i] = sum over k = 0 .. n_in-1, in
+ * order, of FP64(wt[k][i]) * FP64(x[b][k]); wt is FP32, transposed (n_in x n_out). The product
+ * of two FP32 values is exact in FP64, so widening here equals FP64 weights. One pass over the
+ * weights serves every input (these layers are bound by weight bandwidth); each output's sum
+ * keeps the same order, so a batch equals nb single calls bit for bit. (Holding blocks of
+ * outputs in registers measured slower on the Frame.) */
+static void dot_columns(const float *wt, const float *x, i32 nb, i32 n_out, i32 n_in,
+                        double *acc) {
+    for (i32 i = 0; i < nb * n_out; i++)
         acc[i] = 0.0;
+    double *a0 = acc, *a1 = acc + n_out, *a2 = acc + 2 * n_out;
     for (i32 k = 0; k < n_in; k++) {
         const float *r = wt + (usize)k * (usize)n_out;
-        double xk = (double)x[k];
-        for (i32 i = 0; i < n_out; i++)
-            acc[i] += (double)r[i] * xk;
+        double x0 = (double)x[k];
+        if (nb == 1) {
+            for (i32 i = 0; i < n_out; i++)
+                a0[i] += (double)r[i] * x0;
+        } else if (nb == 2) {
+            double x1 = (double)x[n_in + k];
+            for (i32 i = 0; i < n_out; i++) {
+                double w = (double)r[i];
+                a0[i] += w * x0;
+                a1[i] += w * x1;
+            }
+        } else {
+            double x1 = (double)x[n_in + k], x2 = (double)x[2 * n_in + k];
+            for (i32 i = 0; i < n_out; i++) {
+                double w = (double)r[i];
+                a0[i] += w * x0;
+                a1[i] += w * x1;
+                a2[i] += w * x2;
+            }
+        }
     }
 }
 
-/* Dense (mercury._step "dense"): y = FP32(sum FP64(w) * FP64(x) + FP64(b)), then relu6.
- * wt: the FP32 weight transposed (n_in x n_out); acc: n_out doubles of scratch. */
-EXPORT void fnpu_dense(const float *wt, const float *b, const float *x, i32 n_out, i32 n_in,
-                       i32 act_relu6, double *acc, float *y) {
-    dot_columns(wt, x, n_out, n_in, acc);
-    for (i32 i = 0; i < n_out; i++) {
-        float v = (float)(acc[i] + (double)b[i]);
-        y[i] = act_relu6 ? relu6(v) : v;
+/* Dense (mercury._step "dense") of nb inputs: y[b] = FP32(sum FP64(w) * FP64(x[b]) +
+ * FP64(bias)), then relu6. wt: the FP32 weight transposed (n_in x n_out); x: nb x n_in;
+ * acc: nb x n_out doubles of scratch; y: nb x n_out. 1 <= nb <= 3. */
+EXPORT void fnpu_dense(const float *wt, const float *b, const float *x, i32 nb, i32 n_out,
+                       i32 n_in, i32 act_relu6, double *acc, float *y) {
+    dot_columns(wt, x, nb, n_out, n_in, acc);
+    for (i32 j = 0; j < nb * n_out; j++) {
+        float v = (float)(acc[j] + (double)b[j % n_out]);
+        y[j] = act_relu6 ? relu6(v) : v;
     }
 }
 
-/* 1x1 conv of a 1x1 map ("fp32" unit): y = FP32(sum FP64 w*x) + b in FP32, then relu6.
- * Same transposed layout and scratch as fnpu_dense. */
-EXPORT void fnpu_conv1x1(const float *wt, const float *b, const float *x, i32 n_out, i32 n_in,
-                         i32 act_relu6, double *acc, float *y) {
-    dot_columns(wt, x, n_out, n_in, acc);
-    for (i32 i = 0; i < n_out; i++) {
-        float v = (float)acc[i] + b[i];
-        y[i] = act_relu6 ? relu6(v) : v;
+/* 1x1 conv of a 1x1 map ("fp32" unit) of nb inputs: y[b] = FP32(sum FP64 w*x[b]) + bias in
+ * FP32, then relu6. Same layout and scratch as fnpu_dense. */
+EXPORT void fnpu_conv1x1(const float *wt, const float *b, const float *x, i32 nb, i32 n_out,
+                         i32 n_in, i32 act_relu6, double *acc, float *y) {
+    dot_columns(wt, x, nb, n_out, n_in, acc);
+    for (i32 j = 0; j < nb * n_out; j++) {
+        float v = (float)acc[j] + b[j % n_out];
+        y[j] = act_relu6 ? relu6(v) : v;
     }
 }
 
@@ -235,15 +256,16 @@ EXPORT void fnpu_avgpool(const float *x, i32 c, i32 h, i32 w, i32 kh, i32 kw, i3
             }
 }
 
-/* Hint plane (Gemm_58 -> Reshape_63 -> Mul_70): FP16(FP32(relu6 dense(kp)) * flag).
- * Returns the count of non-finite FP16 values. acc: n_out doubles, tmp: n_out floats. */
-EXPORT i32 fnpu_hint(const float *wt, const float *b, const float *kp, float flag, i32 n_out,
-                     i32 n_in, i32 act_relu6, double *acc, float *tmp, u16 *out) {
-    fnpu_dense(wt, b, kp, n_out, n_in, act_relu6, acc, tmp);
+/* Hint planes (Gemm_58 -> Reshape_63 -> Mul_70) of nb crops:
+ * out[b] = FP16(FP32(relu6 dense(kp[b])) * flag[b]). Returns the count of non-finite FP16
+ * values. kp: nb x n_in; acc: nb x n_out doubles; tmp, out: nb x n_out. */
+EXPORT i32 fnpu_hint(const float *wt, const float *b, const float *kp, const float *flag, i32 nb,
+                     i32 n_out, i32 n_in, i32 act_relu6, double *acc, float *tmp, u16 *out) {
+    fnpu_dense(wt, b, kp, nb, n_out, n_in, act_relu6, acc, tmp);
     i32 bad = 0;
-    for (i32 i = 0; i < n_out; i++) {
-        out[i] = f2h(tmp[i] * flag);
-        bad += !finite16(out[i]);
+    for (i32 j = 0; j < nb * n_out; j++) {
+        out[j] = f2h(tmp[j] * flag[j / n_out]);
+        bad += !finite16(out[j]);
     }
     return bad;
 }
