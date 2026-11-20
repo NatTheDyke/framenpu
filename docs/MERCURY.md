@@ -732,6 +732,14 @@ a time, bit for bit. Measured against the single-crop kernels, CPU per crop
 fell from 1.24 to 1.17 ms (2 crops) and 1.16 to 1.04 ms (3 crops); 1-crop
 requests are unchanged ([evidence](../evidence/mercury-native-host-device.json)).
 
+Each session keeps one workspace per batch size (1–3 crops). Its buffers,
+pointers and kernel arguments are bound once, so a request makes integer-only
+ctypes calls with no per-call pointer lookups or allocations. The native work
+runs under the session lock, which serializes use of the shared workspace.
+CPU per crop fell from 1.51 to 1.33 ms (1 crop), 1.19 to 1.03 ms (2 crops)
+and 1.06 to 0.91 ms (3 crops), and wall time per request fell by about
+0.35 ms.
+
 ## Next steps
 
 - **Remaining DSP time** (4.92 ms per crop): 1x1 3.18 ms, of which HMX
@@ -748,10 +756,12 @@ requests are unchanged ([evidence](../evidence/mercury-native-host-device.json))
   per request), the staging in NumPy (about 0.55 ms per crop) and the gate
   claim and acknowledge. Part of the last is the harness audit, which a
   runtime would not repeat on every request.
-- **Host CPU after the native path** (about 1.6 ms per 1-crop request): about
-  0.75 ms is Python bookkeeping around the DSP call (backup and restore,
-  gate, reservation and power checks, polling). The host kernels take about
-  1.1 ms in-session, half of it the slowdown after the DSP wait.
+- **Host CPU after the bound workspace** (about 1.33 ms per 1-crop request,
+  1.03 ms per crop with two): the largest remaining Python item is the
+  per-request power check (91 register reads through `struct`, about
+  0.15 ms). A native read would change the MMIO access width from bytes to
+  32-bit words, so it needs its own review. Backup and restore of the shared
+  window cost only about 0.02 ms.
 - **Corpus.** Collect real Mercury tracking crops on the headset, using the
   stack's local-only `validate_mercury.py`. Do this before freezing accuracy
   ceilings; the affine crops here are only a numerical stand-in.

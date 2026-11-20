@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- The native host path binds its buffers, pointers and kernel arguments once
+  per session and batch size. CPU per crop on the Frame fell from 1.51 to
+  1.33 ms (1 crop), 1.19 to 1.03 ms (2 crops) and 1.06 to 0.91 ms (3 crops),
+  with unchanged outputs.
+
 - The native host kernels now process all crops of a request in one pass over
   each weight matrix, with bit-identical results. CPU per crop on the Frame
   fell from 1.24 to 1.17 ms for 2-crop requests and 1.16 to 1.04 ms for

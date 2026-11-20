@@ -145,7 +145,8 @@ class KernelTests(unittest.TestCase):
             for n in L.HOST_HINT_OPS[:3]:
                 op = model.op(n)
                 ts[op.output] = mercury._step(op, ts, "fp16", "fp16")
-            got = nr.prepare([feed])[0]
+            w = nr.prepare([feed])
+            got = {L.STEM_COLS: w.stem[0].copy(), L.HINT: w.hint_grid[0].copy()}
             for name, ref in ((L.STEM_COLS, L.stem_columns(ts["inputImg"])), (L.HINT, ts[L.HINT])):
                 self.assertEqual(got[name].tobytes(), L.tensor_bytes(plan.crop(0), name, ref), name)
 
@@ -156,8 +157,11 @@ class KernelTests(unittest.TestCase):
             want = mercury.run_tail(model, {L.OUTPUT: o, "heatmap_xy": hm[:21]}, L.LAST, skip=L.HEAD_OPS)
             raw = {n: L.tensor_bytes(plan.crop(1), n, t) for n, t in ((L.OUTPUT, o), (L.HEATMAP, hm))}
             where = plan.crop(1).where
-            maps = nr.read(lambda at, n: raw[next(k for k in raw if where[k] == at)], 1)
-            out = nr.finish([maps])[0]
+            w = nr.prepare([feed, feed])
+            self.assertTrue(nr.read(w, lambda at, n: raw[next(k for k in raw if where[k] == at)], 1))
+            w.maps[L.OUTPUT][0] = w.maps[L.OUTPUT][1]
+            w.maps[L.HEATMAP][0] = w.maps[L.HEATMAP][1]
+            out = nr.finish(w)[1]
             for name in ("heatmap_xy", "scalar_extras", "curls"):
                 np.testing.assert_array_equal(out[name], want[name], name)
             # Conv_143: the reference's FP32 BLAS sum vs the kernel's FP64 sum
@@ -166,7 +170,7 @@ class KernelTests(unittest.TestCase):
             bad = bytearray(raw[L.OUTPUT])
             bad[-2:] = b"\x00\x3c"
             raw[L.OUTPUT] = bytes(bad)
-            self.assertIsNone(nr.read(lambda at, n: raw[next(k for k in raw if where[k] == at)], 1))
+            self.assertFalse(nr.read(w, lambda at, n: raw[next(k for k in raw if where[k] == at)], 1))
         with self.assertRaises(ValueError):
             nr.prepare([feed, dict(feed, inputImg=np.full((1, 1, 128, 128), 7e4, np.float32))])
         with self.assertRaises(ValueError):
@@ -199,16 +203,29 @@ class KernelTests(unittest.TestCase):
             }
             for _ in range(3)
         ]
+        def staged(w, k):
+            return w.stem[k].copy(), w.hint_grid[k].copy()
+
         for n in (2, 3):
-            got = nr.prepare(feeds[:n])
-            out = nr.finish(maps[:n])
+            w = nr.prepare(feeds[:n])
+            got = [staged(w, k) for k in range(n)]
+            nr.load_maps(w, maps[:n])
+            out = nr.finish(w)
             for k in range(n):
-                one = nr.prepare([feeds[k]])[0]
-                for name in one:
-                    np.testing.assert_array_equal(got[k][name], one[name])
-                single = nr.finish([maps[k]])[0]
+                w1 = nr.prepare([feeds[k]])
+                for a, b in zip(got[k], staged(w1, 0)):
+                    np.testing.assert_array_equal(a, b)
+                nr.load_maps(w1, [maps[k]])
+                single = nr.finish(w1)[0]
                 for name in single:
                     np.testing.assert_array_equal(out[k][name], single[name])
+        # results are the caller's own: a later request does not change them
+        first = nr.finish(nr.prepare(feeds[:1]))[0]
+        keep = {k: v.copy() for k, v in first.items()}
+        nr.load_maps(nr._work(1), maps[1:2])
+        nr.finish(nr._work(1))
+        for name in keep:
+            np.testing.assert_array_equal(first[name], keep[name])
 
     @unittest.skipUnless(MODEL and HEADS_JOBS, "FNPU_MERCURY_MODEL and FNPU_MERCURY_HEADS_JOBS required")
     def test_session_on_native_host_matches_the_contract(self):

@@ -312,9 +312,9 @@ class MercurySession:
             if not np.isfinite(ts[L.HINT]).all():
                 raise ValueError("hint exceeds FP16 storage")
             prepared.append({L.STEM_COLS: L.stem_columns(ts["inputImg"]), L.HINT: ts[L.HINT]})
-        if self.native is not None:
-            prepared = self.native.prepare(feeds)
         with self.lock:
+            if self.native is not None:  # under the lock: the workspace is shared
+                prepared = self.native.prepare(feeds)
             self._open()
             if self.power is None:
                 self.power = self.device._hold_power()
@@ -343,10 +343,8 @@ class MercurySession:
                 get = lambda at, n: bytes(self.device._transport.memory[at : at + n])  # noqa: E731
                 for k in range(count):
                     if self.native is not None:
-                        maps = self.native.read(get, k)
-                        if maps is None:
+                        if not self.native.read(prepared, get, k):
                             raise RecoveryRequired("Mercury output has invalid padding or values")
-                        result_maps.append(maps)
                         continue
                     maps = {}
                     for name in (L.OUTPUT, L.HEATMAP) if self.heads else (L.OUTPUT,):
@@ -370,7 +368,7 @@ class MercurySession:
             )
             self.crop_ms = self.last_timing["body_ms"] / count
             if self.native is not None:
-                return self.native.finish(result_maps)
+                return self.native.finish(prepared)
             if not self.heads:
                 return [mercury.run_tail(self.model, m, L.LAST) for m in result_maps]
             # the heatmap head ran on the DSP: only the pooled vector heads remain

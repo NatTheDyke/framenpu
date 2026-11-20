@@ -124,5 +124,62 @@
         1.041
       ]
     }
+  },
+  "bound_workspace": {
+    "date": "2026-11-20",
+    "host_library": "f36413352eef56479dda1f95d90787b2bb042b7a735086237aea24b82150bd46",
+    "note": "per-session workspace per batch size with buffers, pointers and kernel arguments bound once; thread CPU per crop, three alternating runs vs the batched build (53428d0)",
+    "accuracy_native_vs_numpy_on_device": {
+      "heatmap_xy": 0.0,
+      "heatmap_depth": 2.384185791015625e-07,
+      "scalar_extras": 0.0,
+      "curls": 0.0
+    },
+    "before": {
+      "1": [
+        1.496,
+        1.481,
+        1.567
+      ],
+      "2": [
+        1.176,
+        1.188,
+        1.192
+      ],
+      "3": [
+        1.056,
+        1.061,
+        1.048
+      ]
+    },
+    "after": {
+      "1": [
+        1.336,
+        1.32,
+        1.328
+      ],
+      "2": [
+        1.004,
+        1.004,
+        1.071
+      ],
+      "3": [
+        0.893,
+        0.882,
+        0.958
+      ]
+    },
+    "wall_ms_per_request": {
+      "before": {
+        "1": 7.37,
+        "2": 12.81,
+        "3": 18.31
+      },
+      "after": {
+        "1": 7.03,
+        "2": 12.44,
+        "3": 17.81
+      }
+    }
   }
 }
