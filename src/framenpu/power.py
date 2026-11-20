@@ -9,10 +9,72 @@ from .errors import DeviceBusy, UnsupportedFirmware, RecoveryRequired
 from .profile import PROFILE
 
 
+# The held configuration verify() re-reads before every request: (page, byte offsets), in
+# read order. Pages: PLL, clock controller, RSC power sequencer (its status words, then the
+# uploaded 76-word program).
+_PAGES = {"p": 0x32341000, "c": 0x32348000, "s": 0x323C0000}
+_HELD = (
+    ("p", (0, 4, 0x10, 0x14, 0x18)),
+    ("c", (0x180, 0x184, 0x1A0, 0x200)),
+    ("s", (0x404, 0x410, 0x460, 0x464, 0x4BC, 0x4C0)),
+    ("s", tuple(range(0x550, 0x680, 4))),
+)
+
+
+class _NativeVerify:
+    """verify()'s register reads through the host library's fnpu_read32: the same
+    addresses, one 32-bit load each, in the same order, on read-only mappings (a write
+    through them faults in this process instead of reaching the hardware). Built only if
+    its first read equals the Python read of the held configuration."""
+
+    def __init__(self, host, pages, held):
+        import numpy as np
+
+        self.lib = host.lib
+        self._views = {}
+        for key, buf in pages.items():
+            view = np.frombuffer(buf, np.uint8)
+            if view.size != 4096:
+                raise ValueError("register page views must be 4 KiB")
+            self._views[key] = view
+        n = sum(len(offs) for _, offs in _HELD)
+        self.out = np.zeros(n, np.uint32)
+        self._words, self.calls, at = [], [], 0
+        for key, offs in _HELD:
+            if any(o % 4 or not 0 <= o < 4096 for o in offs):
+                raise ValueError("register offset outside its page")
+            words = np.array([o // 4 for o in offs], np.int32)
+            self._words.append(words)
+            self.calls.append(
+                (self._views[key].ctypes.data, words.ctypes.data, len(offs),
+                 self.out[at:].ctypes.data)
+            )
+            at += len(offs)
+        self.expected = np.array([v for part in held for v in part], np.uint32).tobytes()
+        if self.read() != self.expected:
+            raise ValueError("native register reads differ from the Python reads")
+
+    def read(self):
+        for args in self.calls:
+            self.lib.fnpu_read32(*args)
+        return self.out.tobytes()
+
+    def close(self):
+        # drop the array views first: they hold buffer exports on the mappings
+        self.calls, self._views, self._words = [], {}, []
+
+
 class HmxPower:
-    def __init__(self, profile=PROFILE, mmio_factory=None):
+    def __init__(self, profile=PROFILE, mmio_factory=None, *, native=None, ro_factory=None):
+        """native: a _native.Host for the read-only verify path (default: the bundled
+        library when this maps /dev/mem itself; False: always Python). ro_factory(address)
+        gives read-only page buffers instead of /dev/mem (tests)."""
         self.profile = profile
         self._factory = mmio_factory
+        self._native, self._ro_factory = native, ro_factory
+        self._fast = None
+        self._ro_maps, self._ro_fd = [], None
+        self.fast_verify_error = None
         self.maps = []
         self.fd = None
         self.changed = False
@@ -130,13 +192,51 @@ class HmxPower:
             raise
 
     def _held(self):
-        r = self._r
-        return (
-            tuple(r(self.p, o) for o in (0, 4, 0x10, 0x14, 0x18)),
-            tuple(r(self.c, o) for o in (0x180, 0x184, 0x1A0, 0x200)),
-            tuple(r(self.s, o) for o in (0x404, 0x410, 0x460, 0x464, 0x4BC, 0x4C0)),
-            tuple(r(self.s, o) for o in range(0x550, 0x680, 4)),
-        )
+        r, pages = self._r, {"p": self.p, "c": self.c, "s": self.s}
+        return tuple(tuple(r(pages[key], o) for o in offs) for key, offs in _HELD)
+
+    def _open_native_verify(self):
+        """Read-only mappings plus the native reader, or None (Python verify)."""
+        host = self._native
+        if host is False:
+            return None
+        if host is None:
+            if self._factory is not None:
+                return None  # simulated registers: keep the Python path
+            from . import _native
+
+            host = _native.bundled()
+            if host is None:
+                return None
+        try:
+            if self._ro_factory is not None:
+                pages = {k: self._ro_factory(a) for k, a in _PAGES.items()}
+            else:
+                self._ro_fd = os.open("/dev/mem", os.O_RDONLY | os.O_SYNC)
+                pages = {}
+                for key, address in _PAGES.items():
+                    mm = mmap.mmap(
+                        self._ro_fd, 4096, flags=mmap.MAP_SHARED, prot=mmap.PROT_READ,
+                        offset=address,
+                    )
+                    self._ro_maps.append(mm)
+                    pages[key] = mm
+            return _NativeVerify(host, pages, self.held)
+        except (OSError, ValueError) as exc:
+            self.fast_verify_error = f"{type(exc).__name__}: {exc}"
+            self._close_native_verify()
+            return None
+
+    def _close_native_verify(self):
+        if self._fast is not None:
+            self._fast.close()
+            self._fast = None
+        for mm in self._ro_maps:
+            mm.close()
+        self._ro_maps = []
+        if self._ro_fd is not None:
+            os.close(self._ro_fd)
+            self._ro_fd = None
 
     def hold(self):
         """Record the powered configuration this owner established.
@@ -148,12 +248,16 @@ class HmxPower:
         if not self.triggered or self.abandoned:
             raise RecoveryRequired("HMX power is not held by this owner")
         self.held = self._held()
+        self._fast = self._open_native_verify()
 
     def verify(self):
         """Caller must hold the CDSP operation gate. Read-only."""
         if not self.maps or self.abandoned or not self.triggered:
             raise RecoveryRequired("HMX power is not held by this owner")
-        if self._held() != self.held:
+        if self._fast is not None:
+            if self._fast.read() != self._fast.expected:
+                raise RecoveryRequired("held HMX power configuration changed")
+        elif self._held() != self.held:
             raise RecoveryRequired("held HMX power configuration changed")
 
     def abandon(self):
@@ -190,6 +294,7 @@ class HmxPower:
             self._unmap()
 
     def _unmap(self):
+        self._close_native_verify()
         for mm in self.maps:
             mm.close()
         self.maps = []

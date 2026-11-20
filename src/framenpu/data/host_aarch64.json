@@ -1,11 +1,11 @@
 {
   "format": "framenpu-host-native",
-  "abi": 2,
+  "abi": 3,
   "target": "aarch64-linux-gnu",
-  "bytes": 7784,
-  "sha256": "f36413352eef56479dda1f95d90787b2bb042b7a735086237aea24b82150bd46",
+  "bytes": 7904,
+  "sha256": "f0f7416b62e50f81f9046a1292bbeff0beae512634e2504fa5fc2c7b0dbcedca",
   "source_sha256": {
-    "host/fnpu_host.c": "e7b71402f0d13e02edb9e1dc3d0ce0ef0b0692fa3d2362e1ce03b97edad86110"
+    "host/fnpu_host.c": "6356d6b4e2f060d3e7e02ac58f6d1229a64da5ef84c67157b0ea349f4882ac65"
   },
   "compiler_flags": [
     "-O2",
@@ -31,6 +31,7 @@
   ],
   "exports": [
     "fnpu_abi",
+    "fnpu_read32",
     "fnpu_nonfinite32",
     "fnpu_to_f16",
     "fnpu_from_f16",

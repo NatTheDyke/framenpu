@@ -740,6 +740,17 @@ CPU per crop fell from 1.51 to 1.33 ms (1 crop), 1.19 to 1.03 ms (2 crops)
 and 1.06 to 0.91 ms (3 crops), and wall time per request fell by about
 0.35 ms.
 
+The per-request HMX power check (`HmxPower.verify`) reads its 91 registers
+through `fnpu_read32`, on separate read-only `/dev/mem` mappings of the three
+register pages: a stray write would fault in the process instead of reaching
+the hardware. It reads the same registers in the same order with one 32-bit
+load each, which is what CPython's `<I` already does on the Frame (checked in
+the live format table). The native reader is used only if its first read
+equals the Python read of the held configuration; otherwise, and with
+simulated registers, the Python check remains. Power-on, power-off and every
+register write stay in Python. The check fell from 159 to 81 µs, and CPU per
+crop from 1.32 to 1.25 ms (1 crop) and 1.02 to 0.98 ms (2 crops).
+
 ## Next steps
 
 - **Remaining DSP time** (4.92 ms per crop): 1x1 3.18 ms, of which HMX
@@ -756,12 +767,11 @@ and 1.06 to 0.91 ms (3 crops), and wall time per request fell by about
   per request), the staging in NumPy (about 0.55 ms per crop) and the gate
   claim and acknowledge. Part of the last is the harness audit, which a
   runtime would not repeat on every request.
-- **Host CPU after the bound workspace** (about 1.33 ms per 1-crop request,
-  1.03 ms per crop with two): the largest remaining Python item is the
-  per-request power check (91 register reads through `struct`, about
-  0.15 ms). A native read would change the MMIO access width from bytes to
-  32-bit words, so it needs its own review. Backup and restore of the shared
-  window cost only about 0.02 ms.
+- **Host CPU after the native power check** (about 1.25 ms per 1-crop
+  request, 0.98 ms per crop with two). The power check itself is now bound by
+  the hardware: 91 uncached register reads at about 0.9 µs each. Reading fewer
+  registers would weaken the check. Backup and restore of the shared window
+  cost only about 0.02 ms.
 - **Corpus.** Collect real Mercury tracking crops on the headset, using the
   stack's local-only `validate_mercury.py`. Do this before freezing accuracy
   ceilings; the affine crops here are only a numerical stand-in.

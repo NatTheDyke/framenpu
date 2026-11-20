@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- The per-request HMX power check reads its 91 registers natively, on
+  read-only mappings, with the same 32-bit accesses in the same order. It is
+  used only after its first read matches the Python read. The check fell from
+  159 to 81 µs (the rest is uncached register latency), and CPU per crop from
+  1.32 to 1.25 ms (1 crop) and 1.02 to 0.98 ms (2 crops).
+
 - The native host path binds its buffers, pointers and kernel arguments once
   per session and batch size. CPU per crop on the Frame fell from 1.51 to
   1.33 ms (1 crop), 1.19 to 1.03 ms (2 crops) and 1.06 to 0.91 ms (3 crops),

@@ -43,7 +43,7 @@ FLAGS = (
     "-Wl,-soname,libfnpu_host.so",
 )
 EXPORTS = (
-    "fnpu_abi", "fnpu_nonfinite32", "fnpu_to_f16", "fnpu_from_f16", "fnpu_stem_columns",
+    "fnpu_abi", "fnpu_read32", "fnpu_nonfinite32", "fnpu_to_f16", "fnpu_from_f16", "fnpu_stem_columns",
     "fnpu_grid_pack", "fnpu_grid_unpack", "fnpu_dense", "fnpu_conv1x1", "fnpu_avgpool",
     "fnpu_hint",
 )

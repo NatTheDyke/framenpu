@@ -16,11 +16,12 @@ import platform
 from pathlib import Path
 
 DATA = Path(__file__).with_name("data")
-ABI = 2
+ABI = 3
 
 _i32, _f32, _p = ctypes.c_int32, ctypes.c_float, ctypes.c_void_p
 _SIGNATURES = {
     "fnpu_abi": (_i32, ()),
+    "fnpu_read32": (None, (_p, _p, _i32, _p)),
     "fnpu_nonfinite32": (_i32, (_p, _i32)),
     "fnpu_to_f16": (_i32, (_p, _p, _i32)),
     "fnpu_from_f16": (None, (_p, _p, _i32)),

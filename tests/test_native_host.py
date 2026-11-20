@@ -260,5 +260,78 @@ class KernelTests(unittest.TestCase):
         self.assertIsNone(plain.native)
 
 
+@unittest.skipUnless(TOOLS and ARCH in ("x86_64", "aarch64"), "clang and ld.lld required")
+class NativeVerifyTests(unittest.TestCase):
+    """HmxPower.verify() through fnpu_read32 on simulated register pages."""
+
+    @classmethod
+    def setUpClass(cls):
+        import build_host_native as B
+
+        cls.tmp = tempfile.TemporaryDirectory()
+        lib = Path(cls.tmp.name) / f"host_{ARCH}.so"
+        cls.host = _native.Host(lib, B.build(ARCH, lib))
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def powered(self, ro=None):
+        import test_library as TL
+
+        power = TL.PowerTests.make_power()
+        power._native = self.host
+        power._ro_factory = ro or (lambda address: power.views[address])
+        power.start()
+        power.hold()
+        return power
+
+    def test_native_verify_reads_the_held_words_and_detects_a_change(self):
+        import struct
+        from framenpu.errors import RecoveryRequired
+
+        power = self.powered()
+        self.assertIsNotNone(power._fast)
+        self.assertIsNone(power.fast_verify_error)
+        power.verify()
+        self.assertEqual(power._fast.read(), power._fast.expected)
+        for address, off in ((0x323C0000, 0x550 + 4 * 75), (0x32348000, 0x184), (0x32341000, 0x18)):
+            mm = power.views[address]
+            (old,) = struct.unpack_from("<I", mm, off)
+            struct.pack_into("<I", mm, off, old ^ 1)
+            with self.assertRaises(RecoveryRequired):
+                power.verify()
+            struct.pack_into("<I", mm, off, old)
+            power.verify()
+        power.close()
+        self.assertIsNone(power._fast)
+        self.assertTrue(all(mm.closed for mm in power.views.values()))
+
+    def test_a_disagreeing_first_read_keeps_the_python_verify(self):
+        import test_library as TL
+
+        blank = TL.Memory(4096)
+        power = self.powered(ro=lambda address: blank)
+        self.assertIsNone(power._fast)
+        self.assertIn("differ", power.fast_verify_error)
+        power.verify()  # the Python path, on the real views
+        power.close()
+
+    def test_native_false_and_simulated_registers_keep_python(self):
+        import test_library as TL
+
+        power = TL.PowerTests.make_power()
+        power.start()
+        power.hold()  # simulated registers, no native host given
+        self.assertIsNone(power._fast)
+        power.close()
+        power = TL.PowerTests.make_power()
+        power._native = False
+        power.start()
+        power.hold()
+        self.assertIsNone(power._fast)
+        power.close()
+
+
 if __name__ == "__main__":
     unittest.main()

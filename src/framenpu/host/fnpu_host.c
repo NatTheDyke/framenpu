@@ -100,7 +100,15 @@ static float relu6(float v) { return v < 0.0f ? 0.0f : (v > 6.0f ? 6.0f : v); }
 
 /* ---------------------------------------------------------------- exported */
 
-EXPORT i32 fnpu_abi(void) { return 2; }
+EXPORT i32 fnpu_abi(void) { return 3; }
+
+/* out[i] = base[word[i]] for i = 0 .. n-1, in order: one 32-bit load per entry (volatile:
+ * never merged, widened, reordered or skipped). Read-only; used on a PROT_READ mapping of
+ * the HMX power registers. The caller validates every word index against the mapping. */
+EXPORT void fnpu_read32(const volatile u32 *base, const i32 *word, i32 n, u32 *out) {
+    for (i32 i = 0; i < n; i++)
+        out[i] = base[word[i]];
+}
 
 /* Count of non-finite values in x[0..n). */
 EXPORT i32 fnpu_nonfinite32(const float *x, i32 n) {
