@@ -26,21 +26,31 @@ from .resident_landmark import CONTROL
 IMAGE_SHA256 = "d7a78a81469c10acaf193b0d99cc0415f92d1de845a7a9aa292a7a1ebe691819"
 # The same build with --mheads: the heatmap head (step 2c) runs on the DSP too.
 HEADS_IMAGE_SHA256 = "582d79ce821304ab90b48d18c5e9d7c5e4396614b9c6eb70bf2e7b6febf114d3"
+# The heads build with --resident: parameter images stay in the FeatureNN blob region.
+RESIDENT_IMAGE_SHA256 = "265fc6f430a18c8bf342eafff912f2e4462657fc2351b183fc6b1502ffe41474"
 LOADER_SHA256 = "72280ad93eb4ffcf49e7de26908fa2d8f9056e0d9e1e8618f75eba867a7ba3f0"
 CODE, CODE_BYTES, SEAL_AT, SEAL = 0x1FF0000, 0x4000, 0x1FF3F80, 0x544C4E4B
 IMAGE_CACHED, SLOT_UNCACHED = 0x88FF0000, 0xF0A92000
 ADMIN_MAGIC, ADMIN_OPCODE = 0x544C4144, 112
 
 
+def image_kind(record):
+    """(heads, resident) of a link record."""
+    return bool(record.get("mheads")), bool(record.get("resident"))
+
+
 def load_jobs(folder):
     """Accept the qualified replay build only (with or without the DSP heatmap
-    head), including its existing loader. Returns (loader, image, heads)."""
+    head, and the heads build with resident parameters), including its existing
+    loader. Returns (loader, image, heads); resident_image(folder) tells the rest."""
     folder = Path(folder)
     record = json.loads((folder / "link.json").read_text())
     loader = Job.load(folder / "teacher_link_loader.fjob")
     image = (folder / "teacher_link.bin").read_bytes()
-    heads = bool(record.get("mheads"))
-    want = HEADS_IMAGE_SHA256 if heads else IMAGE_SHA256
+    heads, resident = image_kind(record)
+    if resident and not heads:
+        raise InvalidModel("Mercury resident parameters need the heads image")
+    want = RESIDENT_IMAGE_SHA256 if resident else HEADS_IMAGE_SHA256 if heads else IMAGE_SHA256
     if (
         hashlib.sha256(image).hexdigest() != want
         or hashlib.sha256(loader.code).hexdigest() != LOADER_SHA256
@@ -97,9 +107,17 @@ def _completion_guard(check):
     return validate
 
 
-def replay_metadata(result, count, descriptors, image_bytes):
+def replay_metadata(result, count, descriptors, image_bytes, resident=None):
+    """resident: None for a non-resident image; else this request's mode (bool).
+    A resident image reports meta[12] = mode | copied << 1 | tagged << 2, and a
+    complete request tags exactly when it copied."""
     _completion(result, C.META_BYTES)
-    m = struct.unpack("<256I", result.output)
+    m = list(struct.unpack("<256I", result.output))
+    status = m[12]
+    if resident is not None:
+        if status not in ((3 | 4, 1) if resident else (0,)):
+            raise RecoveryRequired("Mercury residency status differs")
+        m[12] = 0
     ticks = list(m[96 : 96 + descriptors])
     ends = list(m[48 : 48 + count]) if count > 1 else [ticks[-1]]
     base = ends[-2] if count > 1 else 0
@@ -121,6 +139,7 @@ def replay_metadata(result, count, descriptors, image_bytes):
         raise RecoveryRequired("Mercury replay metadata or budget differs")
     return {
         "crops": count,
+        "params_copied": bool(status & 2) if resident else None,
         "crop_end_ticks": ends,
         "crop_body_ms": [(b - a) / 19200 for a, b in zip([0] + ends, ends)],
         "body_ms": ends[-1] / 19200,
@@ -142,19 +161,31 @@ class MercurySession:
         *,
         require_pin=True,
         native=None,
+        resident=None,
         _device_factory=Device,
         _lease_factory=_lease,
     ):
         """native: None uses the bundled host kernels when this platform and image allow
         (else NumPy), False always uses NumPy, True requires the kernels, and a
-        _native.Host instance uses that library (tests)."""
+        _native.Host instance uses that library (tests). resident: None keeps the
+        parameter images in the FeatureNN blob region when the image supports it, True
+        requires that, False copies them for every crop (legacy plan, same image)."""
         # require_pin=False accepts retrained weights for the same graph: lower() still validates
         # the structure, shapes and operators, and every plan row is bounds-checked below.
         self.model = mercury.load_keypoint(model_path, require_pin=require_pin)
         self.loader, self.image, self.heads = load_jobs(jobs)
-        self.image_sha256 = HEADS_IMAGE_SHA256 if self.heads else IMAGE_SHA256
+        self.image_sha256 = hashlib.sha256(self.image).hexdigest()
+        self.resident_image = self.image_sha256 == RESIDENT_IMAGE_SHA256
+        if resident and not self.resident_image:
+            raise InvalidModel("this Mercury image has no resident parameter support")
+        self.resident = self.resident_image if resident is None else bool(resident)
+        # the session's residency tag: the kernel copies the images unless the region holds it
+        self.tag = (0, 0, 0, 0)
+        while not self.tag[0]:
+            self.tag = struct.unpack("<4I", secrets.token_bytes(16))
         self.plan = L.build_plan(
-            self.model, prefix=True, batch=3, replay=True, pw_group=8, heads=self.heads
+            self.model, prefix=True, batch=3, replay=True, pw_group=8, heads=self.heads,
+            resident=self.resident,
         )
         for k in range(3):
             for row in struct.iter_unpack("<32I", self.plan.plan.table):
@@ -166,6 +197,7 @@ class MercurySession:
                         s2_direct=0,
                         pw_group=8,
                         mheads=self.heads,
+                        resident=self.resident_image,
                     )
                 if not ok:
                     raise InvalidModel("Mercury plan exceeds native bounds")
@@ -338,7 +370,8 @@ class MercurySession:
             def validate(result):
                 self._reservation(True)
                 self.last_timing = replay_metadata(
-                    result, count, job.end - job.first, len(self.image)
+                    result, count, job.end - job.first, len(self.image),
+                    resident=self.resident if self.resident_image else None,
                 )
                 get = lambda at, n: bytes(self.device._transport.memory[at : at + n])  # noqa: E731
                 for k in range(count):
@@ -356,7 +389,7 @@ class MercurySession:
 
             self.device._submit(
                 self.loader,
-                C.payload(self.plan.plan, count),
+                self._payload(count),
                 opcode=C.RS_OPCODE,
                 params=(1, job.first, job.end, 0, 0, 0),
                 output_size=C.META_BYTES,
@@ -381,6 +414,13 @@ class MercurySession:
                 )
                 for m in result_maps
             ]
+
+    def _payload(self, count):
+        """Request words; a resident image adds the tag (words 5..8) and mode (word 9)."""
+        words = bytearray(C.payload(self.plan.plan, count))
+        if self.resident_image:
+            struct.pack_into("<5I", words, 20, *self.tag, int(self.resident))
+        return bytes(words)
 
     def idle(self):
         """Release held clocks when tracking has no observations; keep the plan."""

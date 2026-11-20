@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Mercury parameter images can stay resident in VTCM between requests
+  (`build_teacher_link.py --resident`, image `265fc6f4…`), in the FeatureNN
+  model-blob region. The firmware reloads that region before FeatureNN's next
+  use once its flag is cleared. DSP time per crop on the Frame fell from 4.66
+  to 3.35 ms with bit-identical outputs, and the live NPU request median from
+  10.8 to 9.4 ms. `MercurySession(resident=False)` keeps the copy-per-crop
+  plan on the same image.
+
 - The per-request HMX power check reads its 91 registers natively, on
   read-only mappings, with the same 32-bit accesses in the same order. It is
   used only after its first read matches the Python read. The check fell from

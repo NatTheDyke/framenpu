@@ -116,7 +116,10 @@ def build(
     dw_fast=False,
     replay=False,
     mheads=False,
+    resident=False,
 ):
+    if resident and not (replay and mheads):
+        raise ValueError("resident parameters are an option of the replay + mheads image")
     if mheads and (not stride2 or heads or stem):
         raise ValueError("the Mercury heatmap head is a stride2 build without heads/stem")
     if replay and (not stride2 or heads or stem):
@@ -227,6 +230,7 @@ def build(
             *(["-DRS_DW_FAST"] if dw_fast else []),
             *(["-DRS_REPLAY"] if replay else []),
             *(["-DRS_MHEADS"] if mheads else []),
+            *(["-DRS_RESIDENT"] if resident else []),
         ),
         compile_(folder, 2, TESTS / "teacher_dw_probe.c", "-Dframe_job=tl_dw"),
         compile_(folder, 3, SDK / "hmx.S"),
@@ -257,6 +261,7 @@ def build(
         "dw_fast": dw_fast,
         "replay": replay,
         "mheads": mheads,
+        "resident": resident,
         "loader": {"bytes": len(loader.code), "sha256": _sha(loader.code), "name": LOADER_NAME},
         "linked": {"bytes": len(image), "sha256": _sha(image)},
         "reservation": {"code": f"{CODE:#x}", "bytes": CODE_BYTES, "seal_vector": f"{SEAL_AT:#x}"},
@@ -295,6 +300,10 @@ def main():
     p.add_argument(
         "--mheads", action="store_true", help="Mercury heatmap head: regrid and 3x3 HMX kinds"
     )
+    p.add_argument(
+        "--resident", action="store_true",
+        help="parameter images resident in the FeatureNN blob region (replay + mheads)",
+    )
     args = p.parse_args()
     r = build(
         args.output,
@@ -313,6 +322,7 @@ def main():
         dw_fast=args.dw_fast,
         replay=args.replay,
         mheads=args.mheads,
+        resident=args.resident,
     )
     print(
         json.dumps(

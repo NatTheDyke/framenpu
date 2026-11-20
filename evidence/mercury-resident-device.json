@@ -1,0 +1,124 @@
+{
+  "format": "framenpu-mercury-resident-device",
+  "date": "2026-11-20",
+  "device": "Steam Frame (CDSP, root), tracker and NPU service stopped for the session runs",
+  "model": "retrained keypoint student (same graph as Mercury, unpinned weights)",
+  "images": {
+    "heads": "582d79ce821304ab90b48d18c5e9d7c5e4396614b9c6eb70bf2e7b6febf114d3",
+    "resident": "265fc6f430a18c8bf342eafff912f2e4462657fc2351b183fc6b1502ffe41474"
+  },
+  "corpus": "96 real tracking crops (normalized, with hints) from a private Frame recording; not redistributed",
+  "profile_heads_image_us_per_crop": {
+    "1x1": 2286,
+    "depthwise": 984,
+    "stride2": 592,
+    "head_regrid": 339,
+    "head_3x3": 249,
+    "load_store": 194,
+    "total": 4645
+  },
+  "copy_strategies_ns_per_vector": {
+    "one_at_a_time": 106.9,
+    "unroll_2": 107.9,
+    "unroll_4": 108.0,
+    "unroll_8": 115.0,
+    "unroll_16": 143.8,
+    "cached_alias_u8": 115.4,
+    "l2fetch_u8": 114.9,
+    "l2fetch_then_wait_0_5ms_u8": 114.5
+  },
+  "sessions": {
+    "heads_image": {
+      "image": "582d79ce821304ab",
+      "resident_mode": false,
+      "requests": 288,
+      "copying_requests": "every request (copy-per-crop plan)",
+      "dsp_body_ms_per_crop_p50_1crop": 4.66,
+      "dsp_body_ms_per_crop_p50_2crop": 4.661
+    },
+    "resident_image": {
+      "image": "265fc6f430a18c8b",
+      "resident_mode": true,
+      "requests": 288,
+      "copying_requests": 1,
+      "dsp_body_ms_per_crop_p50_1crop": 3.35,
+      "dsp_body_ms_per_crop_p50_2crop": 3.351,
+      "max_abs_diff_vs_heads_image": 0
+    },
+    "resident_image_legacy_mode": {
+      "image": "265fc6f430a18c8b",
+      "resident_mode": false,
+      "requests": 288,
+      "copying_requests": "every request (copy-per-crop plan)",
+      "dsp_body_ms_per_crop_p50_1crop": 4.674,
+      "dsp_body_ms_per_crop_p50_2crop": 4.675,
+      "max_abs_diff_vs_heads_image": 0
+    }
+  },
+  "first_resident_request_body_ms": 4.743,
+  "live_ab": {
+    "note": "one hand tracked, 30 crops/s, 40 s per arm, order resident, heads, resident",
+    "npu_request_median_ms": {
+      "resident": [
+        9.2,
+        9.6
+      ],
+      "heads": [
+        10.7,
+        10.9
+      ],
+      "resident_again": [
+        9.3,
+        9.6
+      ]
+    },
+    "service_cpu_ms_per_40s": {
+      "resident": 1650,
+      "heads": 1680,
+      "resident_again": 1620
+    },
+    "end_to_end_latency_ms": {
+      "resident": {
+        "p50": [
+          23,
+          24
+        ],
+        "p95": [
+          25,
+          26
+        ]
+      },
+      "heads": {
+        "p50": [
+          23,
+          23
+        ],
+        "p95": [
+          25,
+          26
+        ]
+      },
+      "resident_again": {
+        "p50": [
+          22,
+          23
+        ],
+        "p95": [
+          25,
+          25
+        ]
+      }
+    },
+    "fallbacks": 0,
+    "dsp_service_restarts": 0,
+    "xrservice_featurenn_warnings": 0
+  },
+  "blob_region_claim": {
+    "source_matches_firmware": true,
+    "vtcm_matches_source_chunks": "81/81",
+    "pattern_fill_and_check_ms": 0.706,
+    "pattern_intact_after_s": 60,
+    "survey_changed_chunks_outside_region": 0,
+    "featurenn_reload_after_claim": "byte-exact (0/81 chunks differ), flag 0 -> 1"
+  }
+}

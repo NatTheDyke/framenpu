@@ -13,6 +13,11 @@ META_BYTES = 1024
 WIN_LO, WIN_HI = 0x1A40000, 0x1F00000
 VTCM_SPAN_VECTORS = (0x311E0000 - 0x31002000) // 128
 SPAN = VTCM_SPAN_VECTORS
+# RS_RESIDENT: parameter images in the FeatureNN model-blob region (0x311e0000..0x316eea80),
+# whose first vector (FR(SPAN)) holds the session tag. Offsets continue the FR() span.
+RES_SPAN = (0x316EEA80 - 0x31002000) // 128
+RES_LO = SPAN + 16
+BLOB_FLAG = 0xB12014  # firmware "blob loaded" word, DDR offset (DSP 0xf0b12014)
 RS_MAGIC, RS_OPCODE = 0x31535254, 111
 KIND = {"pw": 1, "dw": 2, "load": 3, "store": 4, "s2": 5}
 VTCM_FIRST = 4
@@ -252,20 +257,22 @@ def payload(plan, crops=1):
     return w.tobytes()
 
 
-def native_ok(row, *, dw_blocks=2, s2_direct=None, pw_group=1, mheads=False):
+def native_ok(row, *, dw_blocks=2, s2_direct=None, pw_group=1, mheads=False, resident=False):
     """Mirror of rs_get in tests/teacher_resident_probe.c (True = accepted).
     s2_direct: the decimation phase (0 even, 1 odd) of an RS_S2_DIRECT build, which
     adds bounds on the direct kernel's reads and zero-lane store spill. pw_group: an
     RS_PW_GROUP build's 1x1 scratch, pw_group * (nk + no) * 16 vectors. mheads: an
-    RS_MHEADS build, which also accepts kind 8 (3x3 HMX); kind 7 is regrid_ok."""
+    RS_MHEADS build, which also accepts kind 8 (3x3 HMX); kind 7 is regrid_ok. resident: an
+    RS_RESIDENT build (word 21 = scratch offset of a resident op)."""
     if dw_blocks not in (2, 4):
         raise ValueError("dw_blocks must be 2 or 4")
     m = 0xFFFFFFFF
     w = [int(x) for x in row[:15]]
     kind, cpi, cpo, k, clip, nb, blk0, nj, ws, dpar, npar, vin, vout, vres, vpar = w
-    big = 0
+    rscr = int(row[21]) if resident else 0
+    big = rscr
     for i, x in enumerate(w):
-        if i != 9:
+        if i != 9 and not (resident and i == 14):
             big |= x
     s2 = kind == 5
     for x in row[15:21]:
@@ -274,7 +281,10 @@ def native_ok(row, *, dw_blocks=2, s2_direct=None, pw_group=1, mheads=False):
         onb, oblk, ows, oh, ow, tmp = (int(x) for x in row[15:21])
     p3 = mheads and kind == 8
     align = ((vpar | npar) << 3) if kind == 1 or p3 else 0
-    bad = (big > 0x3FFF) or ((kind - 1) & m > 4 and not p3) or vpar + npar > SPAN or (dpar | align) & 127
+    res = rscr != 0
+    bad = (big > 0x3FFF) or ((kind - 1) & m > 4 and not p3) or vpar + npar > (RES_SPAN if res else SPAN) or (dpar | align) & 127
+    bad = bad or (resident and vpar >= RES_SPAN) or (res and vpar < RES_LO) or (res and kind in (3, 4))
+    bad = bad or (res and (kind == 1 or p3) and rscr & 15)
     bad = bad or ((dpar - WIN_LO) & m) + 128 * npar > WIN_HI - WIN_LO or vpar == 0
     bad = bad or dpar < WIN_LO or dpar > WIN_HI or npar > (WIN_HI - dpar) // 128
     if kind in (3, 4) or bad:
@@ -306,7 +316,7 @@ def native_ok(row, *, dw_blocks=2, s2_direct=None, pw_group=1, mheads=False):
     kk, reach, no = k * k, (k >> 1) * (ws + 1), (cpo + 15) >> 4
     pw = kind == 1 or p3
     bias = vpar + (no * k * 16 if pw else (cpi * kk + 31) // 32)
-    scr = vpar + npar
+    scr = rscr if res else vpar + npar
     bad = (
         cpi == 0
         or nj == 0
@@ -317,7 +327,7 @@ def native_ok(row, *, dw_blocks=2, s2_direct=None, pw_group=1, mheads=False):
         or vin + cpi * nb > SPAN
         or vout + cpo * out_nb > SPAN
         or vres + cpo * nb > SPAN
-        or bias + cpo + nj > scr
+        or bias + cpo + nj > vpar + npar
         or scr + ((pw_group * (k + no) if pw_group > 1 else k) * 16 if pw else cpi * kk) > SPAN
     )
     if p3:

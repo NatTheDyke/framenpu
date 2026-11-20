@@ -98,6 +98,28 @@ void fnpu_hmx_store(fnpu_u16 *, const void *);
 #define RS_MAX_KIND 4u
 #endif
 #define SPAN ((0x311e0000u - 0x31002000u) / 128u)
+/* RS_RESIDENT (Mercury replay + mheads builds): parameter images stay resident in
+ * the FeatureNN model-blob region of VTCM, 0x311e0000..0x316eea80, which the
+ * firmware refills from DDR before a FeatureNN request whenever the word at
+ * 0xf0b12014 is 0. A compute descriptor with word 21 nonzero is resident: its
+ * parameters are at FR(vpar) in [RS_RES_LO, RS_RSPAN) and word 21 is its scratch
+ * offset in the borrowed span (otherwise scratch follows the parameters).
+ * Request word 9 = 1 selects resident mode with the session tag in words 5..8
+ * (word 5 nonzero); resident descriptors are refused otherwise. The images are
+ * copied (crop 0 only) unless the flag is 0 and FR(SPAN) holds the tag. Before
+ * copying, the kernel clears the flag (so FeatureNN reloads its blob before its
+ * next use) and the tag; it writes the tag only after a request that ran every
+ * descriptor of the whole table. meta[12]: bit 0 resident mode, bit 1 images
+ * copied, bit 2 tag written. */
+#ifdef RS_RESIDENT
+#if !defined(RS_REPLAY) || !defined(RS_MHEADS)
+#error "RS_RESIDENT is an option of the Mercury replay image (RS_REPLAY, RS_MHEADS)"
+#endif
+#define RS_RSPAN ((0x316eea80u - 0x31002000u) / 128u)
+#define RS_RES_LO (SPAN + 16u)
+#define RS_BLOB_FLAG ((volatile fnpu_u32 *)0xf0b12014u)
+#define RS_TAG ((volatile fnpu_u32 *)(0x31002000u + 128u * SPAN))
+#endif
 #ifdef RS_S2_EVEN
 #define RS_S2_P 0u /* decimation phase: output (y, x) keeps stride-1 (2y+P, 2x+P) */
 #else
@@ -138,6 +160,9 @@ typedef struct {
     fnpu_u32 bias, scr; /* derived */
 #ifdef RS_STRIDE2
     fnpu_u32 onbin, oblk0, ows, oh, ow, tmp;
+#endif
+#ifdef RS_RESIDENT
+    fnpu_u32 rscr; /* word 21: scratch offset of a resident op, else 0 */
 #endif
 } rs_op;
 /* After validation of a compute op, vin, vout, vres, bias and scr hold VTCM
@@ -236,7 +261,13 @@ static __attribute__((noinline)) fnpu_u32 rs_get(fnpu_u32 tab, fnpu_u32 i, rs_op
 #endif
     fnpu_u32 *t = (fnpu_u32 *)d, big = 0;
 #pragma clang loop unroll(disable)
+#ifdef RS_RESIDENT
+    /* vpar is bounded below (resident images lie past 2^14); every other word as before */
+    for (fnpu_u32 w = 0; w < 15; w++) big |= (t[w] = ((const volatile fnpu_u32 *)RS_DESC)[w]) & -((w != 9) & (w != 14));
+    big |= (d->rscr = ((const volatile fnpu_u32 *)RS_DESC)[21]);
+#else
     for (fnpu_u32 w = 0; w < 15; w++) big |= (t[w] = ((const volatile fnpu_u32 *)RS_DESC)[w]) & -(w != 9);
+#endif
 #ifdef RS_REPLAY
     /* off <= the window size (frame_job); a dpar inside the window cannot wrap */
     if (((d->kind == 3) | (d->kind == 4)) & (d->dpar <= RS_WIN_HI)) d->dpar += off;
@@ -249,7 +280,14 @@ static __attribute__((noinline)) fnpu_u32 rs_get(fnpu_u32 tab, fnpu_u32 i, rs_op
 #ifdef RS_MHEADS
     fnpu_u32 p3 = d->kind == P3_KIND;
     fnpu_u32 cpi = d->cpi, cpo = d->cpo, nb = d->nbin, nj = d->nj, k = d->nk, pw = (d->kind == 1) | p3;
+#ifdef RS_RESIDENT
+    fnpu_u32 res = d->rscr != 0;
+    fnpu_u32 bad = (big > 0x3fff) | ((d->kind - 1 >= RS_MAX_KIND) & !p3) | (d->vpar >= RS_RSPAN) |
+                   (d->vpar + d->npar > (res ? RS_RSPAN : SPAN)) | (res & (d->vpar < RS_RES_LO)) |
+                   (res & ((d->kind == 3) | (d->kind == 4))) | (res & (d->rscr & 15) & -pw) |
+#else
     fnpu_u32 bad = (big > 0x3fff) | ((d->kind - 1 >= RS_MAX_KIND) & !p3) | (d->vpar + d->npar > SPAN) |
+#endif
                    ((d->dpar | ((d->vpar | d->npar) << 3 & -pw)) & 127) |
 #else
     fnpu_u32 cpi = d->cpi, cpo = d->cpo, nb = d->nbin, nj = d->nj, k = d->nk, pw = d->kind == 1;
@@ -289,10 +327,17 @@ static __attribute__((noinline)) fnpu_u32 rs_get(fnpu_u32 tab, fnpu_u32 i, rs_op
 #endif
     fnpu_u32 kk = k * k, reach = (k >> 1) * (d->ws + 1), no = (cpo + 15) >> 4;
     d->bias = d->vpar + (pw ? no * k * 16 : (cpi * kk + 31) / 32);
+#ifdef RS_RESIDENT
+    d->scr = res ? d->rscr : d->vpar + d->npar;
+    bad |= (cpi == 0) | (nj == 0) | (d->vin == 0) | (d->vout == 0) | (d->clip > 1) |
+           (d->blk0 + nj > nb) | (d->vin + cpi * nb > SPAN) | (d->vout + cpo * out_nb > SPAN) |
+           (d->vres + cpo * nb > SPAN) | (d->bias + cpo + nj > d->vpar + d->npar) | (d->scr + (pw ? RS_PW_SCR(k, no) : cpi * kk) > SPAN);
+#else
     d->scr = d->vpar + d->npar;
     bad |= (cpi == 0) | (nj == 0) | (d->vin == 0) | (d->vout == 0) | (d->clip > 1) |
            (d->blk0 + nj > nb) | (d->vin + cpi * nb > SPAN) | (d->vout + cpo * out_nb > SPAN) |
            (d->vres + cpo * nb > SPAN) | (d->bias + cpo + nj > d->scr) | (d->scr + (pw ? RS_PW_SCR(k, no) : cpi * kk) > SPAN);
+#endif
 #ifdef RS_MHEADS
     /* kind 8: K = 9 taps x cpi pairs; tap reads reach ws + 1 words either side */
     bad |= p3 ? (k != (9 * cpi + 15) >> 4) | (32 * d->blk0 < d->ws + 1) | (32 * (d->blk0 + nj) + d->ws + 1 > 32 * nb)
@@ -745,6 +790,24 @@ fnpu_u32 frame_job(const fnpu_context *c) {
     rs_zero(LV(57), 7); /* zero vector, flags */
     RS_SCALE[0] = Q6_V_vsplat_R(0x3c00u);
     fault_control(c);
+#ifdef RS_RESIDENT
+    /* rload: copy the resident images (crop 0) because the region is not ours */
+    fnpu_u32 rmode = in[9], rload = 0;
+    if ((rmode > 1) | (rmode & (in[5] == 0))) return FNPU_BAD_ARGUMENT;
+    if (rmode) {
+        rload = (*RS_BLOB_FLAG != 0) | (RS_TAG[0] != in[5]) | (RS_TAG[1] != in[6]) |
+                (RS_TAG[2] != in[7]) | (RS_TAG[3] != in[8]);
+        if (rload) {
+            /* FeatureNN must reload its blob before using it again: clear the
+             * flag before the first store into the region, and confirm it */
+            *RS_BLOB_FLAG = 0;
+            __asm__ volatile("barrier" ::: "memory");
+            if (*RS_BLOB_FLAG != 0) return FNPU_BAD_ARGUMENT;
+            for (fnpu_u32 w = 0; w < 4; w++) RS_TAG[w] = 0;
+            __asm__ volatile("barrier" ::: "memory");
+        }
+    }
+#endif
     fnpu_u32 t0 = rs_ticks();
 #ifdef RS_REPLAY
 #pragma clang loop unroll(disable)
@@ -774,8 +837,14 @@ fnpu_u32 frame_job(const fnpu_context *c) {
 #endif
         volatile HVX_Vector *v = FR(d->vpar), *m = (volatile HVX_Vector *)(RS_DDR + d->dpar);
         RS_PT(tc);
+#ifdef RS_RESIDENT
+        if (d->rscr && !rmode) return FNPU_BAD_ARGUMENT;
+        if (d->kind == 4) rs_copy(m, v, d->npar);
+        else if (!d->rscr || (rload & (k == 0))) rs_copy(v, m, d->npar);
+#else
         if (d->kind == 4) rs_copy(m, v, d->npar);
         else rs_copy(v, m, d->npar);
+#endif
 #ifdef RS_PW_PROFILE
         if (d->kind == 1) RS_PADD(0, tc);
 #endif
@@ -822,6 +891,15 @@ fnpu_u32 frame_job(const fnpu_context *c) {
 #endif
     fnpu_u32 pc;
     __asm__ volatile("%0 = pc" : "=r"(pc)::"memory");
+#ifdef RS_RESIDENT
+    fnpu_u32 tagged = rload & !stop & (a == 0) & (b == n); /* crop 0 copied every image */
+    if (tagged) {
+        __asm__ volatile("barrier" ::: "memory");
+        for (fnpu_u32 w = 0; w < 4; w++) RS_TAG[w] = in[5 + w];
+        __asm__ volatile("barrier" ::: "memory");
+    }
+    meta[12] = rmode | rload << 1 | tagged << 2;
+#endif
 #ifdef RS_REPLAY
     meta[0] = RS_MAGIC; meta[1] = pc; meta[2] = steps; /* descriptors run, all crops */
 #else

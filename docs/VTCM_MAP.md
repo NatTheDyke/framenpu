@@ -76,10 +76,37 @@ The pattern is left in place. FeatureNN scratch semantics make that harmless.
 | **FeatureNN worker 0/1 scratch** `0x31002000`–`0x311e0000` | **1,912 KiB** | Per-request scratch of a client that is serialized with direct jobs. Never written this boot. | Write canary and persistence **passed** (idle headset). Used within jobs by the [v2 block](HMX_SPATIAL_BLOCK.md#v2-vtcm-resident-block). Use it across jobs only with an in-job hash check and reload. |
 | Gap below gaze `0x316ef000`–`0x31700000` | 68 KiB | Unreferenced; noise | Worn-headset soak (gaze is adjacent) |
 | Top `0x317d5000`–`0x31800000` | 172 KiB | Unreferenced beyond the gaze loop bound; noise | Worn-headset soak; exact gaze bound |
-| Model-blob range | 5 MiB | Unused this boot | **Not proposed:** persistent FeatureNN state once op 7 runs |
+| Model-blob range | 5 MiB | Loaded on FeatureNN's first run | **Borrowable** by clearing the reload flag; see [FeatureNN blob region](#featurenn-blob-region) |
 
 What 1.9 MiB buys for the [spatial block](HMX_SPATIAL_BLOCK.md): every
 per-layer weight set (≤ about 338 KiB) can stay resident for a whole job. Mid
 activations stay in VTCM instead of spilling. A full source band can also be
 staged once per job, which replaces the 32 scattered DDR loads per K tile
 (67 of the 99 forecast ms) with VTCM `valign` work.
+
+## FeatureNN blob region
+
+Status (2026-11-20): borrowed by the resident Mercury image
+([MERCURY.md](MERCURY.md#resident-parameters)).
+
+From the firmware disassembly, an op-8 (FeatureNN) request first reads the
+word at `0xf0b12014`. If it is 0, the master sets worker mode 16, and worker 0
+copies `0x50ea80` bytes from DDR `0x8707c400` to VTCM `0x311e0000`
+(`0x870052e0`). The copy sets the word to 1 and completes a handshake at
+`0xf0b1200c`, which the master clears before each copy. Boot zeroes the block
+at `0xf0b12000`, and nothing else writes the flag.
+
+Checks on the device (`tests/blob_claim_probe.c`, `tests/blob_claim_run.py`):
+
+1. The DDR source equals the firmware file, and VTCM equals the source in all
+   81 64 KiB chunks.
+2. With the flag cleared from the host, a seeded pattern filled and checked
+   the whole region in 0.7 ms, and was still intact 60 s later.
+3. A before/after survey showed exactly the region's 1,295 4 KiB chunks
+   changed, and nothing outside it.
+4. With a controller turned on, the next FeatureNN run reloaded the region
+   byte-exact (0 differing chunks) and set the flag again. XRService logged
+   no FeatureNN warnings.
+
+So the region can be claimed by clearing the flag before writing it. A flag
+of 1 later means FeatureNN ran and reloaded its blob. No restore is needed.

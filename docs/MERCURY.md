@@ -751,11 +751,71 @@ simulated registers, the Python check remains. Power-on, power-off and every
 register write stay in Python. The check fell from 159 to 81 µs, and CPU per
 crop from 1.32 to 1.25 ms (1 crop) and 1.02 to 0.98 ms (2 crops).
 
+## Resident parameters
+
+Profiling the heads image on 96 real crops put 1.31 ms of its 4.64 ms per
+crop in parameter copies. Every op copied its weights from DDR into VTCM for
+every crop, at about 107 ns per vector. No single-thread copy beats that:
+unrolled loads, the cached alias and L2 prefetch were all measured
+(`tests/ddr_copy_probe.c`).
+
+`--resident` (`RS_RESIDENT`, with `--replay --mheads`) keeps the parameter
+images in VTCM between requests, in the FeatureNN model-blob region
+(`0x311e0000`–`0x316eea80`, 5,179 KiB; see [VTCM_MAP.md](VTCM_MAP.md#featurenn-blob-region)).
+The firmware refills that region from DDR before a FeatureNN request whenever
+the word at `0xf0b12014` is 0, so the region can be borrowed and FeatureNN
+repairs it on its next use.
+
+- **Descriptors:** a compute descriptor with word 21 nonzero is resident. Its
+  image is at `FR(vpar)` in `[SPAN + 16, RES_SPAN)`, and word 21 is its
+  scratch offset in the borrowed span. Load and store descriptors cannot be
+  resident.
+- **Request:** words 5..8 carry the session tag and word 9 the mode.
+  Resident descriptors are refused outside resident mode.
+- **Copy rule:** the kernel copies the images (crop 0 only) unless the flag
+  is 0 and `FR(SPAN)` holds the tag. Before copying, it clears the flag,
+  confirms the clear, and clears the tag.
+- **Tagging:** the tag is written only after a request that ran the whole
+  table. `meta[12]` reports mode, copied and tagged.
+- **Planner:** `build_plan(resident=True)` gives each op a permanent,
+  non-overlapping image slot (1.46 MiB in all) and takes its scratch from the
+  borrowed span.
+- **Session:** `MercurySession(resident=None)` uses resident mode when the
+  image supports it. `False` runs the copy-every-crop plan on the same image.
+  Each session draws a random tag, and `last_timing["params_copied"]` reports
+  whether a request copied.
+
+The legacy heads image (`582d79ce…`) still builds byte-identical. The
+resident image is `265fc6f4…` (8,592 B). Offline, the simulator models the
+persistent region: a resident request matches the legacy plan bit for bit,
+and later requests match even with the window's parameter images wiped.
+
+On the device ([evidence](../evidence/mercury-resident-device.json)), 96 real
+crops, 288 requests per session:
+
+| Per crop | Heads image | Resident image |
+|---|---:|---:|
+| DSP body, 1 crop | 4.66 ms | 3.35 ms |
+| DSP body, 2 crops | 4.66 ms | 3.35 ms |
+| Requests that copied | 288 | 1 (4.74 ms) |
+
+Outputs are identical (maximum difference 0), and so is legacy mode on the
+resident image (4.67 ms).
+
+Live, with one hand tracked at 30 crops/s (resident, heads, resident):
+
+- **NPU request median:** 9.2–9.6 ms, against 10.7–10.9 ms.
+- **Service CPU:** unchanged at about 1.35 ms per crop.
+- **End-to-end latency:** p50 22–24 ms and p95 25–26 ms in every arm.
+- **Coexistence:** no fallbacks, no dsp_service restart, and no FeatureNN
+  warnings from XRService.
+
 ## Next steps
 
-- **Remaining DSP time** (4.92 ms per crop): 1x1 3.18 ms, of which HMX
-  itself is about 1.45 and parameter copies about 0.72; depthwise 0.98;
-  stride 2 0.59; activation load/store 0.17. Hiding the posts and gathers
+- **Remaining DSP time** (3.35 ms per crop with resident parameters):
+  1x1 HMX tiles cost about 0.73 µs each in the network, against about 85 ns
+  pipelined plus 1.16 µs per drain in `tests/hmx_int8_stream.c`.
+  Depthwise and stride 2 take about 1.6 ms. Hiding the posts and gathers
   behind HMX would need a second hardware thread for the HVX work.
 - **Tracker integration.** The [pluggable backend](MERCURY_INTEGRATION.md)
   submits actual groups of 1..3 crops immediately and keeps CPU as the default

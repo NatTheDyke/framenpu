@@ -70,6 +70,26 @@ class ReplayCompletionTests(unittest.TestCase):
                     with self.assertRaises(RecoveryRequired):
                         parse(bad)
 
+    def test_residency_status(self):
+        from types import SimpleNamespace
+
+        words, workers = self.result(1)
+
+        def parse(status, resident):
+            w = list(words)
+            w[12] = status
+            return M.replay_metadata(
+                SimpleNamespace(output=struct.pack("<256I", *w), workers=workers, kernel_reference_ticks=2000),
+                1, 55, 6960, resident=resident,
+            )
+
+        self.assertTrue(parse(7, True)["params_copied"])
+        self.assertFalse(parse(1, True)["params_copied"])
+        self.assertIsNone(parse(0, False)["params_copied"])
+        for status, resident in ((0, True), (3, True), (5, True), (6, True), (1, False), (7, False), (1, None)):
+            with self.subTest(status=status, resident=resident), self.assertRaises(RecoveryRequired):
+                parse(status, resident)
+
     def test_missing_clock_and_validator_errors_require_recovery(self):
         from types import SimpleNamespace
 
@@ -122,6 +142,11 @@ class _Device:
         self.powers = []
         self.released = 0
         self.owner = None
+        # RS_RESIDENT model: FeatureNN has loaded its blob (flag 1); VTCM persists
+        struct.pack_into("<I", self._transport.memory, C.BLOB_FLAG, 1)
+        self.vt = None
+        self.tag = (0, 0, 0, 0)
+        self.copied = []
 
     def claim(self, timeout):
         if self.claimed:
@@ -166,9 +191,28 @@ class _Device:
                 self.submitted.append(count)
                 p = self.owner.plan.plan
                 window = self._transport.memory[C.WIN_LO : C.WIN_HI]
-                oracle.simulate(p, window, s2_phase=0, s2_direct=True, crops=count)
+                status, kw = 0, {}
+                if self.owner.resident_image:
+                    import numpy as np
+
+                    tag, mode = struct.unpack_from("<4I", data, 20), struct.unpack_from("<I", data, 36)[0]
+                    if mode:
+                        flag = struct.unpack_from("<I", self._transport.memory, C.BLOB_FLAG)[0]
+                        load = bool(flag) or tag != self.tag
+                        if load:
+                            struct.pack_into("<I", self._transport.memory, C.BLOB_FLAG, 0)
+                            self.tag = (0, 0, 0, 0)
+                        if self.vt is None:
+                            self.vt = np.full((oracle.RES_SPAN, 32, 2), np.nan, np.float16)
+                        kw = dict(resident=self.vt, load=load)
+                        status = 1 | 6 * load
+                        self.copied.append(load)
+                oracle.simulate(p, window, s2_phase=0, s2_direct=True, crops=count, **kw)
+                if status & 4:
+                    self.tag = tag
                 self._transport.memory[C.WIN_LO : C.WIN_HI] = window
                 words, workers = ReplayCompletionTests.result(count, len(p.table) // 128)
+                words[12] = status
                 out = struct.pack("<256I", *words)
                 if self.fail:
                     workers[0] = tuple(list(workers[0][:2]) + [1] + list(workers[0][3:]))
@@ -273,7 +317,82 @@ class MercurySessionTests(unittest.TestCase):
         self.assertEqual(dev.submitted, [1, 3, 2, 1, 1])
         self.assertTrue(dev.closed and lease.closed)
         self.assertEqual(dev.released, 2)
-        self.assertFalse(any(dev._transport.memory))
+        self.assert_restored(dev, session)
+
+    @staticmethod
+    def flag(dev):
+        return struct.unpack_from("<I", dev._transport.memory, C.BLOB_FLAG)[0]
+
+    def assert_restored(self, dev, session):
+        """Everything the session wrote is restored; the blob flag stays cleared
+        only when resident images were copied (FeatureNN then reloads its blob)."""
+        self.assertEqual(self.flag(dev), 0 if any(dev.copied) else 1)
+        mem = bytearray(dev._transport.memory)
+        mem[C.BLOB_FLAG : C.BLOB_FLAG + 4] = bytes(4)
+        self.assertFalse(any(mem))
+
+    def test_resident_parameters_load_once_and_after_eviction(self):
+        import numpy as np
+
+        session, lease = self.session()
+        if not session.resident_image:
+            self.skipTest("FNPU_MERCURY_JOBS is not the resident image")
+        self.assertTrue(session.resident and session.plan.resident)
+        session.__enter__()
+        dev = session.device
+        dev.owner = session
+        fs = [self.feeds(41), self.feeds(42)]
+        want = [mercury.run(session.model, f, "fp16") for f in fs]
+
+        def check(got, want=want):
+            self.assertEqual(len(got), len(want))
+            for w, out in zip(want, got):
+                for name in mercury.OUTPUTS:
+                    np.testing.assert_array_equal(out[name], w[name])
+
+        with session:
+            check(session.infer(fs))
+            self.assertTrue(session.last_timing["params_copied"])
+            self.assertEqual(self.flag(dev), 0)
+            # the window's images are no longer read once resident
+            for off, data in session.plan.plan.fixed.items():
+                dev._transport.memory[off : off + len(data)] = bytes(len(data))
+            check(session.infer(fs))
+            check(session.infer(fs[1:]), want[1:])
+            self.assertEqual(dev.copied, [True, False, False])
+            # FeatureNN ran in between (flag 1): the next request copies again
+            for off, data in session.plan.plan.fixed.items():
+                dev._transport.memory[off : off + len(data)] = data
+            struct.pack_into("<I", dev._transport.memory, C.BLOB_FLAG, 1)
+            check(session.infer(fs))
+            self.assertEqual(dev.copied, [True, False, False, True])
+            self.assertEqual(self.flag(dev), 0)
+        self.assert_restored(dev, session)
+
+    def test_resident_image_runs_the_legacy_plan(self):
+        import numpy as np
+        from unittest.mock import patch
+
+        lease = _Lease()
+        with patch.object(M, "_lease", return_value=lease):
+            session = M.MercurySession(
+                MODEL, JOBS, resident=False, _device_factory=_Device, _lease_factory=lambda: lease
+            )
+        if not session.resident_image:
+            self.skipTest("FNPU_MERCURY_JOBS is not the resident image")
+        self.assertFalse(session.resident or session.plan.resident)
+        session.__enter__()
+        dev = session.device
+        dev.owner = session
+        with session:
+            f = self.feeds(43)
+            out = session.infer([f])[0]
+            self.assertIsNone(session.last_timing["params_copied"])
+            want = mercury.run(session.model, f, "fp16")
+            for name in mercury.OUTPUTS:
+                np.testing.assert_array_equal(out[name], want[name])
+        self.assertEqual(dev.copied, [])
+        self.assert_restored(dev, session)
 
     def test_uncertain_completion_retains_refusal_and_does_not_retry(self):
         session, lease = self.session()
@@ -322,7 +441,7 @@ class HeadsSessionTests(unittest.TestCase):
                     for name in mercury.OUTPUTS:
                         np.testing.assert_array_equal(out[name], want[name])
         self.assertEqual(dev.submitted, [1, 3, 2])
-        self.assertFalse(any(dev._transport.memory))
+        self.assert_restored(dev, session)
 
     def test_regrid_and_tap_checks_refuse_out_of_bounds_rows(self):
         lease = _Lease()

@@ -327,6 +327,7 @@ class MercuryPlan:
     prefix: bool
     crops: tuple = ()  # batch: one window map per crop (parameter images shared)
     replay: bool = False  # RS_REPLAY: one crop's table; a request runs 1..batch crops
+    resident: bool = False  # RS_RESIDENT: parameter images in the FeatureNN blob region
 
     def grid(self, name):
         return grid(self.shape[name])
@@ -362,6 +363,7 @@ def build_plan(
     pw_group=1,
     replay=False,
     heads=False,
+    resident=False,
 ):
     """batch > 1 (merged only): one request runs the merged sequence once per crop,
     each crop with its own input and final-tensor slots; parameter images are
@@ -372,7 +374,12 @@ def build_plan(
     (at most RL.MAX_CROPS) and a window slot set is reserved for each, but the table
     holds crop 0's descriptors only; the kernel runs them once per crop with
     replay_row addressing. The planner emits every crop and refuses the plan unless
-    each equals crop 0 under that rule (same VTCM layout, slots a fixed stride apart)."""
+    each equals crop 0 under that rule (same VTCM layout, slots a fixed stride apart).
+
+    resident (an RS_RESIDENT build, replay + heads only): every compute op's parameter
+    image gets its own permanent slot in the FeatureNN blob region (offsets RES_LO..
+    RES_SPAN of the FR() span) and its scratch comes from the borrowed span; word 21
+    of the descriptor is that scratch offset."""
     if mode not in ("merged", "qualify"):
         raise ValueError(mode)
     if batch < 1 or (batch > 1 and mode != "merged"):
@@ -381,6 +388,8 @@ def build_plan(
         raise ValueError(f"replay is a merged plan of at most {RL.MAX_CROPS} crops")
     if heads and (mode != "merged" or start is not None):
         raise ValueError("heads are a whole-network merged plan")
+    if resident and not (replay and heads):
+        raise ValueError("resident parameters need a replay plan with heads")
     ops = device_ops(model, stop_after, start, prefix, heads)
     final = ops[-1].output
     shape = shapes(model, prefix, heads)
@@ -458,6 +467,7 @@ def build_plan(
         table.append(RL._words(*w))
 
     cur = dict(where)  # the crop being emitted
+    res_at, res_next = {}, RL.RES_LO  # resident: op name -> permanent image slot
 
     def load(name, to):
         words(RL.KIND["load"], 0, 0, 0, 0, 0, 0, 0, 0, cur[name], vec(name), 0, 0, 0, to)
@@ -473,10 +483,22 @@ def build_plan(
         if op.kind == "regrid":
             words(*regrid_words(op, gin, gout, at[src], at[dst]))
             return
+        nonlocal res_next
         image, scratch = images[op.name]
         npar = len(image) // 128
         pw = op.conv_class == "pointwise"
-        vpar = vt.take(npar + scratch, align=16 if pw else 1)
+        if resident:
+            if op.name not in res_at:
+                at0 = RL._al(res_next * 128, 2048 if pw else 128) // 128
+                if at0 + npar > RL.RES_SPAN:
+                    raise ValueError("resident parameter images exceed the blob region")
+                res_at[op.name], res_next = at0, at0 + npar
+            vpar = res_at[op.name]
+            scr = vt.take(scratch, align=16 if pw else 1)
+            tail = (scr,)
+        else:
+            vpar = vt.take(npar + scratch, align=16 if pw else 1)
+            tail = ()
         s2 = not pw and op.params["stride"] == (2, 2)
         tmp = vt.take(vec(src)) if s2 else None
         if pw:
@@ -498,10 +520,13 @@ def build_plan(
                 at[dst],
                 at[res] if res else 0,
                 vpar,
+                *((0,) * 6 + tail if tail else ()),
             )
         else:
             cp = pairs(src)
             extra = (gout.nbin, gout.blk0, gout.ws, gout.h, gout.w, tmp) if s2 else ()
+            if tail:
+                extra = (extra or (0,) * 6) + tail
             words(
                 RL.KIND["s2" if s2 else "dw"],
                 cp,
@@ -520,7 +545,10 @@ def build_plan(
                 vpar,
                 *extra,
             )
-        vt.give(vpar, npar + scratch)
+        if resident:
+            vt.give(scr, scratch)
+        else:
+            vt.give(vpar, npar + scratch)
         if tmp is not None:
             vt.give(tmp, vec(src))
 
@@ -604,6 +632,7 @@ def build_plan(
         prefix,
         tuple(crops) if batch > 1 else (),
         replay,
+        resident,
     )
 
 
