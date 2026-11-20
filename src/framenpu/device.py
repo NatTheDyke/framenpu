@@ -142,6 +142,7 @@ class Device:
         _prepare=None,
         _phase_times=None,
         _held_power=None,
+        _expect_s=0.0,
     ):
         if not isinstance(job, Job):
             raise TypeError("job must be a Job")
@@ -239,6 +240,9 @@ class Device:
                     t.publish(direct=True)
                 else:
                     t.publish()
+                if 0 < _expect_s < self.timeout:
+                    # The caller's expected DSP time: sleep through it instead of polling.
+                    time.sleep(_expect_s)
                 t.wait_complete(seq, self.timeout)
                 mark("publish_wait_ms")
                 returned = True

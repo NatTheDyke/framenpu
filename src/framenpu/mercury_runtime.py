@@ -164,6 +164,7 @@ class MercurySession:
         self.saved = []
         self.lock = threading.RLock()
         self.last_timing = None
+        self.crop_ms = 0.0  # last measured DSP body per crop: the next request sleeps most of it
 
     def _owner(self):
         if (
@@ -330,7 +331,9 @@ class MercurySession:
                 _prepare=lambda t: self._reservation(True),
                 _completion_validator=_completion_guard(validate),
                 _held_power=self.power,
+                _expect_s=0.8e-3 * self.crop_ms * count,
             )
+            self.crop_ms = self.last_timing["body_ms"] / count
             if not self.heads:
                 return [mercury.run_tail(self.model, m, L.LAST) for m in result_maps]
             # the heatmap head ran on the DSP: only the pooled vector heads remain

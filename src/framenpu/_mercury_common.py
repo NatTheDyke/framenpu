@@ -5,6 +5,7 @@ compares the packaged planner's tables and parameter bytes with that oracle.
 """
 
 from dataclasses import dataclass, field
+import functools
 import math
 
 R = 2
@@ -100,10 +101,9 @@ class Grid:
         import numpy as np
 
         c = tensor.shape[0]
+        idx, _ = _grid_index(self.w, self.h)
         flat = np.zeros((c, self.nbin * 32), np.float16)
-        for y in range(self.h):
-            s = self.word(y, 0)
-            flat[:, s : s + self.w] = tensor[:, y]
+        flat[:, idx] = np.asarray(tensor).reshape(c, -1)
         return planar(flat, self.nbin, 0).tobytes()
 
     def from_bytes(self, raw, channels):
@@ -111,15 +111,25 @@ class Grid:
         import numpy as np
 
         flat = unplanar(raw, channels, self.nbin)
-        ok = self.interior()
-        stray = int(np.count_nonzero(flat[:, ~ok]))
-        out = np.stack(
-            [flat[:, self.word(y, 0) : self.word(y, 0) + self.w] for y in range(self.h)], 1
-        )
-        return out, stray
+        idx, outside = _grid_index(self.w, self.h)
+        stray = int(np.count_nonzero(flat[:, outside]))
+        return flat[:, idx].reshape(channels, self.h, self.w), stray
 
     def tensor_bytes(self, channels):
         return channels // 2 * self.nbin * 128
+
+
+@functools.lru_cache(maxsize=64)
+def _grid_index(w, h):
+    """(word of every (y, x) in row-major order, mask of non-interior words) of a grid."""
+    import numpy as np
+
+    g = Grid(w, h)
+    idx = (g.word(0, 0) + np.arange(h)[:, None] * g.ws + np.arange(w)[None, :]).reshape(-1)
+    outside = ~g.interior()
+    idx.setflags(write=False)
+    outside.setflags(write=False)
+    return idx, outside
 
 
 def _al(n, a=128):
