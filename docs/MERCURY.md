@@ -786,7 +786,13 @@ repairs it on its next use.
   whether a request copied.
 
 The legacy heads image (`582d79ce…`) still builds byte-identical. The
-resident image is `265fc6f4…` (8,592 B). Offline, the simulator models the
+resident image is `5d15e715…` (16,172 B, loader `cc81fb7e…`), the
+`--resident` build with `--omit-fp --pw-pipe --hmx-inline --pool --tiles
+--post-batch --pw-deep --pw-lg 3 --code-kib 20`. It runs on all three workers,
+reads tile-layout 1x1 inputs in place, and needs the 20 KiB code reservation
+(0x1ff0000..0x1ff5000). With only `--omit-fp --pw-pipe` the build is
+`9160e4c7…` (10,540 B, 16 KiB), and with neither it is `265fc6f4…` (8,592 B).
+All three give the same outputs. Offline, the simulator models the
 persistent region: a resident request matches the legacy plan bit for bit,
 and later requests match even with the window's parameter images wiped.
 

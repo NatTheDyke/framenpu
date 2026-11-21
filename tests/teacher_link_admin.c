@@ -22,7 +22,9 @@
 #define TL_SEAL 0x544c4e4bu
 #define TL_OPCODE 112u
 #define TL_CODE 0x1ff0000u
-#define TL_CODE_BYTES 0x4000u
+#ifndef TL_CODE_BYTES
+#define TL_CODE_BYTES 0x4000u /* 0x5000u: the 20 KiB reservation (--code-kib 20) */
+#endif
 #define TL_SEAL_WORD (*(volatile fnpu_u32 *)(0xf0000000u + TL_CODE + TL_CODE_BYTES - 128u))
 
 fnpu_u32 frame_job(const fnpu_context *c) {

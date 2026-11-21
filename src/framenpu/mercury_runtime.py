@@ -27,9 +27,15 @@ IMAGE_SHA256 = "d7a78a81469c10acaf193b0d99cc0415f92d1de845a7a9aa292a7a1ebe691819
 # The same build with --mheads: the heatmap head (step 2c) runs on the DSP too.
 HEADS_IMAGE_SHA256 = "582d79ce821304ab90b48d18c5e9d7c5e4396614b9c6eb70bf2e7b6febf114d3"
 # The heads build with --resident: parameter images stay in the FeatureNN blob region.
-RESIDENT_IMAGE_SHA256 = "265fc6f430a18c8bf342eafff912f2e4462657fc2351b183fc6b1502ffe41474"
+# Built with --omit-fp --pw-pipe: no leaf frames on the DDR stack for the group barriers
+# to wait on, overlapped 1x1 loops (same outputs bit for bit; 3.35 -> 2.96 ms DSP per crop).
+# 9160e4c7 (16 KiB) was the --omit-fp --pw-pipe build. This one adds --hmx-inline --pool
+# --tiles --post-batch --pw-deep --pw-lg 3 --code-kib 20: three workers, tile-layout 1x1
+# inputs, 8-block 1x1 groups; same outputs bit for bit, 2.96 -> 1.63 ms DSP per crop.
+RESIDENT_IMAGE_SHA256 = "5d15e715948564ee0546cfb05d5cabb5c767f6f302936dad99716c0b15637ee4"
 # Straight-line VTCM backup/restore (the uncached slot refetched each loop packet: 385 -> 42 us).
-LOADER_SHA256 = "de3cc52a08ac15bd45be77cacd3cdd83082bde2817de0e5166385db6ab510b65"
+# The pool loader (workers 1 and 2 enter the image too) for the 20 KiB reservation.
+LOADER_SHA256 = "cc81fb7ec3ad340da8fe3ba7f3c930689cd9fd81861a5fe8cab29babc7247524"
 CODE, CODE_BYTES, SEAL_AT, SEAL = 0x1FF0000, 0x4000, 0x1FF3F80, 0x544C4E4B
 IMAGE_CACHED, SLOT_UNCACHED = 0x88FF0000, 0xF0A92000
 ADMIN_MAGIC, ADMIN_OPCODE = 0x544C4144, 112
@@ -38,6 +44,19 @@ ADMIN_MAGIC, ADMIN_OPCODE = 0x544C4144, 112
 def image_kind(record):
     """(heads, resident) of a link record."""
     return bool(record.get("mheads")), bool(record.get("resident"))
+
+
+def reservation(record):
+    """(bytes, seal vector) of a link record's image reservation at CODE: the
+    16 KiB default or the 20 KiB --code-kib 20 build. The loader's admin command
+    rejects any other size, so a misstated record fails before sealing."""
+    r = record.get("reservation", {})
+    size = r.get("bytes")
+    if r.get("code") != f"{CODE:#x}" or size not in (0x4000, 0x5000) or (
+        r.get("seal_vector") != f"{CODE + size - 128:#x}"
+    ):
+        raise InvalidModel("Mercury image reservation differs")
+    return size, CODE + size - 128
 
 
 def load_jobs(folder):
@@ -180,13 +199,24 @@ class MercurySession:
         if resident and not self.resident_image:
             raise InvalidModel("this Mercury image has no resident parameter support")
         self.resident = self.resident_image if resident is None else bool(resident)
+        # an RS_TILES build keeps 1x1-only tensors in B-tile layout (no gather). A record
+        # that misstates it is harmless: a build without RS_TILES ignores the layout word
+        # (every tensor stays planar), and one with it runs flag-free rows planar too.
+        record = json.loads((Path(jobs) / "link.json").read_text())
+        self.tiles = self.resident and bool(record.get("tiles"))
+        # 8-block 1x1 groups (--pw-deep --pw-lg 3): flagged ops get a larger scratch. A build
+        # without them refuses flag 8; one with them runs unflagged ops 4-block.
+        self.deep8 = self.tiles and bool(record.get("pw_deep")) and record.get("pw_lg") == 3
+        self.code_bytes, self.seal_at = reservation(record)
+        if len(self.image) > self.seal_at - CODE:
+            raise InvalidModel("Mercury image overlaps its seal vector")
         # the session's residency tag: the kernel copies the images unless the region holds it
         self.tag = (0, 0, 0, 0)
         while not self.tag[0]:
             self.tag = struct.unpack("<4I", secrets.token_bytes(16))
         self.plan = L.build_plan(
             self.model, prefix=True, batch=3, replay=True, pw_group=8, heads=self.heads,
-            resident=self.resident,
+            resident=self.resident, tiles=self.tiles, deep8=self.deep8,
         )
         for k in range(3):
             for row in struct.iter_unpack("<32I", self.plan.plan.table):
@@ -199,6 +229,8 @@ class MercurySession:
                         pw_group=8,
                         mheads=self.heads,
                         resident=self.resident_image,
+                        tiles=self.tiles,
+                        deep8=self.deep8,
                     )
                 if not ok:
                     raise InvalidModel("Mercury plan exceeds native bounds")
@@ -232,9 +264,9 @@ class MercurySession:
 
     def _reservation(self, sealed):
         mem = self.device._transport.memory
-        expect = bytearray(self.image.ljust(CODE_BYTES, b"\0"))
-        struct.pack_into("<I", expect, SEAL_AT - CODE, SEAL if sealed else 0)
-        if bytes(mem[CODE : CODE + CODE_BYTES]) != expect:
+        expect = bytearray(self.image.ljust(self.code_bytes, b"\0"))
+        struct.pack_into("<I", expect, self.seal_at - CODE, SEAL if sealed else 0)
+        if bytes(mem[CODE : CODE + self.code_bytes]) != expect:
             raise RecoveryRequired("Mercury image or seal changed")
         self._owner()
 
@@ -268,7 +300,7 @@ class MercurySession:
 
         self.device._submit(
             self.loader,
-            struct.pack("<4I", ADMIN_MAGIC, command, CODE, CODE_BYTES).ljust(128, b"\0"),
+            struct.pack("<4I", ADMIN_MAGIC, command, CODE, self.code_bytes).ljust(128, b"\0"),
             opcode=ADMIN_OPCODE,
             params=(0,),
             output_size=256,
@@ -295,14 +327,14 @@ class MercurySession:
                     (at, bytes(mem[at : at + size]))
                     for at, size in (
                         (C.WIN_LO, C.WIN_HI - C.WIN_LO),
-                        (CODE, CODE_BYTES),
+                        (CODE, self.code_bytes),
                         (CONTROL, 128),
                     )
                 ]
                 self.owned = True
                 mem[CONTROL : CONTROL + len(self.marker)] = self.marker
-                image = self.image.ljust(CODE_BYTES, b"\0")
-                mem[CODE : CODE + CODE_BYTES] = image
+                image = self.image.ljust(self.code_bytes, b"\0")
+                mem[CODE : CODE + self.code_bytes] = image
                 for off, data in C.setup_writes(self.plan.plan).items():
                     mem[off : off + len(data)] = data
                     if bytes(mem[off : off + len(data)]) != data:

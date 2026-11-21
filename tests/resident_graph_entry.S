@@ -28,6 +28,9 @@
  { vmem(r1++#1) = v1 }
 .endm
 #endif
+#if defined(RG_LINK_ENTRY) && defined(TL_LINK_ENTRY) && !defined(TL_SEAL_VA)
+#define TL_SEAL_VA 0xf1ff3f80 /* last vector of the 16 KiB reservation; 0xf1ff4f80 for 20 KiB */
+#endif
 .section .text.entry,"ax",@progbits
 .global custom_job
 custom_job:
@@ -49,7 +52,11 @@ custom_job:
  { r17 = ssr }
  { memw(r16+#28) = r17 }
  { p0 = cmp.eq(r0,#0) }
+#if defined(TL_LINK_ENTRY) && defined(RG_POOL)
+ { if (!p0) jump pool_worker }
+#else
  { if (!p0) jump finish }
+#endif
  { r18 = evb }
  { memw(r16+#32) = r18 }
  { memw(r16+#24) = r29 }
@@ -107,6 +114,43 @@ resident_cache_recovered:
  /* A synchronous fault abandons C frames. deallocframe reads through FP, so
   * restoring SP alone can return into an abandoned frame and publish twice. */
  { r30 = add(r29,#FNPU_ENTRY_FRAME_BYTES) }
+#if defined(TL_LINK_ENTRY) && defined(RG_POOL)
+ /* Before the VTCM restore: if the image's worker pool is open for this
+  * request (mailbox words 0/1 = seq/~seq in the saved page), post its exit
+  * word and wait at most ~1 ms for both workers to acknowledge, so no worker
+  * still writes the page once it holds the firmware's data again. The image
+  * closes the pool itself on every return; this covers a fault on worker 0. */
+ { r0 = memw(r16+#36) }
+ { p0 = cmp.eq(r0,#0) }
+ { if (p0) jump pool_drained }
+ { r2 = ##0x31001400 }
+ { r3 = ##0xf0a93000 }
+ { r3 = memw(r3+#0) }
+ { r4 = memw(r2+#0) }
+ { p0 = cmp.eq(r4,r3) }
+ { if (!p0) jump pool_drained }
+ { r4 = memw(r2+#4) }
+ { r5 = not(r3) }
+ { p0 = cmp.eq(r4,r5) }
+ { if (!p0) jump pool_drained }
+ { memw(r2+#32) = r3 }
+ { barrier }
+ { r7:6 = c31:30 }
+pool_drain_wait:
+ { r4 = memw(r2+#36) }
+ { r5 = memw(r2+#40) }
+ { p0 = cmp.eq(r4,r3) }
+ { p1 = cmp.eq(r5,r3) }
+ { p0 = and(p0,p1) }
+ { if (p0) jump pool_drained }
+ { r5:4 = c31:30 }
+ { r5:4 = sub(r5:4,r7:6) }
+ { p0 = cmp.gtu(r4,#19200) }
+ { if (p0) jump pool_drained }
+ { pause(#64) }
+ { jump pool_drain_wait }
+pool_drained:
+#endif
  { r17 = memw(r16+#28) }
  { r18 = memw(r16+#32) }
  { r0 = memw(r16+#36) }
@@ -335,7 +379,18 @@ resident_forward_common:
  { jumpr r0 }
 .balign 16
 fault:
+#if defined(TL_LINK_ENTRY) && defined(RG_POOL)
+ /* Workers 1 and 2 run image code too: each faulting worker records into its
+  * own status row and returns through its own finish. Other threads keep
+  * the worker-0 row and path, as before. */
+ { r0 = htid }
+ { p0 = cmp.gtu(r0,#2) }
+ { if (p0) r0 = #0 }
+ { r1 = ##0xf0a93400 }
+ { r0 = addasl(r1,r0,#6) }
+#else
  { r0 = ##0xf0a93400 }
+#endif
  { r1 = #2 }
  { memw(r0+#8) = r1 }
  { r1 = ssr }
@@ -345,8 +400,47 @@ fault:
  { r1 = badva }
  { memw(r0+#20) = r1 }
  { r1 = ##resident_cache_fault_return }
+#if defined(TL_LINK_ENTRY) && defined(RG_POOL)
+ { r0 = htid }
+ { p0 = cmp.eq(r0,#1) }
+ { p1 = cmp.eq(r0,#2) }
+ { p0 = or(p0,p1) }
+ { if (p0) r1 = ##pool_worker_recover }
+#endif
  { elr = r1 }
  { rte }
+#if defined(TL_LINK_ENTRY) && defined(RG_POOL)
+/* Workers 1 and 2 (r16 = own status row): enter the sealed operator image,
+ * cached, only for the Mercury request (opcode 111, params[0] = 1). The image
+ * waits for worker 0's VTCM backup before touching VTCM. SP is saved as on
+ * worker 0, so a fault returns here with the frame rebuilt; the worker never
+ * writes its status result word, only its own fault fields on a fault. */
+.balign 16
+pool_worker:
+ { r19 = ##0xf0a93000 }
+ { r1 = memw(r19+#36) }
+ { p0 = cmp.eq(r1,#111) }
+ { if (!p0) jump finish }
+ { r1 = memw(r19+#40) }
+ { p0 = cmp.eq(r1,#1) }
+ { if (!p0) jump finish }
+ { r1 = ##TL_SEAL_VA }
+ { r1 = memw(r1+#0) }
+ { r2 = ##0x544c4e4b }
+ { p0 = cmp.eq(r1,r2) }
+ { if (!p0) jump finish }
+ { memw(r16+#24) = r29 }
+ { r0 = r19 }
+ { r1 = ##0x88ff0000 }
+ { callr r1 }
+pool_worker_recover:
+ { r0 = htid }
+ { r16 = ##0xf0a93400 }
+ { r16 = addasl(r16,r0,#6) }
+ { r29 = memw(r16+#24) }
+ { r30 = add(r29,#FNPU_ENTRY_FRAME_BYTES) }
+ { jump finish }
+#endif
 
 .balign 16
 resident_cache_fault_return:
@@ -365,7 +459,7 @@ resident_dispatch:
  { r1 = add(r1,#-110) }
  { p0 = cmp.gtu(r1,#1) }
  { if (p0) jump frame_job }
- { r1 = ##0xf1ff3f80 }
+ { r1 = ##TL_SEAL_VA }
  { r1 = memw(r1+#0) }
  { r2 = ##0x544c4e4b }
  { p0 = cmp.eq(r1,r2) }

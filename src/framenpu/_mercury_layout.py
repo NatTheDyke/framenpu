@@ -364,6 +364,8 @@ def build_plan(
     replay=False,
     heads=False,
     resident=False,
+    tiles=False,
+    deep8=False,
 ):
     """batch > 1 (merged only): one request runs the merged sequence once per crop,
     each crop with its own input and final-tensor slots; parameter images are
@@ -379,7 +381,20 @@ def build_plan(
     resident (an RS_RESIDENT build, replay + heads only): every compute op's parameter
     image gets its own permanent slot in the FeatureNN blob region (offsets RES_LO..
     RES_SPAN of the FR() span) and its scratch comes from the borrowed span; word 21
-    of the descriptor is that scratch offset."""
+    of the descriptor is that scratch offset.
+
+    tiles (an RS_TILES build, resident only): a tensor that only 1x1 ops read (as input
+    or residual), made by a 1x1 or stride-1 depthwise op, with a pair count that is a
+    multiple of 16, is kept in B-tile layout (vector (pair p, block j) at j * pairs + p,
+    16-vector aligned) so the 1x1 loads its B tiles in place, with no gather. Word 15
+    of a 1x1 descriptor flags its input (1), output (2) and residual (4) in that layout,
+    of a depthwise one its output (2). Outputs are unchanged bit for bit.
+
+    deep8 (a tiles plan for an RS_PW_DEEP, RS_PW_LG 3 build): a 1x1 whose input is a
+    tile tensor, whose output is no wider (no <= nk) and which spans at least 64
+    column blocks gets 32 * no * 16 scratch
+    vectors, at least, and word 15 flag 8, so it runs 8-block groups two deep per
+    worker. An unflagged op runs 4-block groups in the usual scratch."""
     if mode not in ("merged", "qualify"):
         raise ValueError(mode)
     if batch < 1 or (batch > 1 and mode != "merged"):
@@ -390,6 +405,10 @@ def build_plan(
         raise ValueError("heads are a whole-network merged plan")
     if resident and not (replay and heads):
         raise ValueError("resident parameters need a replay plan with heads")
+    if tiles and not resident:
+        raise ValueError("tile layout is an option of the resident plan")
+    if deep8 and not (tiles and pw_group == 8):
+        raise ValueError("deep8 is an option of the 8-group tiles plan")
     ops = device_ops(model, stop_after, start, prefix, heads)
     final = ops[-1].output
     shape = shapes(model, prefix, heads)
@@ -421,6 +440,7 @@ def build_plan(
     host_parts = [n for par in free for n, src in comps[par] if src == "host"]
     made = produced | set(free) | set(host_parts)
     external = [b for b in dict.fromkeys(i for op in ops for i in op.inputs) if b not in made]
+    tile = _tile_tensors(ops, shape, external, free, parent_of, host_parts, heads) if tiles else set()
 
     images = {}
     for op in ops:
@@ -430,6 +450,19 @@ def build_plan(
         images[op.name] = (
             pw_image(op, gin, pw_group) if op.conv_class == "pointwise" else dw_image(op, gin)
         )
+    deep = set()
+    if deep8:
+        for op in ops:
+            if op.kind == "regrid" or op.conv_class != "pointwise" or op.params.get("taps", 1) != 1:
+                continue
+            cout, cin = op.params["weight"].shape[:2]
+            nk, no = -(-cin // 32), -(-cout // 32)
+            # only long ops: at 34 blocks and under, 8-block groups timed 1-2.5 us slower
+            # per op (fewer groups balance worse over the two workers); at 132, 4 us faster
+            if op.inputs[0] in tile and no <= nk and grid(shape[op.inputs[0]]).nj >= 64:
+                image, scratch = images[op.name]
+                images[op.name] = (image, max(scratch, 32 * no * 16))
+                deep.add(op.name)
 
     # window: table | parameter images | tensors (each 4 KiB aligned, never reused)
     table_at = T.WIN_LO
@@ -520,13 +553,18 @@ def build_plan(
                 at[dst],
                 at[res] if res else 0,
                 vpar,
-                *((0,) * 6 + tail if tail else ()),
+                *(
+                    (int(src in tile) | int(dst in tile) << 1 | int(res in tile) << 2
+                     | int(op.name in deep) << 3,) + (0,) * 5 + tail
+                    if tail
+                    else ()
+                ),
             )
         else:
             cp = pairs(src)
             extra = (gout.nbin, gout.blk0, gout.ws, gout.h, gout.w, tmp) if s2 else ()
             if tail:
-                extra = (extra or (0,) * 6) + tail
+                extra = (extra or (int(dst in tile) << 1,) + (0,) * 5) + tail
             words(
                 RL.KIND["s2" if s2 else "dw"],
                 cp,
@@ -578,6 +616,7 @@ def build_plan(
                 store,
                 emit,
                 stored,
+                tile,
             )
         job = RL.Job("rs", first=0, end=len(table), ops=[op.name for op in ops], stores=stored)
         job.vtcm_peak = peak = vt.peak
@@ -636,11 +675,38 @@ def build_plan(
     )
 
 
+def _gkey(g):
+    return g.nbin, g.blk0, g.nj, g.ws
+
+
+def _tile_tensors(ops, shape, external, free, parent_of, host_parts, heads):
+    """Tensors a tiles plan keeps in B-tile layout (see build_plan)."""
+    pw1 = lambda op: op.conv_class == "pointwise" and op.params.get("taps", 1) == 1  # noqa: E731
+    fixed = set(external) | set(free) | set(parent_of) | set(host_parts) | {ops[-1].output}
+    if heads:
+        fixed.add(OUTPUT)
+    out = set()
+    for op in ops:
+        t = op.output
+        if op.kind == "regrid" or t in fixed or shape[t][0] % 32:
+            continue
+        if not (pw1(op) or (op.conv_class != "pointwise" and op.params["stride"] == (1, 1))):
+            continue
+        users = [u for u in ops if t in u.inputs]
+        g = grid(shape[t])
+        if users and all(
+            pw1(u) and t in u.inputs[:2] and _gkey(grid(shape[u.inputs[0]])) == _gkey(g) for u in users
+        ):
+            out.add(t)
+    return out
+
+
 def _merged_crop(
     ops, external, free, comps, parent_of, final, last_use, key, vec, vt, load, store, emit,
-    stores=None,
+    stores=None, tile=frozenset(),
 ):
-    """One crop of a merged request; every VTCM block it takes is given back."""
+    """One crop of a merged request; every VTCM block it takes is given back.
+    Tile-layout tensors are 16-vector aligned."""
     stores = stores or [final]
     at = {}
     for b in external:
@@ -656,7 +722,7 @@ def _merged_crop(
                     at[n] = at[par] + off
         else:
             later = [k for k in range(i + 1, len(ops)) if dst in ops[k].inputs]
-            at[dst] = vt.take(vec(dst), top=bool(later) and later[-1] > i + 1)
+            at[dst] = vt.take(vec(dst), top=bool(later) and later[-1] > i + 1, align=16 if dst in tile else 1)
         emit(op, at, vt)
         if par is not None:
             dev = [n for n, src in comps[par] if src == "device"]

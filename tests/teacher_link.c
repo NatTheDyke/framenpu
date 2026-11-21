@@ -8,7 +8,23 @@
 
 fnpu_u32 tl_rs(const fnpu_context *c);
 fnpu_u32 tl_dw(const fnpu_context *c);
+#ifdef RS_POOL
+fnpu_u32 tl_pool_worker(fnpu_u32 w);
+#endif
 
 __attribute__((section(".text.rg_entry"))) fnpu_u32 tl_entry(const fnpu_context *c) {
+#ifdef RS_POOL
+    /* the RG_POOL loader enters workers 1 and 2 here for opcode 111 only */
+    fnpu_u32 w;
+    __asm__ volatile("%0 = htid" : "=r"(w));
+    if (w) return w <= 2u && c->opcode == 111u ? tl_pool_worker(w) : 0u;
+#endif
     return c->opcode == 111u ? tl_rs(c) : tl_dw(c);
 }
+
+#ifdef TL_DIAG_CODE_PAD
+#define RS_STR0(x) #x
+#define RS_XSTR(x) RS_STR0(x)
+/* DIAGNOSTIC: moves every function after the entry by TL_DIAG_CODE_PAD bytes (never executed) */
+__asm__(".section .text.rg_pad,\"ax\",@progbits\n\t.space " RS_XSTR(TL_DIAG_CODE_PAD) "\n\t.text");
+#endif

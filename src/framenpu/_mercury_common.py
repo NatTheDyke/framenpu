@@ -204,7 +204,15 @@ class _Vtcm:
             at, size = self.free[i]
             pad = -at % align
             if size >= n + pad:
-                if top:
+                if top and align > 1:  # the highest aligned start that fits
+                    start = (at + size - n) // align * align
+                    if start < at:
+                        continue
+                    rest = [(at, start - at)] if start > at else []
+                    rest += [(start + n, at + size - start - n)] if at + size > start + n else []
+                    self.free[i : i + 1] = rest
+                    at = start
+                elif top:
                     self.free[i : i + 1] = [(at, size - n)] if size > n else []
                     at += size - n
                 else:
@@ -257,13 +265,14 @@ def payload(plan, crops=1):
     return w.tobytes()
 
 
-def native_ok(row, *, dw_blocks=2, s2_direct=None, pw_group=1, mheads=False, resident=False):
+def native_ok(row, *, dw_blocks=2, s2_direct=None, pw_group=1, mheads=False, resident=False, tiles=False, deep8=False):
     """Mirror of rs_get in tests/teacher_resident_probe.c (True = accepted).
     s2_direct: the decimation phase (0 even, 1 odd) of an RS_S2_DIRECT build, which
     adds bounds on the direct kernel's reads and zero-lane store spill. pw_group: an
     RS_PW_GROUP build's 1x1 scratch, pw_group * (nk + no) * 16 vectors. mheads: an
     RS_MHEADS build, which also accepts kind 8 (3x3 HMX); kind 7 is regrid_ok. resident: an
-    RS_RESIDENT build (word 21 = scratch offset of a resident op)."""
+    RS_RESIDENT build (word 21 = scratch offset of a resident op). tiles: an RS_TILES build
+    (word 15 of kinds 1 and 2 = tile layout flags; see _mercury_layout.build_plan)."""
     if dw_blocks not in (2, 4):
         raise ValueError("dw_blocks must be 2 or 4")
     m = 0xFFFFFFFF
@@ -342,6 +351,17 @@ def native_ok(row, *, dw_blocks=2, s2_direct=None, pw_group=1, mheads=False, res
             or nj & (dw_blocks - 1)
             or 32 * blk0 < reach
             or 32 * (blk0 + nj) + reach > 32 * nb
+        )
+    if tiles and not s2:
+        lay = int(row[15])
+        lim = (15 if deep8 else 7) if kind == 1 else 2 if kind == 2 else 0
+        bad = (
+            bad
+            or lay & ~lim
+            or (lay & 8 and (not lay & 1 or no > k or scr + 32 * 16 * no > SPAN))
+            or (lay & 1 and (cpi | vin) & 15)
+            or (lay & 2 and (cpo | vout) & 15)
+            or (lay & 4 and ((cpo | vres) & 15 or vres == 0))
         )
     return not bad
 

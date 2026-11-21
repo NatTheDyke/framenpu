@@ -492,7 +492,8 @@ def _s2_direct(row, vt, phase):
                 words[q : q + 32] = v
 
 
-def simulate(plan, window, *, s2_phase=1, s2_direct=False, crops=1, resident=None, load=True):
+def simulate(plan, window, *, s2_phase=1, s2_direct=False, crops=1, resident=None, load=True, tiles=False,
+             deep8=False):
     """Run a plan against `window` (bytearray covering WIN_LO..WIN_HI) with the
     kernel's addressing; VTCM starts each resident job filled with NaN. The
     caller performs setup_writes(plan) first, exactly as the harness does; the
@@ -505,7 +506,10 @@ def simulate(plan, window, *, s2_phase=1, s2_direct=False, crops=1, resident=Non
     resident: an RS_RESIDENT plan's persistent VTCM, a (RES_SPAN, 32, 2) float16 array
     whose blob region survives between calls; the borrowed span is refilled with NaN
     each job. Resident images are copied from the window only when `load` (crop 0),
-    as the kernel does when the region is not the session's."""
+    as the kernel does when the region is not the session's. tiles models an RS_TILES
+    build: word 15 of kinds 1 and 2 puts the input (1), output (2) or residual (4) in
+    B-tile layout, vector (pair p, block j) at j * pairs + p; a tile output is not
+    cleared first. Other builds ignore the word."""
     import numpy as np
     from hmx_block_layout import unpack
 
@@ -580,7 +584,8 @@ def simulate(plan, window, *, s2_phase=1, s2_direct=False, crops=1, resident=Non
                             ]
                 continue
             if not native_ok(
-                row, s2_direct=s2_phase if s2_direct else None, mheads=True, resident=resident is not None
+                row, s2_direct=s2_phase if s2_direct else None, mheads=True, resident=resident is not None,
+                tiles=tiles, deep8=deep8,
             ):
                 raise ValueError("invalid resident descriptor")
             kind, cpi, cpo, k, clip, nb, blk0, nj, ws, dpar, npar, vin, vout, vres, vpar = (
@@ -595,13 +600,14 @@ def simulate(plan, window, *, s2_phase=1, s2_direct=False, crops=1, resident=Non
             if not (resident is not None and int(row[21])) or (load and crop == 0):
                 vt[vpar : vpar + npar] = vecs(dpar, npar)
             dst = vout
+            lay = int(row[15]) if tiles and kind in (1, 2) else 0
             if kind == 5 and s2_direct:
                 _s2_direct(row, vt, s2_phase)
                 continue
             if kind == 5:
                 onb, oblk, ows, oh, ow, vout = (int(x) for x in row[15:21])
                 vt[dst : dst + cpo * onb] = 0
-            else:
+            elif not lay & 2:
                 vt[vout : vout + cpo * nb] = 0
             if kind in (1, 8):
                 if (vpar | npar) % 16:
@@ -626,6 +632,8 @@ def simulate(plan, window, *, s2_phase=1, s2_direct=False, crops=1, resident=Non
                                 at = 32 * (vin + q * nb + blk0 + j) + off
                                 rows.append(words[at : at + 32])
                         blk = np.stack(rows)  # [9 cpi, 32, 2]
+                    elif lay & 1:
+                        blk = vt[vin + j * cpi : vin + (j + 1) * cpi]
                     else:
                         blk = vt[vin + blk0 + j : vin + blk0 + j + cpi * nb : nb]  # [cpi, 32, 2]
                     B[: 2 * len(blk)] = blk.astype(np.float64).transpose(0, 2, 1).reshape(2 * len(blk), 32)
@@ -634,16 +642,18 @@ def simulate(plan, window, *, s2_phase=1, s2_direct=False, crops=1, resident=Non
                     if clip:
                         v = np.clip(v, 0, 6).astype(np.float16)
                     if vres:
-                        v = f16(
-                            v.astype(np.float64)
-                            + vt[vres + blk0 + j : vres + blk0 + j + cpo * nb : nb].astype(
-                                np.float64
-                            )
+                        rv = (
+                            vt[vres + j * cpo : vres + (j + 1) * cpo]
+                            if lay & 4
+                            else vt[vres + blk0 + j : vres + blk0 + j + cpo * nb : nb]
                         )
+                        v = f16(v.astype(np.float64) + rv.astype(np.float64))
                     m = vt[bias + cpo + j].view("<u4").reshape(32) != 0
-                    vt[vout + blk0 + j : vout + blk0 + j + cpo * nb : nb] = np.where(
-                        m[None, :, None], v, 0
-                    )
+                    ov = np.where(m[None, :, None], v, 0)
+                    if lay & 2:
+                        vt[vout + j * cpo : vout + (j + 1) * cpo] = ov
+                    else:
+                        vt[vout + blk0 + j : vout + blk0 + j + cpo * nb : nb] = ov
             else:
                 kk, r = k * k, k // 2
                 coef = vt[vpar:].reshape(-1, 2)[: cpi * kk].reshape(cpi, kk, 2).astype(np.float32)
@@ -662,6 +672,11 @@ def simulate(plan, window, *, s2_phase=1, s2_direct=False, crops=1, resident=Non
                 v = np.clip(f16(f16(acc).astype(np.float64) + bv[:, None, :]), 0, 6)
                 m = (vt[bias + cpi : bias + cpi + nj].view("<u4") != 0).reshape(-1)
                 out = np.where(m[None, :, None], v, 0).astype(np.float16)
+                if lay & 2:  # (pair c, block j) at j * cpi + c
+                    vt[vout : vout + nj * cpi] = (
+                        out.reshape(cpi, nj, 32, 2).transpose(1, 0, 2, 3).reshape(-1, 32, 2)
+                    )
+                    continue
                 flat = vt[vout : vout + cpi * nb].reshape(cpi, nb * 32, 2)
                 flat[:, 32 * blk0 : 32 * (blk0 + nj)] = out
                 vt[vout : vout + cpi * nb] = flat.reshape(-1, 32, 2)
@@ -677,13 +692,14 @@ def simulate(plan, window, *, s2_phase=1, s2_direct=False, crops=1, resident=Non
 # ---------------------------------------------------------------- native check mirror
 
 
-def native_ok(row, *, dw_blocks=2, s2_direct=None, pw_group=1, mheads=False, resident=False):
+def native_ok(row, *, dw_blocks=2, s2_direct=None, pw_group=1, mheads=False, resident=False, tiles=False, deep8=False):
     """Mirror of rs_get in tests/teacher_resident_probe.c (True = accepted).
     s2_direct: the decimation phase (0 even, 1 odd) of an RS_S2_DIRECT build, which
     adds bounds on the direct kernel's reads and zero-lane store spill. pw_group: an
     RS_PW_GROUP build's 1x1 scratch, pw_group * (nk + no) * 16 vectors. mheads: an
     RS_MHEADS build, which also accepts kind 8 (3x3 HMX); kind 7 is regrid_ok. resident: an
-    RS_RESIDENT build (word 21 = scratch offset of a resident op)."""
+    RS_RESIDENT build (word 21 = scratch offset of a resident op). tiles: an RS_TILES build
+    (word 15 of kinds 1 and 2 = tile layout flags; see _mercury_layout.build_plan)."""
     if dw_blocks not in (2, 4):
         raise ValueError("dw_blocks must be 2 or 4")
     m = 0xFFFFFFFF
@@ -762,6 +778,17 @@ def native_ok(row, *, dw_blocks=2, s2_direct=None, pw_group=1, mheads=False, res
             or nj & (dw_blocks - 1)
             or 32 * blk0 < reach
             or 32 * (blk0 + nj) + reach > 32 * nb
+        )
+    if tiles and not s2:
+        lay = int(row[15])
+        lim = (15 if deep8 else 7) if kind == 1 else 2 if kind == 2 else 0
+        bad = (
+            bad
+            or lay & ~lim
+            or (lay & 8 and (not lay & 1 or no > k or scr + 32 * 16 * no > SPAN))
+            or (lay & 1 and (cpi | vin) & 15)
+            or (lay & 2 and (cpo | vout) & 15)
+            or (lay & 4 and ((cpo | vres) & 15 or vres == 0))
         )
     return not bad
 

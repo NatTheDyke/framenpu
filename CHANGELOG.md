@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+- The resident Mercury image is now `5d15e715…` with loader `cc81fb7e…`, built
+  with `--hmx-inline --pool --tiles --post-batch --pw-deep --pw-lg 3 --code-kib
+  20`. Workers 1 and 2 run the depthwise, stride-2 and 1x1 post work while
+  worker 0 drives HMX. Tensors that only 1x1 ops read are kept in B-tile
+  layout, so those ops no longer gather their inputs. Posts are batched four
+  vectors at a time. The full-resolution 1x1 ops run 8-block groups in a larger
+  scratch that the planner flags in descriptor word 15 (bit 8). The image
+  reservation grows from 16 to 20 KiB (0x1ff0000..0x1ff5000, seal vector
+  0x1ff4f80); the runtime reads the size from `link.json` and accepts only 16
+  or 20 KiB. DSP time per crop on the Frame fell from 2.96 to 1.63 ms, with
+  bit-identical outputs. In a live A/B/A/B the DSP body of a 1-crop request
+  fell from about 3.0 to 1.62 ms and the service's handling time from 5.1 to
+  3.7 ms.
+
+- The resident Mercury image (`9160e4c7…`) is now built with `--omit-fp
+  --pw-pipe`. Without frame pointers, the 1x1 op's helper calls stop storing
+  frames to the stack in cached DDR, and the barrier after every eight tiles no
+  longer waits about 1.9 µs for those stores to finish. With the stall gone,
+  the overlapped gather and post loops of `--pw-pipe` pay off. DSP time per
+  crop on the Frame fell from 3.35 to 2.96 ms (1x1 ops 1.49 to 1.10 ms), with
+  bit-identical outputs on 192 requests. In a live A/B/A/B the service's DSP
+  wait per request fell from 3.95 to 3.46 ms. The loader is unchanged.
+
 - Mercury parameter images can stay resident in VTCM between requests
   (`build_teacher_link.py --resident`, image `265fc6f4…`), in the FeatureNN
   model-blob region. The firmware reloads that region before FeatureNN's next
