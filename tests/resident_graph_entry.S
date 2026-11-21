@@ -12,6 +12,22 @@
  * selected alias; everything else reaches the loader's own frame_job.
  */
 #define FNPU_ENTRY_FRAME_BYTES 80
+#ifdef TL_LINK_ENTRY
+/* The slot runs uncached, so every packet is fetched from DDR again each time
+ * it executes (~0.3 us per packet). A loop spent ~3 us per vector on the 64-vector
+ * VTCM backup and restore; straight-line copies pairing a load and a store per
+ * packet take ~0.33 us. Copies 64 vectors from r0 to r1 (both advanced);
+ * clobbers v0 and v1. Teacher linked (Mercury) loader only; the others keep the loops. */
+.macro vtcm_copy64
+ { v0 = vmem(r0++#1) }
+ .rept 31
+ { v1 = vmem(r0++#1); vmem(r1++#1) = v0 }
+ { v0 = vmem(r0++#1); vmem(r1++#1) = v1 }
+ .endr
+ { v1 = vmem(r0++#1); vmem(r1++#1) = v0 }
+ { vmem(r1++#1) = v1 }
+.endm
+#endif
 .section .text.entry,"ax",@progbits
 .global custom_job
 custom_job:
@@ -41,11 +57,19 @@ custom_job:
  { evb = r0 }
  { isync }
  { r19 = ##0xf0a93000 }
+#ifdef RG_STAMP_RESTORED
+ /* timing instrument: entry, before the VTCM backup (worker 2's unused status words 14-15) */
+ { r1:0 = c31:30 }
+ { memd(r16+#184) = r1:0 }
+#endif
  { r0 = memw(r19+#12) }
  { p0 = tstbit(r0,#0) }
  { if (!p0) jump execute }
  { r0 = ##0x31000000 }
  { r1 = ##0xf0a94000 }
+#ifdef TL_LINK_ENTRY
+ vtcm_copy64
+#else
  { r2 = #64 }
 backup_loop:
  { v0 = vmem(r0+#0) }
@@ -55,6 +79,7 @@ backup_loop:
  { r2 = add(r2,#-1) }
  { p0 = cmp.eq(r2,#0) }
  { if (!p0) jump backup_loop }
+#endif
  { barrier }
  { r0 = #1 }
  { memw(r16+#36) = r0 }
@@ -87,6 +112,11 @@ resident_cache_recovered:
  { r0 = memw(r16+#36) }
  { p0 = cmp.eq(r0,#0) }
  { if (p0) jump registers }
+#ifdef TL_LINK_ENTRY
+ { r1 = ##0x31000000 }
+ { r0 = ##0xf0a94000 }
+ vtcm_copy64
+#else
  { r0 = ##0x31000000 }
  { r1 = ##0xf0a94000 }
  { r2 = #64 }
@@ -98,11 +128,22 @@ restore_loop:
  { r2 = add(r2,#-1) }
  { p0 = cmp.eq(r2,#0) }
  { if (!p0) jump restore_loop }
+#endif
  { barrier }
 registers:
+#ifdef RG_STAMP_RESTORED
+ /* timing instrument: after the VTCM restore (worker 0's status words 14-15) */
+ { r1:0 = c31:30 }
+ { memd(r16+#56) = r1:0 }
+#endif
  { evb = r18 }
  { ssr = r17 }
  { isync }
+#ifdef RG_STAMP_RESTORED
+ /* timing instrument: after the context restore (worker 1's unused status words 14-15) */
+ { r1:0 = c31:30 }
+ { memd(r16+#120) = r1:0 }
+#endif
 finish:
  { barrier }
  { r0 = r16 }

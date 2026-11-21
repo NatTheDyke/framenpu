@@ -117,6 +117,7 @@ def build(
     replay=False,
     mheads=False,
     resident=False,
+    loader_stamp=False,
 ):
     if resident and not (replay and mheads):
         raise ValueError("resident parameters are an option of the replay + mheads image")
@@ -196,7 +197,8 @@ def build(
     folder = output / "loader"
     folder.mkdir(parents=True, exist_ok=True)
     objects = [
-        compile_(folder, 0, TESTS / "resident_graph_entry.S", "-DRG_LINK_ENTRY", "-DTL_LINK_ENTRY"),
+        compile_(folder, 0, TESTS / "resident_graph_entry.S", "-DRG_LINK_ENTRY", "-DTL_LINK_ENTRY",
+                 *(("-DRG_STAMP_RESTORED",) if loader_stamp else ())),
         compile_(folder, 1, SDK / "hmx.S"),
         compile_(folder, 2, TESTS / "teacher_link_admin.c"),
     ]
@@ -304,6 +306,10 @@ def main():
         "--resident", action="store_true",
         help="parameter images resident in the FeatureNN blob region (replay + mheads)",
     )
+    p.add_argument(
+        "--loader-stamp", action="store_true",
+        help="timing instrument: worker 0 stamps c31:30 around the VTCM backup and restore (status words 14-15)",
+    )
     args = p.parse_args()
     r = build(
         args.output,
@@ -323,6 +329,7 @@ def main():
         replay=args.replay,
         mheads=args.mheads,
         resident=args.resident,
+        loader_stamp=args.loader_stamp,
     )
     print(
         json.dumps(

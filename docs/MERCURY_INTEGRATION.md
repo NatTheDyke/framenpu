@@ -34,7 +34,7 @@ python /path/to/framenpu/tools/build_teacher_link.py --stride2 --s2-even \
 
 Deploy that build's `link.json`, `teacher_link.bin` and
 `teacher_link_loader.fjob` together. The runtime accepts only the qualified image
-`d7a78a81…` and loader `72280ad9…`, and the pinned Mercury model `40c0daa5…`.
+`d7a78a81…` and loader `de3cc52a…`, and the pinned Mercury model `40c0daa5…`.
 No weights are redistributed. In the patched tracker, select:
 
 ```sh
