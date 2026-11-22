@@ -117,6 +117,11 @@ def build(
     replay=False,
     mheads=False,
     resident=False,
+    res_slots=False,
+    cbias=False,
+    win_wide=False,
+    s2_rev=False,
+    multi=False,
     loader_stamp=False,
     pw_ablate=0,
     clock_probe=False,
@@ -150,6 +155,16 @@ def build(
         raise ValueError("--tiles is an option of the pipelined resident image")
     if pw_ablate and not (0 < pw_ablate < 32 and pw_group > 1 and not pw_profile):
         raise ValueError("--pw-ablate is a timing diagnostic of the unprofiled grouped build (1..15)")
+    if res_slots and not resident:
+        raise ValueError("--res-slots is an option of --resident")
+    if cbias and not res_slots:
+        raise ValueError("--cbias is an option of the --res-slots image")
+    if win_wide and not res_slots:
+        raise ValueError("--win-wide is an option of the --res-slots image")
+    if s2_rev and not post_batch:
+        raise ValueError("--s2-rev is an option of the --post-batch build")
+    if multi and not (res_slots and pool and replay) or multi and pool_diag:
+        raise ValueError("--multi is an option of the pooled --res-slots replay build")
     if resident and not (replay and mheads):
         raise ValueError("resident parameters are an option of the replay + mheads image")
     if mheads and (not stride2 or heads or stem):
@@ -188,6 +203,8 @@ def build(
         # rs_job's frame in the --pool build is 8 bytes smaller than the plain
         # build's frame_job; the 1x1 post is ~60 us/crop slower at any other depth
         pool_sp_pad = 8 if pool else 0
+        if multi:  # rs_job(c, seg) keeps three more words: its frame is the plain depth already
+            pool_sp_pad = 0
     if pool_solo and not pool:
         raise ValueError("--pool-solo is a diagnostic of the --pool build")
     tools = Toolchain.discover()
@@ -279,6 +296,11 @@ def build(
             *(["-DRS_REPLAY"] if replay else []),
             *(["-DRS_MHEADS"] if mheads else []),
             *(["-DRS_RESIDENT"] if resident else []),
+            *(["-DRS_RES_SLOTS"] if res_slots else []),
+            *(["-DRS_CBIAS"] if cbias else []),
+            *(["-DRS_WIN_WIDE"] if win_wide else []),
+            *(["-DRS_S2_REV"] if s2_rev else []),
+            *(["-DRS_MULTI"] if multi else []),
             *([f"-DRS_PW_ABLATE={pw_ablate}"] if pw_ablate else []),
             *(["-DRS_CLOCK_PROBE"] if clock_probe else []),
             *(["-DRS_PW_PIPE"] if pw_pipe else []),
@@ -331,6 +353,11 @@ def build(
         "replay": replay,
         "mheads": mheads,
         "resident": resident,
+        **({"res_slots": 4} if res_slots else {}),
+        **({"cbias": True} if cbias else {}),
+        **({"win_hi": "0x1ff0000"} if win_wide else {}),
+        **({"s2_rev": True} if s2_rev else {}),
+        **({"multi": 2} if multi else {}),
         **({"pw_ablate": pw_ablate} if pw_ablate else {}),
         **({"clock_probe": True} if clock_probe else {}),
         **({"pw_pipe": True} if pw_pipe else {}),
@@ -424,6 +451,16 @@ def main():
                    help="DIAGNOSTIC: bytes the frame_job wrapper moves the stack down (needs a wrapper build)")
     p.add_argument("--pool-solo", action="store_true",
                    help="DIAGNOSTIC (same outputs): with --pool, worker 0 runs every share; workers leave at once")
+    p.add_argument("--res-slots", action="store_true",
+                   help="(--resident) four residency tag slots: models resident side by side")
+    p.add_argument("--cbias", action="store_true",
+                   help="(--res-slots) packed biases, expanded per op at the top of the blob region")
+    p.add_argument("--win-wide", action="store_true",
+                   help="(--res-slots) window up to the image reservation at 0x1ff0000 (5.69 MiB)")
+    p.add_argument("--multi", action="store_true",
+                   help="(--res-slots --pool) requests of one or two segments (two models' tables)")
+    p.add_argument("--s2-rev", action="store_true",
+                   help="(--post-batch) stride-2 column blocks last to first (rows wider than 32)")
     p.add_argument("--hmx-inline", action="store_true",
                    help="HMX sequences inline in the resident operators (same instructions, no calls)")
     p.add_argument("--pw-pipe", action="store_true",
@@ -447,6 +484,11 @@ def main():
         replay=args.replay,
         mheads=args.mheads,
         resident=args.resident,
+        res_slots=args.res_slots,
+        cbias=args.cbias,
+        win_wide=args.win_wide,
+        s2_rev=args.s2_rev,
+        multi=args.multi,
         loader_stamp=args.loader_stamp,
         pw_ablate=args.pw_ablate,
         clock_probe=args.clock_probe,

@@ -143,11 +143,14 @@ class Device:
         _phase_times=None,
         _held_power=None,
         _expect_s=0.0,
+        _while_waiting=None,
     ):
         if not isinstance(job, Job):
             raise TypeError("job must be a Job")
         if _prepare is not None and not callable(_prepare):
             raise TypeError("private prepare hook must be callable")
+        if _while_waiting is not None and not callable(_while_waiting):
+            raise TypeError("private wait hook must be callable")
         if _phase_times is not None and type(_phase_times) is not dict:
             raise TypeError("private phase timing output must be a dict")
         if use_direct and not job.supports_direct:
@@ -189,6 +192,7 @@ class Device:
             mark("claim_ms")
             power = None
             backup = []
+            waiting_error = None
             published = False
             returned = False
             try:
@@ -240,9 +244,19 @@ class Device:
                     t.publish(direct=True)
                 else:
                     t.publish()
+                if _while_waiting is not None:
+                    # Host-only work of the caller (no device access) in place of part of the
+                    # expected-time sleep; the caller sizes it to fit. Its failure is raised
+                    # only after this job has completed and been acknowledged.
+                    try:
+                        _while_waiting()
+                    except BaseException as exc:
+                        waiting_error = exc
                 if 0 < _expect_s < self.timeout:
                     # The caller's expected DSP time: sleep through it instead of polling.
-                    time.sleep(_expect_s)
+                    left = _expect_s - (time.monotonic() - started)
+                    if left > 0:
+                        time.sleep(left)
                 t.wait_complete(seq, self.timeout)
                 mark("publish_wait_ms")
                 returned = True
@@ -270,7 +284,8 @@ class Device:
                     raise JobFailed(
                         "DSP kernel failed (worker, error, fault registers): %r" % failed
                     )
-                return result
+                if waiting_error is None:
+                    return result
             except BaseException as exc:
                 if (published and not returned) or isinstance(exc, RecoveryRequired):
                     t.poisoned = True
@@ -293,6 +308,8 @@ class Device:
                     t.memory[off : off + len(saved)] = saved
                 t.release_unsubmitted()
                 raise
+            # The job completed and was acknowledged; only the caller's wait hook failed.
+            raise waiting_error
 
     def _hold_power(self):
         """Power HMX on under the operation gate and keep it on after release.

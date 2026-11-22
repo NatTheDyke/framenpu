@@ -1,11 +1,11 @@
 {
   "format": "framenpu-host-native",
-  "abi": 3,
+  "abi": 4,
   "target": "aarch64-linux-gnu",
-  "bytes": 7904,
-  "sha256": "f0f7416b62e50f81f9046a1292bbeff0beae512634e2504fa5fc2c7b0dbcedca",
+  "bytes": 9168,
+  "sha256": "80f96f9bd7d410ac63c105954200591d76f533e05fc6d6a7b7ad3b5c0bce1011",
   "source_sha256": {
-    "host/fnpu_host.c": "6356d6b4e2f060d3e7e02ac58f6d1229a64da5ef84c67157b0ea349f4882ac65"
+    "host/fnpu_host.c": "2b4876f85810f45b24668a01ed44e1bfb2026ae2f41b48c7855f8b3af010aeb5"
   },
   "compiler_flags": [
     "-O2",
@@ -41,7 +41,8 @@
     "fnpu_dense",
     "fnpu_conv1x1",
     "fnpu_avgpool",
-    "fnpu_hint"
+    "fnpu_hint",
+    "fnpu_conv1x1_f16"
   ],
   "toolchain": {
     "clang": "clang version 23.1.5",

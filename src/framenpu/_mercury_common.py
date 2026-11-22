@@ -11,6 +11,8 @@ import math
 R = 2
 META_BYTES = 1024
 WIN_LO, WIN_HI = 0x1A40000, 0x1F00000
+WIN_HI_WIDE = 0x1FF0000  # RS_WIN_WIDE: up to the image reservation (canary-soaked arena)
+XB_N = 512  # RS_CBIAS: expansion vectors at the top of the blob region
 VTCM_SPAN_VECTORS = (0x311E0000 - 0x31002000) // 128
 SPAN = VTCM_SPAN_VECTORS
 # RS_RESIDENT: parameter images in the FeatureNN model-blob region (0x311e0000..0x316eea80),
@@ -143,6 +145,19 @@ def _al(n, a=128):
     return (n + a - 1) // a * a
 
 
+def _packed_pairs(values, pairs):
+    """RS_CBIAS: FP16 values -> one word per channel pair (even | odd << 16), padded to
+    whole vectors; the kernel splats word pr into bias vector pr."""
+    import numpy as np
+
+    h = np.zeros(2 * pairs, np.float16)
+    h[: len(values)] = np.asarray(values, np.float32).astype(np.float16)
+    w = h.view("<u2").astype("<u4")
+    word = np.zeros(-(-pairs // 32) * 32, "<u4")
+    word[:pairs] = w[0::2] | (w[1::2] << 16)
+    return word.tobytes()
+
+
 def _splat_pairs(values, pairs):
     """FP16 values -> one splatted vector per channel pair (word = even | odd << 16)."""
     import numpy as np
@@ -182,11 +197,11 @@ class Plan:
     crop_stride: int = 0  # bytes between crop k's and crop k+1's load/store addresses
 
 
-def replay_row(row, k, stride):
+def replay_row(row, k, stride, win_hi=WIN_HI):
     """A descriptor as the RS_REPLAY kernel runs it for crop k: load and store
     window addresses (word 9) moved by k * stride, everything else unchanged."""
     row = list(row)
-    if row[0] in (KIND["load"], KIND["store"]) and row[9] <= WIN_HI:
+    if row[0] in (KIND["load"], KIND["store"]) and row[9] <= win_hi:
         row[9] += k * stride
     return row
 
@@ -265,14 +280,19 @@ def payload(plan, crops=1):
     return w.tobytes()
 
 
-def native_ok(row, *, dw_blocks=2, s2_direct=None, pw_group=1, mheads=False, resident=False, tiles=False, deep8=False):
+def native_ok(row, *, dw_blocks=2, s2_direct=None, pw_group=1, mheads=False, resident=False, tiles=False, deep8=False,
+              cbias=False, win_hi=WIN_HI):
     """Mirror of rs_get in tests/teacher_resident_probe.c (True = accepted).
     s2_direct: the decimation phase (0 even, 1 odd) of an RS_S2_DIRECT build, which
     adds bounds on the direct kernel's reads and zero-lane store spill. pw_group: an
     RS_PW_GROUP build's 1x1 scratch, pw_group * (nk + no) * 16 vectors. mheads: an
     RS_MHEADS build, which also accepts kind 8 (3x3 HMX); kind 7 is regrid_ok. resident: an
     RS_RESIDENT build (word 21 = scratch offset of a resident op). tiles: an RS_TILES build
-    (word 15 of kinds 1 and 2 = tile layout flags; see _mercury_layout.build_plan)."""
+    (word 15 of kinds 1 and 2 = tile layout flags; see _mercury_layout.build_plan).
+    cbias: an RS_CBIAS build (packed biases; resident images end XB_N below RES_SPAN).
+    win_hi: the build's window top (WIN_HI_WIDE for RS_WIN_WIDE)."""
+    if cbias and not resident:
+        raise ValueError("cbias is an option of the resident build")
     if dw_blocks not in (2, 4):
         raise ValueError("dw_blocks must be 2 or 4")
     m = 0xFFFFFFFF
@@ -291,11 +311,12 @@ def native_ok(row, *, dw_blocks=2, s2_direct=None, pw_group=1, mheads=False, res
     p3 = mheads and kind == 8
     align = ((vpar | npar) << 3) if kind == 1 or p3 else 0
     res = rscr != 0
-    bad = (big > 0x3FFF) or ((kind - 1) & m > 4 and not p3) or vpar + npar > (RES_SPAN if res else SPAN) or (dpar | align) & 127
+    top = RES_SPAN - XB_N if cbias else RES_SPAN
+    bad = (big > 0x3FFF) or ((kind - 1) & m > 4 and not p3) or vpar + npar > (top if res else SPAN) or (dpar | align) & 127
     bad = bad or (resident and vpar >= RES_SPAN) or (res and vpar < RES_LO) or (res and kind in (3, 4))
     bad = bad or (res and (kind == 1 or p3) and rscr & 15)
-    bad = bad or ((dpar - WIN_LO) & m) + 128 * npar > WIN_HI - WIN_LO or vpar == 0
-    bad = bad or dpar < WIN_LO or dpar > WIN_HI or npar > (WIN_HI - dpar) // 128
+    bad = bad or ((dpar - WIN_LO) & m) + 128 * npar > win_hi - WIN_LO or vpar == 0
+    bad = bad or dpar < WIN_LO or dpar > win_hi or npar > (win_hi - dpar) // 128
     if kind in (3, 4) or bad:
         return not bad
     out_nb = onb if s2 else nb
@@ -336,7 +357,8 @@ def native_ok(row, *, dw_blocks=2, s2_direct=None, pw_group=1, mheads=False, res
         or vin + cpi * nb > SPAN
         or vout + cpo * out_nb > SPAN
         or vres + cpo * nb > SPAN
-        or bias + cpo + nj > vpar + npar
+        or bias + (-(-cpo // 32) if cbias else cpo) + nj > vpar + npar
+        or (cbias and cpo + nj > XB_N)
         or scr + ((pw_group * (k + no) if pw_group > 1 else k) * 16 if pw else cpi * kk) > SPAN
     )
     if p3:

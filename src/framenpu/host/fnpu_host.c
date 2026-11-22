@@ -16,6 +16,8 @@
  *     whose summation order the reference does not fix either.
  *   - average pools of FP16-valued inputs: the FP64 sum of at most 36 FP16 values
  *     is exact, so the result equals NumPy's mean exactly.
+ *   - conv1x1 on a spatial FP16 map (the reference's "hmx" unit): FP64 products and sums
+ *     of FP16 values rounded once to FP16, plus the FP16 bias in FP32, rounded to FP16.
  */
 typedef unsigned short u16;
 typedef unsigned int u32;
@@ -84,6 +86,26 @@ static u16 f2h(float f) {
     return (u16)(sign | q);
 }
 
+/* FP64 -> FP16 with a single rounding (NumPy's float64.astype(float16)): round to odd
+ * into FP32 first, whose 24 bits leave enough guard bits that the RNE step to FP16 is
+ * the correctly rounded result. */
+static u16 d2h(double d) {
+    if (d != d)
+        return 0x7e00u;
+    double a = d < 0.0 ? -d : d;
+    if (a >= 65520.0)
+        return (u16)((d < 0.0 ? 0x8000u : 0u) | 0x7c00u);
+    float f = (float)d;
+    if ((double)f != d) {
+        u32 u = bits(f);
+        double af = f < 0.0f ? -(double)f : (double)f;
+        if (af > a)
+            u -= 1u;                   /* truncate: one step toward zero */
+        f = from_bits(u | 1u);         /* sticky bit: odd */
+    }
+    return f2h(f);
+}
+
 /* FP16 -> FP32, exact. */
 static float h2f(u16 h) {
     u32 s = (u32)(h & 0x8000u) << 16, e = (h >> 10) & 0x1fu, m = h & 0x3ffu;
@@ -100,7 +122,7 @@ static float relu6(float v) { return v < 0.0f ? 0.0f : (v > 6.0f ? 6.0f : v); }
 
 /* ---------------------------------------------------------------- exported */
 
-EXPORT i32 fnpu_abi(void) { return 3; }
+EXPORT i32 fnpu_abi(void) { return 4; }
 
 /* out[i] = base[word[i]] for i = 0 .. n-1, in order: one 32-bit load per entry (volatile:
  * never merged, widened, reordered or skipped). Read-only; used on a PROT_READ mapping of
@@ -276,4 +298,27 @@ EXPORT i32 fnpu_hint(const float *wt, const float *b, const float *kp, const flo
         bad += !finite16(out[j]);
     }
     return bad;
+}
+
+/* 1x1 conv of an FP16 map (mercury._conv, unit "hmx"): y[o][p] = FP16(FP32(FP16(sum over
+ * k = 0 .. cin-1, in order, of FP64(w[o][k]) * FP64(x[k][p]))) + b[o]), then relu6. w (cout x
+ * cin), b and x (cin planes of hw) hold FP16 values as FP32; acc: hw doubles; y: cout x hw. */
+EXPORT void fnpu_conv1x1_f16(const float *w, const float *b, const float *x, i32 cout, i32 cin,
+                             i32 hw, i32 act_relu6, double *acc, float *y) {
+    for (i32 o = 0; o < cout; o++) {
+        for (i32 p = 0; p < hw; p++)
+            acc[p] = 0.0;
+        const float *wr = w + (usize)o * (usize)cin;
+        for (i32 k = 0; k < cin; k++) {
+            double wk = (double)wr[k];
+            const float *xr = x + (usize)k * (usize)hw;
+            for (i32 p = 0; p < hw; p++)
+                acc[p] += wk * (double)xr[p];
+        }
+        float *yr = y + (usize)o * (usize)hw;
+        for (i32 p = 0; p < hw; p++) {
+            float v = h2f(f2h(h2f(d2h(acc[p])) + b[o]));
+            yr[p] = act_relu6 ? relu6(v) : v;
+        }
+    }
 }

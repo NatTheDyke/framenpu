@@ -47,6 +47,21 @@ OUTPUTS = {
     "scalar_extras": (1, 8),
     "curls": (1, 10),
 }
+# Two-view 3D stereo student (distill make_stereo.py + make_stereo3d.py): Mercury's trunk on both
+# cameras' crops as channels, both views' hints, the two crops' pair geometry, view-1 copies of the
+# heatmap heads and a joints3d head on the trunk features. Unpinned (a retrained model) only.
+S3D_INPUTS = {"inputImg": (1, 2, 128, 128), "lastKeypoints": (1, 84), "useLastKeypoints": (1,), "geom": (1, 16)}
+S3D_OUTPUTS = OUTPUTS | {
+    "heatmap_xy_1": (1, 21, 22, 22),
+    "heatmap_depth_1": (1, 21, 22),
+    "joints3d": (1, 63),
+}
+# Mercury's hand detector (grayscale_detection_160x160.onnx): the keypoint trunk's operators on a
+# 160x160 image, then three Gemm layers to 8 values that four Slices (one Sigmoid) split per side.
+DET_SIZE = 160
+DET_INPUTS = {"inputImg": (1, 1, DET_SIZE, DET_SIZE)}
+DET_OUTPUTS = {"hand_exists": (1, 2), "cx": (1, 2), "cy": (1, 2), "size": (1, 2)}
+SIGNATURES = ((INPUTS, OUTPUTS), (S3D_INPUTS, S3D_OUTPUTS), (DET_INPUTS, DET_OUTPUTS))
 BN_EPSILON_MAX = 1e-3
 
 
@@ -75,6 +90,18 @@ class KeypointModel:
     sha256: str
     pinned: bool
     params: int
+    inputs: dict = field(default_factory=lambda: dict(INPUTS))
+    outputs: dict = field(default_factory=lambda: dict(OUTPUTS))
+
+    @property
+    def detector(self):
+        """the hand detector graph (DET_INPUTS/DET_OUTPUTS), not a keypoint network"""
+        return "hand_exists" in self.outputs
+
+    @property
+    def views(self):
+        """crops per inference: 1 (Mercury) or 2 (the stereo student's two cameras)"""
+        return self.inputs["inputImg"][1]
 
     def op(self, name):
         for op in self.ops:
@@ -105,24 +132,28 @@ def _clip6(graph, node):
         raise UnsupportedOperator(f"{node.name}: only ReLU6 clips are supported, got {lo},{hi}")
 
 
-def lower(graph, *, require_pin=True):
-    """Validate a parsed ONNX graph against the Mercury keypoint structure."""
+def lower(graph, *, require_pin=True, detector=False):
+    """Validate a parsed ONNX graph against the Mercury keypoint structure, or with
+    ``detector`` against the Mercury hand detector's."""
     import numpy as np
 
-    if require_pin and graph.sha256 != KEYPOINT_SHA256:
-        raise InvalidModel("Mercury keypoint model hash differs from the pinned model")
+    pin, what = (DETECTOR_SHA256, "detector") if detector else (KEYPOINT_SHA256, "keypoint")
+    if require_pin and graph.sha256 != pin:
+        raise InvalidModel(f"Mercury {what} model hash differs from the pinned model")
     if graph.opset != 13:
         raise InvalidModel(f"expected opset 13, got {graph.opset}")
-    if {v.name: v.shape for v in graph.inputs} != INPUTS:
-        raise InvalidModel("Mercury keypoint inputs differ")
-    if {v.name: v.shape for v in graph.outputs} != OUTPUTS:
-        raise InvalidModel("Mercury keypoint outputs differ")
+    sig = ({v.name: v.shape for v in graph.inputs}, {v.name: v.shape for v in graph.outputs})
+    allowed = SIGNATURES[2:] if detector else SIGNATURES[:2]
+    if sig not in allowed:
+        known = any(sig[0] == i for i, _ in allowed)
+        raise InvalidModel("Mercury %s %s differ" % (what, "outputs" if known else "inputs"))
+    INS, OUTS = sig
 
     consumers = {}
     for node in graph.nodes:
         for name in node.inputs:
             consumers.setdefault(name, []).append(node)
-    for out in OUTPUTS:
+    for out in OUTS:
         consumers.setdefault(out, []).append(None)
 
     def sole(name):
@@ -135,7 +166,7 @@ def lower(graph, *, require_pin=True):
             raise InvalidModel(f"{name}: expected FP32 weights")
         return t.array().astype(np.float32)
 
-    shapes = {k: v[1:] for k, v in INPUTS.items()}
+    shapes = {k: v[1:] for k, v in INS.items()}
     alias = {}  # tensor name -> lowered tensor name
     ops, consumed, scalars = [], set(), {"useLastKeypoints"}
 
@@ -328,19 +359,47 @@ def lower(graph, *, require_pin=True):
                 raise InvalidModel(f"{node.name}: Concat spatial mismatch")
             shape = (sum(p[0] for p in parts),) + parts[0][1:]
             emit(Op(node.name, "concat", ins, node.outputs[0], {}, shape))
+        elif t == "Slice" and detector:
+            # the detector's split of its last Gemm: constant [start, end) on axis 1, step 1
+            _attrs(node, set())
+            if len(node.inputs) != 5:
+                raise UnsupportedOperator(f"{node.name}: Slice needs constant starts/ends/axes/steps")
+            start, end, axis, step = (
+                [int(v) for v in graph.tensor(x).array().ravel()] for x in node.inputs[1:]
+            )
+            shp = shapes[src(node.inputs[0])]
+            if axis != [1] or step != [1] or len(shp) != 1 or not 0 <= start[0] < end[0] <= shp[0]:
+                raise UnsupportedOperator(f"{node.name}: only a step-1 Slice of a vector")
+            emit(Op(node.name, "slice", (src(node.inputs[0]),), node.outputs[0],
+                    {"start": start[0], "end": end[0]}, (end[0] - start[0],)))
+        elif t == "Sigmoid" and detector:
+            _attrs(node, set())
+            shp = shapes[src(node.inputs[0])]
+            emit(Op(node.name, "sigmoid", (src(node.inputs[0]),), node.outputs[0], {}, shp))
         else:
             raise UnsupportedOperator(f"{node.name}: {t} is not part of the Mercury keypoint graph")
 
     produced = {op.output for op in ops}
-    for out, shape in OUTPUTS.items():
+    for out, shape in OUTS.items():
         if out not in produced or shapes[out] != shape[1:]:
             raise InvalidModel(f"output {out} not produced with shape {shape}")
     params = sum(t.count for t in graph.initializers.values())
-    return KeypointModel(ops, graph.sha256, graph.sha256 == KEYPOINT_SHA256, params)
+    return KeypointModel(ops, graph.sha256, graph.sha256 == pin, params, dict(INS), dict(OUTS))
 
 
 def load_keypoint(path, *, require_pin=True):
     return lower(onnx_graph.load(path), require_pin=require_pin)
+
+
+def load_detector(path, *, require_pin=True):
+    return lower(onnx_graph.load(path), require_pin=require_pin, detector=True)
+
+
+def load_model(path, *, require_pin=True):
+    """A keypoint network or the hand detector, told apart by the graph's outputs."""
+    graph = onnx_graph.load(path)
+    detector = {v.name for v in graph.outputs} == set(DET_OUTPUTS)
+    return lower(graph, require_pin=require_pin, detector=detector)
 
 
 # ---------------------------------------------------------------- numerics
@@ -456,7 +515,7 @@ def run(model, feeds, numerics="fp32", keep=False, host_prefix=None):
 
     ``feeds`` maps ONNX input names to arrays (batch dimension optional).
     ``numerics`` is ``"fp32"`` (exact reference, FP64 accumulation) or
-    ``"fp16"`` (device contract). Returns the four outputs with batch 1, and
+    ``"fp16"`` (device contract). Returns the model's outputs with batch 1, and
     with ``keep=True`` also every intermediate tensor.
 
     ``host_prefix`` names the last op of an FP32 host prefix: ops up to and
@@ -467,24 +526,19 @@ def run(model, feeds, numerics="fp32", keep=False, host_prefix=None):
 
     if numerics not in ("fp32", "fp16"):
         raise ValueError("numerics must be fp32 or fp16")
-    img = np.asarray(feeds["inputImg"], np.float32).reshape(1, 128, 128)
-    hint = np.asarray(feeds["lastKeypoints"], np.float32).reshape(42)
-    flag = np.asarray(feeds["useLastKeypoints"], np.float32).reshape(1)
-    if not (np.isfinite(img).all() and np.isfinite(hint).all() and np.isfinite(flag).all()):
+    ins = {k: np.asarray(feeds[k], np.float32).reshape(v[1:] if len(v) > 1 else v) for k, v in model.inputs.items()}
+    if not all(np.isfinite(v).all() for v in ins.values()):
         raise ValueError("non-finite input")
+    img = ins.pop("inputImg")
     if host_prefix is not None and host_prefix not in {op.name for op in model.ops}:
         raise ValueError(f"unknown host_prefix op {host_prefix!r}")
     mode = "fp32" if host_prefix is not None else numerics
-    t = {
-        "inputImg": _f16(img) if mode == "fp16" else img,
-        "lastKeypoints": hint,
-        "useLastKeypoints": flag,
-    }
+    t = {"inputImg": _f16(img) if mode == "fp16" else img, **ins}
     for op in model.ops:
         t[op.output] = _step(op, t, mode, numerics)
         if op.name == host_prefix:
             mode = numerics
-    outs = {k: t[k].reshape(OUTPUTS[k]).astype(np.float32) for k in OUTPUTS}
+    outs = {k: t[k].reshape(v).astype(np.float32) for k, v in model.outputs.items()}
     return (outs, t) if keep else outs
 
 
@@ -535,26 +589,38 @@ def _step(op, t, mode, numerics):
         return _f16(v) if numerics == "fp16" else v  # the hint plane enters the FP16 grid
     if op.kind == "concat":
         return np.concatenate([t[i] for i in op.inputs], axis=0)
+    if op.kind == "slice":
+        return x[op.params["start"] : op.params["end"]]
+    if op.kind == "sigmoid":
+        return (1.0 / (1.0 + np.exp(-x.astype(np.float64)))).astype(np.float32)
     raise AssertionError(op.kind)  # pragma: no cover - lower() only emits the kinds above
 
 
-def run_tail(model, tensors, after, numerics="fp16", skip=()):
+def run_tail(model, tensors, after, numerics="fp16", skip=(), outputs=None):
     """Finish the graph on the host from given tensors: every op after ``after``
     runs with ``numerics`` and may read any tensor in ``tensors`` (for example a
     device-produced feature map). Ops named in ``skip`` are not run; ``tensors``
     must then hold whatever of their outputs is needed (for example a
-    device-produced heatmap). Returns the four outputs with batch 1."""
+    device-produced heatmap). Returns the model's outputs with batch 1, or only the
+    names in ``outputs``."""
     import numpy as np
 
     names = [op.name for op in model.ops]
     if after not in names or any(n not in names for n in skip):
         raise ValueError(f"unknown op {after!r} or skip {skip!r}")
     t = dict(tensors)
-    for op in model.ops[names.index(after) + 1 :]:
-        if op.name in skip:
-            continue
+    tail = [op for op in model.ops[names.index(after) + 1 :] if op.name not in skip]
+    if outputs is not None:  # only the ops the requested outputs depend on
+        want, keep = set(outputs), []
+        for op in reversed(tail):
+            if op.output in want:
+                keep.append(op)
+                want.update(op.inputs)
+        tail = keep[::-1]
+    for op in tail:
         t[op.output] = _step(op, t, numerics, numerics)
-    return {k: t[k].reshape(OUTPUTS[k]).astype(np.float32) for k in OUTPUTS}
+    names = model.outputs if outputs is None else outputs
+    return {k: t[k].reshape(model.outputs[k]).astype(np.float32) for k in names}
 
 
 # ---------------------------------------------------------------- decode

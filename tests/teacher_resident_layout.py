@@ -110,13 +110,15 @@ class Plan:
 
 
 MAX_CROPS = 3  # RS_MAX_CROPS
+WIN_HI_WIDE = 0x1FF0000  # RS_WIN_WIDE window top
+XB_N = 512  # RS_CBIAS: expansion vectors at the top of the blob region (RS_XB = RES_SPAN - XB_N)
 
 
-def replay_row(row, k, stride):
+def replay_row(row, k, stride, win_hi=None):
     """A descriptor as the RS_REPLAY kernel runs it for crop k: load and store
     window addresses (word 9) moved by k * stride, everything else unchanged."""
     row = list(row)
-    if row[0] in (KIND["load"], KIND["store"]) and row[9] <= T.WIN_HI:
+    if row[0] in (KIND["load"], KIND["store"]) and row[9] <= (T.WIN_HI if win_hi is None else win_hi):
         row[9] += k * stride
     return row
 
@@ -440,11 +442,47 @@ def payload(plan, crops=1):
 # ---------------------------------------------------------------- lane-level simulator
 
 
-def _s2_direct(row, vt, phase):
+def _cbias_expand(vt, base, cpo, nj):
+    """RS_CBIAS rs_cbias: splat the packed pair words at vector `base` and copy the nj
+    masks after them to RS_XB; returns RS_XB (the op's expanded bias base)."""
+    import numpy as np
+
+    xb = RES_SPAN - XB_N
+    nwv = -(-cpo // 32)
+    words = vt[base : base + nwv].view("<u4").reshape(-1)[:cpo]
+    masks = vt[base + nwv : base + nwv + nj].copy()
+    vt[xb : xb + cpo] = np.repeat(words[:, None], 32, 1).view("<f2").reshape(cpo, 32, 2)
+    vt[xb + cpo : xb + cpo + nj] = masks
+    return xb
+
+
+S2_ORDERS = ("rows", "pairs", "pairs_rev")
+
+
+def _s2_store_order(oh, ow, order):
+    """(y, x0) of the kernel's stride-2 stores in issue order: "rows" row by row (no
+    RS_POST_BATCH), "pairs" two rows per column block (RS_POST_BATCH; an odd last row
+    pairs with itself), "pairs_rev" the same with the blocks last to first (RS_S2_REV)."""
+    blocks = list(range(0, ow, 32))
+    if order == "rows":
+        return [(y, x0) for y in range(oh) for x0 in blocks]
+    if order not in S2_ORDERS:
+        raise ValueError(f"s2 store order {order!r}")
+    if order == "pairs_rev":
+        blocks = blocks[::-1]
+    out = []
+    for y in range(0, oh, 2):
+        for x0 in blocks:
+            out += [(y, x0), (min(y + 1, oh - 1), x0)]
+    return out
+
+
+def _s2_direct(row, vt, phase, bias_at=None, order="rows"):
     """Word-level model of rs_s2 under RS_S2_DIRECT (tests/teacher_resident_probe.c):
-    the kernel's word offsets, 32-word loads, deals and zero-lane stores, with the
-    simulator's arithmetic. Raises if any access leaves the bounds the native check
-    promises (reads inside the input planes, writes inside the output tensor)."""
+    the kernel's word offsets, 32-word loads, deals and zero-lane stores in the kernel's
+    store order (_s2_store_order), with the simulator's arithmetic. Raises if any access
+    leaves the bounds the native check promises (reads inside the input planes, writes
+    inside the output tensor)."""
     import numpy as np
 
     kind, cpi, cpo, k, clip, nb, blk0, nj, ws, dpar, npar, vin, vout, vres, vpar = (
@@ -454,7 +492,8 @@ def _s2_direct(row, vt, phase):
     words = vt.reshape(-1, 2)  # word i = (vector i // 32, lane i % 32)
     kk = 9
     coef = vt[vpar:].reshape(-1, 2)[: cpi * kk].reshape(cpi, kk, 2).astype(np.float32)
-    bias = vt[vpar + (cpi * kk + 31) // 32 : vpar + (cpi * kk + 31) // 32 + cpi, 0, :]
+    b0 = vpar + (cpi * kk + 31) // 32 if bias_at is None else bias_at
+    bias = vt[b0 : b0 + cpi, 0, :]
     vt[vout : vout + cpo * onb] = 0
     off0 = 32 * blk0 + 1 + phase + phase * ws - ws
     lo_in, hi_in = 32 * vin, 32 * (vin + cpi * nb)
@@ -462,6 +501,7 @@ def _s2_direct(row, vt, phase):
     for c in range(cpi):
         base = 32 * (vin + nb * c) + off0
         out = 32 * (vout + onb * c) + 32 * oblk + 2
+        vals = {}
         for y in range(oh):
             for x0 in range(0, ow, 32):
                 acc = np.zeros((32, 2), np.float32)
@@ -486,14 +526,17 @@ def _s2_direct(row, vt, phase):
                     6,
                 )
                 v[min(32, ow - x0) :] = 0
-                q = out + y * ows + x0
-                if q < lo_out or q + 32 > hi_out:
-                    raise ValueError("direct stride-2 store outside the output")
-                words[q : q + 32] = v
+                vals[y, x0] = v
+        # the inputs and outputs are separate tensors: every value first, then the stores
+        for y, x0 in _s2_store_order(oh, ow, order):
+            q = out + y * ows + x0
+            if q < lo_out or q + 32 > hi_out:
+                raise ValueError("direct stride-2 store outside the output")
+            words[q : q + 32] = vals[y, x0]
 
 
 def simulate(plan, window, *, s2_phase=1, s2_direct=False, crops=1, resident=None, load=True, tiles=False,
-             deep8=False):
+             deep8=False, cbias=False, win_hi=None, s2_order="rows"):
     """Run a plan against `window` (bytearray covering WIN_LO..WIN_HI) with the
     kernel's addressing; VTCM starts each resident job filled with NaN. The
     caller performs setup_writes(plan) first, exactly as the harness does; the
@@ -509,7 +552,11 @@ def simulate(plan, window, *, s2_phase=1, s2_direct=False, crops=1, resident=Non
     as the kernel does when the region is not the session's. tiles models an RS_TILES
     build: word 15 of kinds 1 and 2 puts the input (1), output (2) or residual (4) in
     B-tile layout, vector (pair p, block j) at j * pairs + p; a tile output is not
-    cleared first. Other builds ignore the word."""
+    cleared first. Other builds ignore the word. cbias models an RS_CBIAS build (packed
+    biases expanded per op at RES_SPAN - XB_N; resident only); win_hi an RS_WIN_WIDE
+    build's window top (the window bytearray then covers WIN_LO..win_hi). s2_order: the
+    direct stride-2 kernel's store order (_s2_store_order): "pairs" for an RS_POST_BATCH
+    build, "pairs_rev" with RS_S2_REV; the default "rows" is the order without either."""
     import numpy as np
     from hmx_block_layout import unpack
 
@@ -550,7 +597,7 @@ def simulate(plan, window, *, s2_phase=1, s2_direct=False, crops=1, resident=Non
         else:
             vt = np.full((SPAN, 32, 2), np.nan, np.float16)
         rows = [
-            (k, np.asarray(replay_row(r, k, plan.crop_stride), np.uint32) if k else r)
+            (k, np.asarray(replay_row(r, k, plan.crop_stride, win_hi), np.uint32) if k else r)
             for k in range(crops)
             for r in tab[job.first : job.end]
         ]
@@ -585,7 +632,7 @@ def simulate(plan, window, *, s2_phase=1, s2_direct=False, crops=1, resident=Non
                 continue
             if not native_ok(
                 row, s2_direct=s2_phase if s2_direct else None, mheads=True, resident=resident is not None,
-                tiles=tiles, deep8=deep8,
+                tiles=tiles, deep8=deep8, cbias=cbias, win_hi=win_hi,
             ):
                 raise ValueError("invalid resident descriptor")
             kind, cpi, cpo, k, clip, nb, blk0, nj, ws, dpar, npar, vin, vout, vres, vpar = (
@@ -601,8 +648,15 @@ def simulate(plan, window, *, s2_phase=1, s2_direct=False, crops=1, resident=Non
                 vt[vpar : vpar + npar] = vecs(dpar, npar)
             dst = vout
             lay = int(row[15]) if tiles and kind in (1, 2) else 0
+            xb = None
+            if cbias:
+                if resident is None:
+                    raise ValueError("cbias needs the resident VTCM")
+                pw_ = kind in (1, 8)
+                base = vpar + (((cpo + 15) >> 4) * k * 16 if pw_ else (cpi * k * k + 31) // 32)
+                xb = _cbias_expand(vt, base, cpo, nj)
             if kind == 5 and s2_direct:
-                _s2_direct(row, vt, s2_phase)
+                _s2_direct(row, vt, s2_phase, xb, s2_order)
                 continue
             if kind == 5:
                 onb, oblk, ows, oh, ow, vout = (int(x) for x in row[15:21])
@@ -613,7 +667,7 @@ def simulate(plan, window, *, s2_phase=1, s2_direct=False, crops=1, resident=Non
                 if (vpar | npar) % 16:
                     raise ValueError("HMX tiles not 2 KiB aligned")
                 no = (cpo + 15) >> 4
-                bias = vpar + no * k * 16
+                bias = vpar + no * k * 16 if xb is None else xb
                 raw = vt[vpar : vpar + no * k * 16].tobytes()
                 A = np.block(
                     [
@@ -657,7 +711,7 @@ def simulate(plan, window, *, s2_phase=1, s2_direct=False, crops=1, resident=Non
             else:
                 kk, r = k * k, k // 2
                 coef = vt[vpar:].reshape(-1, 2)[: cpi * kk].reshape(cpi, kk, 2).astype(np.float32)
-                bias = vpar + (cpi * kk + 31) // 32
+                bias = vpar + (cpi * kk + 31) // 32 if xb is None else xb
                 src = vt[vin : vin + cpi * nb].reshape(cpi, nb * 32, 2).astype(np.float32)
                 o = 32 * blk0 + np.arange(nj * 32)
                 acc = np.zeros((cpi, nj * 32, 2), np.float32)
@@ -692,7 +746,8 @@ def simulate(plan, window, *, s2_phase=1, s2_direct=False, crops=1, resident=Non
 # ---------------------------------------------------------------- native check mirror
 
 
-def native_ok(row, *, dw_blocks=2, s2_direct=None, pw_group=1, mheads=False, resident=False, tiles=False, deep8=False):
+def native_ok(row, *, dw_blocks=2, s2_direct=None, pw_group=1, mheads=False, resident=False, tiles=False, deep8=False,
+              cbias=False, win_hi=None):
     """Mirror of rs_get in tests/teacher_resident_probe.c (True = accepted).
     s2_direct: the decimation phase (0 even, 1 odd) of an RS_S2_DIRECT build, which
     adds bounds on the direct kernel's reads and zero-lane store spill. pw_group: an
@@ -718,11 +773,15 @@ def native_ok(row, *, dw_blocks=2, s2_direct=None, pw_group=1, mheads=False, res
     p3 = mheads and kind == 8
     align = ((vpar | npar) << 3) if kind == 1 or p3 else 0
     res = rscr != 0
-    bad = (big > 0x3FFF) or ((kind - 1) & m > 4 and not p3) or vpar + npar > (RES_SPAN if res else SPAN) or (dpar | align) & 127
+    if cbias and not resident:
+        raise ValueError("cbias is an option of the resident build")
+    hi = T.WIN_HI if win_hi is None else win_hi
+    top = RES_SPAN - XB_N if cbias else RES_SPAN
+    bad = (big > 0x3FFF) or ((kind - 1) & m > 4 and not p3) or vpar + npar > (top if res else SPAN) or (dpar | align) & 127
     bad = bad or (resident and vpar >= RES_SPAN) or (res and vpar < RES_LO) or (res and kind in (3, 4))
     bad = bad or (res and (kind == 1 or p3) and rscr & 15)
-    bad = bad or ((dpar - T.WIN_LO) & m) + 128 * npar > T.WIN_HI - T.WIN_LO or vpar == 0
-    bad = bad or dpar < T.WIN_LO or dpar > T.WIN_HI or npar > (T.WIN_HI - dpar) // 128
+    bad = bad or ((dpar - T.WIN_LO) & m) + 128 * npar > hi - T.WIN_LO or vpar == 0
+    bad = bad or dpar < T.WIN_LO or dpar > hi or npar > (hi - dpar) // 128
     if kind in (3, 4) or bad:
         return not bad
     out_nb = onb if s2 else nb
@@ -763,7 +822,8 @@ def native_ok(row, *, dw_blocks=2, s2_direct=None, pw_group=1, mheads=False, res
         or vin + cpi * nb > SPAN
         or vout + cpo * out_nb > SPAN
         or vres + cpo * nb > SPAN
-        or bias + cpo + nj > vpar + npar
+        or bias + (-(-cpo // 32) if cbias else cpo) + nj > vpar + npar
+        or (cbias and cpo + nj > XB_N)
         or scr + ((pw_group * (k + no) if pw_group > 1 else k) * 16 if pw else cpi * kk) > SPAN
     )
     if p3:

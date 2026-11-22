@@ -36,6 +36,8 @@
  * output equals the decimated stride-1 result; the temporary is unused (still
  * validated). Lanes past the row are stored as zero onto pad words or words a
  * later row rewrites; extra checks bound the reads and that spill.
+ * RS_POST_BATCH stores two rows per column block; RS_S2_REV runs the blocks
+ * last to first so that holds for rows wider than one block (ow > 32).
  * The ordinary 4 KiB reference build does not include this extension. */
 /* RS_MHEADS (Mercury heatmap head, stride-2 builds) adds two kinds:
  * kind 7 (regrid) is an exact word copy between grids. Words: 7, pairs per
@@ -94,7 +96,14 @@ static inline __attribute__((always_inline)) void rs_hmx_store(fnpu_u16 *out, co
 #define RS_OPCODE 111u
 #define RS_DDR 0xf0000000u
 #define RS_WIN_LO 0x1a40000u
+#ifdef RS_WIN_WIDE
+/* RS_WIN_WIDE: the window runs up to the image reservation at 0x1ff0000 (inside
+ * the canary-soaked arena 0x1a22000..0x2000000; nothing else is placed above
+ * 0x1f00000), 5.69 MiB instead of 4.75 */
+#define RS_WIN_HI 0x1ff0000u
+#else
 #define RS_WIN_HI 0x1f00000u
+#endif
 #define RS_META 1024u
 #ifdef RS_REPLAY
 #if !defined(RS_STRIDE2) || defined(RS_STEM) || defined(RS_HEADS)
@@ -132,7 +141,14 @@ static inline __attribute__((always_inline)) void rs_hmx_store(fnpu_u16 *out, co
  * copying, the kernel clears the flag (so FeatureNN reloads its blob before its
  * next use) and the tag; it writes the tag only after a request that ran every
  * descriptor of the whole table. meta[12]: bit 0 resident mode, bit 1 images
- * copied, bit 2 tag written. */
+ * copied, bit 2 tag written.
+ * RS_RES_SLOTS: several models keep their images resident at once, each in its
+ * own part of the region (the host plans them apart). Word 9 = 1 | s << 1 picks
+ * tag slot s (0..3, words 4s..4s+3 of FR(SPAN)); word 9 = 1 is slot 0, as
+ * before. A slot's images are copied unless the flag is 0 and its slot holds
+ * the tag. When the flag is set, FeatureNN has refilled the whole region, so
+ * every slot is cleared; on a plain tag mismatch only the request's own slot is
+ * cleared, and the other models' images and tags stay valid. */
 #ifdef RS_RESIDENT
 #if !defined(RS_REPLAY) || !defined(RS_MHEADS)
 #error "RS_RESIDENT is an option of the Mercury replay image (RS_REPLAY, RS_MHEADS)"
@@ -141,6 +157,26 @@ static inline __attribute__((always_inline)) void rs_hmx_store(fnpu_u16 *out, co
 #define RS_RES_LO (SPAN + 16u)
 #define RS_BLOB_FLAG ((volatile fnpu_u32 *)0xf0b12014u)
 #define RS_TAG ((volatile fnpu_u32 *)(0x31002000u + 128u * SPAN))
+#ifdef RS_RES_SLOTS
+#define RS_NSLOT 4u
+#endif
+#endif
+#ifdef RS_CBIAS
+/* RS_CBIAS: a compute op's parameter image holds its biases packed, one FP16
+ * pair word per output pair (ceil(cpo / 32) vectors), then its nj mask vectors.
+ * Before the op runs, worker 0 splats the words and copies the masks into the
+ * last RS_XB_N vectors of the blob region (no resident image may reach them)
+ * and points bias there, so every compute path reads the usual layout: bias
+ * vector pr, then mask j at cpo + j. Every request must be resident (word 9):
+ * only then is the blob region the session's (FeatureNN reloads it after us). */
+#ifndef RS_RESIDENT
+#error "RS_CBIAS is an option of the resident image"
+#endif
+#define RS_XB_N 512u
+#define RS_XB (RS_RSPAN - RS_XB_N)
+#define RS_RES_TOP RS_XB
+#elif defined(RS_RESIDENT)
+#define RS_RES_TOP RS_RSPAN
 #endif
 #ifdef RS_S2_EVEN
 #define RS_S2_P 0u /* decimation phase: output (y, x) keeps stride-1 (2y+P, 2x+P) */
@@ -246,6 +282,17 @@ static void rs_s2_range(const rs_op *d, fnpu_u32 c0, fnpu_u32 c1, volatile HVX_V
 
 static __attribute__((noinline)) void rs_pool_open(void) {
     const fnpu_u32 seq = RS_SEQ;
+#ifdef RS_MULTI
+    /* segment 1 of a request: the pool stays open (closing it would send the
+     * workers back to the loader); the job counter carries on */
+    if ((RS_MB[MB_OPEN] == seq) & (RS_MB[MB_OPEN2] == ~seq)) {
+        /* the workers are idle between jobs: their flags start clean, as below */
+        RS_WFLAGS(1)[0] = Q6_V_vzero();
+        RS_WFLAGS(2)[0] = Q6_V_vzero();
+        RS_BARRIER();
+        return;
+    }
+#endif
     for (fnpu_u32 k = 2; k < 14; k++) RS_MB[k] = 0; /* 14, 15: frame_job's */
     RS_WFLAGS(1)[0] = Q6_V_vzero();
     RS_WFLAGS(2)[0] = Q6_V_vzero();
@@ -385,7 +432,7 @@ static __attribute__((noinline)) fnpu_u32 rs_get(fnpu_u32 tab, fnpu_u32 i, rs_op
 #ifdef RS_RESIDENT
     fnpu_u32 res = d->rscr != 0;
     fnpu_u32 bad = (big > 0x3fff) | ((d->kind - 1 >= RS_MAX_KIND) & !p3) | (d->vpar >= RS_RSPAN) |
-                   (d->vpar + d->npar > (res ? RS_RSPAN : SPAN)) | (res & (d->vpar < RS_RES_LO)) |
+                   (d->vpar + d->npar > (res ? RS_RES_TOP : SPAN)) | (res & (d->vpar < RS_RES_LO)) |
                    (res & ((d->kind == 3) | (d->kind == 4))) | (res & (d->rscr & 15) & -pw) |
 #else
     fnpu_u32 bad = (big > 0x3fff) | ((d->kind - 1 >= RS_MAX_KIND) & !p3) | (d->vpar + d->npar > SPAN) |
@@ -431,9 +478,17 @@ static __attribute__((noinline)) fnpu_u32 rs_get(fnpu_u32 tab, fnpu_u32 i, rs_op
     d->bias = d->vpar + (pw ? no * k * 16 : (cpi * kk + 31) / 32);
 #ifdef RS_RESIDENT
     d->scr = res ? d->rscr : d->vpar + d->npar;
+#ifdef RS_CBIAS
+    /* packed: ceil(cpo / 32) bias vectors, then the masks; expanded at RS_XB */
+    bad |= (cpi == 0) | (nj == 0) | (d->vin == 0) | (d->vout == 0) | (d->clip > 1) |
+           (d->blk0 + nj > nb) | (d->vin + cpi * nb > SPAN) | (d->vout + cpo * out_nb > SPAN) |
+           (d->vres + cpo * nb > SPAN) | (d->bias + ((cpo + 31) >> 5) + nj > d->vpar + d->npar) |
+           (cpo + nj > RS_XB_N) | (d->scr + (pw ? RS_PW_SCR(k, no) : cpi * kk) > SPAN);
+#else
     bad |= (cpi == 0) | (nj == 0) | (d->vin == 0) | (d->vout == 0) | (d->clip > 1) |
            (d->blk0 + nj > nb) | (d->vin + cpi * nb > SPAN) | (d->vout + cpo * out_nb > SPAN) |
            (d->vres + cpo * nb > SPAN) | (d->bias + cpo + nj > d->vpar + d->npar) | (d->scr + (pw ? RS_PW_SCR(k, no) : cpi * kk) > SPAN);
+#endif
 #else
     d->scr = d->vpar + d->npar;
     bad |= (cpi == 0) | (nj == 0) | (d->vin == 0) | (d->vout == 0) | (d->clip > 1) |
@@ -765,6 +820,13 @@ static __attribute__((noinline)) void rs_gather(const rs_op *d, volatile HVX_Vec
 #endif
 #if defined(RS_POST_BATCH) && !(defined(RS_POOL) && defined(RS_S2_DIRECT) && defined(RS_DW_FAST))
 #error "RS_POST_BATCH is an option of the pooled build"
+#endif
+#if defined(RS_S2_REV) && !defined(RS_POST_BATCH)
+#error "RS_S2_REV is an option of the RS_POST_BATCH build"
+#endif
+#if defined(RS_MULTI) && !(defined(RS_POOL) && defined(RS_REPLAY) && defined(RS_RES_SLOTS)) || \
+    defined(RS_MULTI) && (defined(RS_DIAG_WRAP) || defined(RS_DIAG_TAIL))
+#error "RS_MULTI is an option of the pooled --res-slots replay build"
 #endif
 #if defined(RS_TILES) && !(defined(RS_PW_PIPE) && defined(RS_STRIDE2) && defined(RS_DW_FAST) && defined(RS_RESIDENT))
 #error "RS_TILES is an option of the pipelined resident heads build"
@@ -1466,8 +1528,19 @@ static __attribute__((noinline)) void rs_s2(rs_op *d) {
 #pragma clang loop unroll(disable)
         for (fnpu_u32 y = 0; y < oh; y += 2) {
             const fnpu_u32 y1 = y + 1 < oh ? y + 1 : y;
+#ifdef RS_S2_REV
+            /* column blocks last to first: row y's last-block spill (zero lanes past
+             * the row) lands on row y1's first columns before row y1's own block 0
+             * rewrites them. In the ascending order below, a row of more than one
+             * block (ow > 32, n = ow % 32 > 0) loses row y1's first 32 - n - (ows - ow)
+             * columns to it (the detector's 80 -> 40 layer: columns 0..21). */
+#pragma clang loop unroll(disable)
+            for (fnpu_u32 xb = (ow + 31) >> 5; xb-- > 0;) {
+                const fnpu_u32 x0 = 32 * xb;
+#else
 #pragma clang loop unroll(disable)
             for (fnpu_u32 x0 = 0; x0 < ow; x0 += 32) {
+#endif
                 HVX_Vector a = qz, b = qz;
                 const char *p = in + 4 * (2 * y * ws + 2 * x0), *q = in + 4 * (2 * y1 * ws + 2 * x0);
 #pragma clang loop unroll(disable)
@@ -1588,6 +1661,21 @@ static __attribute__((noinline)) void rs_s2(rs_op *d) {
 #include "teacher_stem_profile.h"
 #endif
 
+#ifdef RS_CBIAS
+/* Expand a validated compute op's packed biases and masks at RS_XB (rs_get
+ * bounded cpo + nj by RS_XB_N and the packed words by the image) */
+static __attribute__((noinline)) void rs_cbias(rs_op *d) {
+    const volatile fnpu_u32 *w = (const volatile fnpu_u32 *)d->bias;
+    const volatile HVX_Vector *mk = (const volatile HVX_Vector *)d->bias + ((d->cpo + 31) >> 5);
+    volatile HVX_Vector *x = FR(RS_XB);
+#pragma clang loop unroll(disable)
+    for (fnpu_u32 i = 0; i < d->cpo; i++) x[i] = Q6_V_vsplat_R(w[i]);
+#pragma clang loop unroll(disable)
+    for (fnpu_u32 j = 0; j < d->nj; j++) x[d->cpo + j] = mk[j];
+    d->bias = (fnpu_u32)x;
+}
+#endif
+
 #ifdef RS_DIAG_TAIL
 /* DIAGNOSTIC: the wrapper's code layout, by a tail call (no frame) */
 static fnpu_u32 rs_job(const fnpu_context *c);
@@ -1600,6 +1688,45 @@ static __attribute__((noinline)) fnpu_u32 rs_job(const fnpu_context *c) {
  * stack depth of the plain build (RS_POOL_SP_PAD makes up rs_job's own frame
  * difference). The 1x1 post is ~60 us/crop slower with the stack 8 or more
  * bytes deeper than the plain build's; the cause is open. */
+#ifdef RS_MULTI
+/* RS_MULTI: a request of 256 input bytes carries two segments (two models'
+ * tables, crop counts and residency slots); rs_job(c, seg) runs one, with its
+ * request words at input word 32 * seg and its metadata in output block seg.
+ * Segment 1 runs only after segment 0 returned FNPU_OK; the pool is closed
+ * once, after the last. Mailbox word 16 keeps the context across the calls. */
+static __attribute__((used, noinline)) fnpu_u32 rs_job(const fnpu_context *c, fnpu_u32 seg);
+__asm__(".text\n"
+        ".globl " RS_STR(frame_job) "\n"
+        ".type " RS_STR(frame_job) ",@function\n"
+        ".p2align 4\n" RS_STR(frame_job) ":\n"
+        " { r1 = ##0x31001438 }\n"
+        " { memw(r1+#0) = r31 }\n"
+        " { memw(r1+#8) = r0 }\n"
+        " { r1 = #0 }\n"
+        " { call rs_job }\n"
+        " { r1 = ##0x31001438 }\n"
+        " { memw(r1+#4) = r0 }\n"
+        " { p0 = cmp.eq(r0,#0) }\n"
+        " { if (!p0) jump 1f }\n"
+        " { r0 = memw(r1+#8) }\n"
+        " { r2 = memw(r0+#24) }\n" /* input_bytes */
+        " { p0 = cmp.eq(r2,#256) }\n"
+        " { if (!p0) jump 1f }\n"
+        " { r1 = #1 }\n"
+        " { call rs_job }\n"
+        " { r1 = ##0x31001438 }\n"
+        " { memw(r1+#4) = r0 }\n"
+        "1:\n"
+        " { call rs_pool_close }\n"
+        " { r1 = ##0x31001438 }\n"
+        " { r31 = memw(r1+#0) }\n"
+        " { r2 = memw(r1+#4) }\n"
+        " { p0 = cmp.eq(r0,#0) }\n"
+        " { if (p0) r2 = #0x7e }\n"
+        " { r0 = r2; jumpr r31 }\n"
+        ".size " RS_STR(frame_job) ", .-" RS_STR(frame_job) "\n");
+static __attribute__((used, noinline)) fnpu_u32 rs_job(const fnpu_context *c, fnpu_u32 seg) {
+#else
 static __attribute__((used, noinline)) fnpu_u32 rs_job(const fnpu_context *c);
 __asm__(".text\n"
         ".globl " RS_STR(frame_job) "\n"
@@ -1619,6 +1746,7 @@ __asm__(".text\n"
         " { r0 = r2; jumpr r31 }\n"
         ".size " RS_STR(frame_job) ", .-" RS_STR(frame_job) "\n");
 static __attribute__((used, noinline)) fnpu_u32 rs_job(const fnpu_context *c) {
+#endif
 #ifdef RS_POOL_SP_PAD
     char sp_pad_[RS_POOL_SP_PAD]; /* never stored to */
     __asm__ volatile("" :: "r"(sp_pad_) : "memory");
@@ -1643,8 +1771,15 @@ static __attribute__((noinline)) fnpu_u32 rs_job(const fnpu_context *c) {
 #else
 fnpu_u32 frame_job(const fnpu_context *c) {
 #endif
+#ifdef RS_MULTI
+    /* segment seg's request words; segment 1 always runs its whole table */
+    const volatile fnpu_u32 *in = (const volatile fnpu_u32 *)fnpu_input(c) + 32u * seg;
+    const fnpu_u32 nseg = c->input_bytes >> 7;
+    fnpu_u32 tab = in[1], n = in[2], a = seg ? 0u : c->params[1], b = seg ? n : c->params[2], i;
+#else
     const volatile fnpu_u32 *in = fnpu_input(c);
     fnpu_u32 tab = in[1], n = in[2], a = c->params[1], b = c->params[2], i;
+#endif
 #ifdef RS_REPLAY
     fnpu_u32 nc = in[3] ? in[3] : 1, cs = in[4], steps = 0, stop = 0, t = 0;
     if ((nc > RS_MAX_CROPS) | (cs & 4095) | ((nc == 1) & (cs != 0)) | (cs > (RS_WIN_HI - RS_WIN_LO) / 2))
@@ -1656,11 +1791,19 @@ fnpu_u32 frame_job(const fnpu_context *c) {
     if (tab < RS_WIN_LO || tab > RS_WIN_HI || n > (RS_WIN_HI - tab) / 128)
         return FNPU_BAD_ARGUMENT;
 #endif
+#ifdef RS_MULTI
+    if (!valid(c) || c->opcode != RS_OPCODE || c->params[0] != 1 || ((c->input_bytes != 128) & (c->input_bytes != 256)) ||
+        (seg >= nseg) | (c->output_bytes != RS_META * nseg) || in[0] != RS_MAGIC || (tab & 127) | (n > 160) | (b > n) |
+        (tab - RS_WIN_LO + 128 * n > RS_WIN_HI - RS_WIN_LO))
+        return FNPU_BAD_ARGUMENT;
+    volatile fnpu_u32 *meta = (volatile fnpu_u32 *)fnpu_output(c) + (RS_META / 4u) * seg;
+#else
     if (!valid(c) || c->opcode != RS_OPCODE || c->params[0] != 1 || c->input_bytes != 128 ||
         c->output_bytes != RS_META || in[0] != RS_MAGIC || (tab & 127) | (n > 160) | (b > n) | /* a >= b runs no op */
         (tab - RS_WIN_LO + 128 * n > RS_WIN_HI - RS_WIN_LO))
         return FNPU_BAD_ARGUMENT;
     volatile fnpu_u32 *meta = fnpu_output(c);
+#endif
     rs_zero((volatile HVX_Vector *)meta, RS_META / 128);
 #ifdef RS_CLOCK_PROBE
     /* diagnostic: core cycles, packets and 19.2 MHz ticks over the request, meta[3..8] */
@@ -1677,6 +1820,27 @@ fnpu_u32 frame_job(const fnpu_context *c) {
     fault_control(c);
 #ifdef RS_RESIDENT
     /* rload: copy the resident images (crop 0) because the region is not ours */
+#ifdef RS_RES_SLOTS
+    fnpu_u32 rmode = in[9] & 1u, rslot = in[9] >> 1, rload = 0;
+    if ((rslot >= RS_NSLOT) | (rslot & !rmode) | (rmode & (in[5] == 0))) return FNPU_BAD_ARGUMENT;
+    volatile fnpu_u32 *rtag = RS_TAG + 4u * rslot;
+    if (rmode) {
+        fnpu_u32 evicted = *RS_BLOB_FLAG != 0;
+        rload = evicted | (rtag[0] != in[5]) | (rtag[1] != in[6]) |
+                (rtag[2] != in[7]) | (rtag[3] != in[8]);
+        if (rload) {
+            /* FeatureNN must reload its blob before using it again: clear the
+             * flag before the first store into the region, and confirm it */
+            *RS_BLOB_FLAG = 0;
+            __asm__ volatile("barrier" ::: "memory");
+            if (*RS_BLOB_FLAG != 0) return FNPU_BAD_ARGUMENT;
+            /* a refilled region invalidates every slot; a mismatch only ours */
+            fnpu_u32 w0 = evicted ? 0u : 4u * rslot, w1 = evicted ? 4u * RS_NSLOT : 4u * rslot + 4u;
+            for (fnpu_u32 w = w0; w < w1; w++) RS_TAG[w] = 0;
+            __asm__ volatile("barrier" ::: "memory");
+        }
+    }
+#else
     fnpu_u32 rmode = in[9], rload = 0;
     if ((rmode > 1) | (rmode & (in[5] == 0))) return FNPU_BAD_ARGUMENT;
     if (rmode) {
@@ -1693,7 +1857,18 @@ fnpu_u32 frame_job(const fnpu_context *c) {
         }
     }
 #endif
+#endif
+#ifdef RS_CBIAS
+    if (!rmode) return FNPU_BAD_ARGUMENT; /* RS_XB lies in the blob region */
+#endif
     fnpu_u32 t0 = rs_ticks();
+#ifdef RS_MULTI
+    /* one 20 ms budget for the whole request (the gate hold): segment 0's start
+     * in mailbox word 17; segment 1 gets what segment 0 left, none -> no op runs */
+    if (!seg) RS_MB[17] = t0;
+    const fnpu_u32 used = t0 - RS_MB[17], lim = used < 384000u ? 384000u - used : 0u;
+    stop = !lim;
+#endif
 #ifdef RS_REPLAY
 #pragma clang loop unroll(disable)
     for (fnpu_u32 k = 0; k < nc && !stop; k++) {
@@ -1733,6 +1908,9 @@ fnpu_u32 frame_job(const fnpu_context *c) {
 #ifdef RS_PW_PROFILE
         if (d->kind == 1) RS_PADD(0, tc);
 #endif
+#ifdef RS_CBIAS
+        if ((d->kind == 1) | (d->kind == 2) | (d->kind == 5) | (d->kind == P3_KIND)) rs_cbias(d);
+#endif
         RS_PT(tz);
 #ifdef RS_MHEADS
 #ifdef RS_TILES
@@ -1769,7 +1947,11 @@ fnpu_u32 frame_job(const fnpu_context *c) {
         t = rs_ticks() - t0;
         meta[96 + i - a] = t; /* the last crop's ticks remain */
         steps++;
+#ifdef RS_MULTI
+        if (t > lim) { stop = 1; break; }
+#else
         if (t > 384000u) { stop = 1; break; }
+#endif
     }
     if (nc > 1) meta[48 + k] = t; /* crop k's end */
     }
@@ -1785,7 +1967,11 @@ fnpu_u32 frame_job(const fnpu_context *c) {
     fnpu_u32 tagged = rload & !stop & (a == 0) & (b == n); /* crop 0 copied every image */
     if (tagged) {
         __asm__ volatile("barrier" ::: "memory");
+#ifdef RS_RES_SLOTS
+        for (fnpu_u32 w = 0; w < 4; w++) rtag[w] = in[5 + w];
+#else
         for (fnpu_u32 w = 0; w < 4; w++) RS_TAG[w] = in[5 + w];
+#endif
         __asm__ volatile("barrier" ::: "memory");
     }
     meta[12] = rmode | rload << 1 | tagged << 2;

@@ -25,6 +25,9 @@ from framenpu import _native  # noqa: E402
 
 MODEL = os.environ.get("FNPU_MERCURY_MODEL")
 HEADS_JOBS = os.environ.get("FNPU_MERCURY_HEADS_JOBS")
+DET_MODEL = os.environ.get("FNPU_MERCURY_DETECTOR")  # Mercury's grayscale_detection_160x160.onnx
+DET_JOBS = os.environ.get("FNPU_MERCURY_DET_JOBS")  # the --cbias --win-wide --s2-rev slots build
+S3D_MODEL = os.environ.get("FNPU_S3D_MODEL")  # a 2-view stereo student (distill/make_stereo3d.py)
 TOOLS = all(shutil.which(t) for t in ("clang", "ld.lld", "llvm-nm"))
 ARCH = platform.machine()
 
@@ -178,6 +181,111 @@ class KernelTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             nr.prepare([feed] * 4)
 
+    @unittest.skipUnless(DET_MODEL, "FNPU_MERCURY_DETECTOR required")
+    def test_detector_host_side_matches_the_numpy_path(self):
+        import numpy as np
+        from framenpu import mercury, _mercury_common as C, _mercury_layout as L
+        from framenpu._mercury_host import NativeDetector, NativeRequest
+
+        model = mercury.load_detector(DET_MODEL, require_pin=False)
+        plan = L.build_plan(model, batch=2, replay=True, pw_group=8, resident=True, tiles=True, deep8=True,
+                            cbias=True, win_hi=C.WIN_HI_WIDE)
+        nd = NativeDetector(self.host, model, plan)
+        with self.assertRaises(ValueError):  # the keypoint request class refuses the detector
+            NativeRequest(self.host, model, plan, False)
+        with self.assertRaises(ValueError):  # a split device part is not covered
+            NativeDetector(self.host, model, L.build_plan(
+                model, batch=2, replay=True, pw_group=8, resident=True, tiles=True, deep8=True,
+                stop_after="Conv_123"))
+        rng = np.random.default_rng(3)
+        for seed in range(3):
+            # values off the FP16 grid, edges included: the conversion rounds as NumPy does
+            xs = [rng.uniform(-2, 2, (1, 1, 160, 160)).astype(np.float32) for _ in range(2)]
+            w = nd.prepare([{"inputImg": x} for x in xs])
+            mem = {}
+            for k, x in enumerate(xs):
+                want = {}
+                L.stage_inputs(plan.crop(k), want.__setitem__, {L.STEM_COLS: L.stem_columns(x[0, 0], 160)})
+                self.assertEqual(bytes(w.staged[k]), want[plan.crop(k).where[L.STEM_COLS]])
+            # read back the FP16 contract's final maps and finish both ways
+            fins = [mercury.run(model, {"inputImg": x}, "fp16", keep=True)[1][L.DET_OUTPUT] for x in xs]
+            for k, f in enumerate(fins):
+                mem[plan.crop(k).where[L.DET_OUTPUT]] = L.tensor_bytes(plan.crop(k), L.DET_OUTPUT, f)
+            for k in range(2):
+                self.assertTrue(nd.read(w, lambda at, n: mem[at], k))
+            outs = nd.finish(w)
+            for f, out in zip(fins, outs):
+                want = mercury.run_tail(model, {L.DET_OUTPUT: np.asarray(f, np.float32)}, L.DET_LAST)
+                for name in mercury.DET_OUTPUTS:
+                    self.assertEqual(out[name].shape, want[name].shape)
+                    np.testing.assert_allclose(out[name], want[name], rtol=0, atol=1e-6, err_msg=name)
+            # a nonzero half in the padding is refused
+            k0 = plan.crop(0).where[L.DET_OUTPUT]
+            bad = bytearray(mem[k0])
+            bad[-2:] = b"\x00\x3c"
+            mem[k0] = bytes(bad)
+            self.assertFalse(nd.read(w, lambda at, n: mem[at], 0))
+        with self.assertRaises(ValueError):
+            nd.prepare([{"inputImg": np.full((1, 1, 160, 160), 7e4, np.float32)}])
+        with self.assertRaises(ValueError):
+            nd.prepare([{"inputImg": np.full((1, 1, 160, 160), np.nan, np.float32)}])
+        with self.assertRaises(ValueError):
+            nd.prepare([{"inputImg": np.zeros((1, 1, 128, 128), np.float32)}])
+        with self.assertRaises(ValueError):
+            nd.prepare([{"inputImg": xs[0]}] * 4)
+
+    @unittest.skipUnless(S3D_MODEL, "FNPU_S3D_MODEL required")
+    def test_stereo_student_host_side_matches_the_numpy_path(self):
+        import numpy as np
+        from framenpu import mercury, _mercury_layout as L
+        from framenpu._mercury_host import NativeRequest
+
+        model = mercury.load_keypoint(S3D_MODEL, require_pin=False)
+        plan = L.build_plan(model, prefix=True, batch=2, replay=True, pw_group=8, heads=True, resident=True)
+        outs = ("joints3d", "scalar_extras")
+        nr = NativeRequest(self.host, model, plan, True, outs)
+        rng = np.random.default_rng(11)
+        feeds, wants, maps = [], [], []
+        for seed in range(3):
+            feed = {
+                "inputImg": rng.uniform(-1, 1, (1, 2, 128, 128)).astype(np.float32),
+                "lastKeypoints": rng.uniform(-1, 1, (1, 84)).astype(np.float32),
+                "useLastKeypoints": np.array([seed % 2], np.float32),
+                "geom": rng.uniform(-1, 1, (1, 16)).astype(np.float32),
+            }
+            ts = {n: np.asarray(feed[n], np.float32).reshape(s[1:] if len(s) > 1 else s) for n, s in model.inputs.items()}
+            for n in L.HOST_HINT_OPS[:3]:
+                op = model.op(n)
+                ts[op.output] = mercury._step(op, ts, "fp16", "fp16")
+            w = nr.prepare([feed])
+            self.assertEqual(w.stem[0].tobytes(), L.tensor_bytes(plan.crop(0), L.STEM_COLS, L.stem_columns(ts["inputImg"])))
+            self.assertEqual(w.hint_grid[0].tobytes(), L.tensor_bytes(plan.crop(0), L.HINT, ts[L.HINT]))
+            full = mercury.run(model, feed, "fp16", keep=True)[1]
+            o = full[L.OUTPUT].astype(np.float32)
+            want = mercury.run_tail(model, {L.OUTPUT: o, "geom": ts["geom"]}, L.LAST, skip=L.HEAD_OPS, outputs=outs)
+            for k in outs:  # the emulator's own end to end run agrees
+                np.testing.assert_array_equal(want[k], full[k].reshape(want[k].shape))
+            feeds.append(feed), wants.append(want), maps.append(o)
+            w.maps[L.OUTPUT][0] = o
+            got = nr.finish(w)[0]
+            self.assertEqual(sorted(got), sorted(outs))
+            # FP64 sums in a fixed order vs NumPy's BLAS order: at most an FP32 ulp or so
+            for k in outs:
+                np.testing.assert_allclose(got[k], want[k], rtol=1e-6, atol=1e-6, err_msg=k)
+        # a batch of two equals its pairs one at a time, bit for bit
+        singles = []
+        for f, o in zip(feeds[:2], maps[:2]):
+            w = nr.prepare([f])
+            w.maps[L.OUTPUT][0] = o
+            singles.append(nr.finish(w)[0])
+        w = nr.prepare(feeds[:2])
+        w.maps[L.OUTPUT][:] = maps[:2]
+        for got, one in zip(nr.finish(w), singles):
+            for k in outs:
+                np.testing.assert_array_equal(got[k], one[k])
+        with self.assertRaises(ValueError):
+            nr.prepare([dict(feeds[0], geom=np.full((1, 16), np.inf, np.float32))])
+
     @unittest.skipUnless(MODEL, "FNPU_MERCURY_MODEL required")
     def test_a_batch_equals_its_crops_one_at_a_time(self):
         import numpy as np
@@ -258,6 +366,42 @@ class KernelTests(unittest.TestCase):
             plain = M.MercurySession(MODEL, HEADS_JOBS, native=False, _device_factory=T._Device,
                                      _lease_factory=lambda: lease)
         self.assertIsNone(plain.native)
+
+    @unittest.skipUnless(MODEL and DET_MODEL and DET_JOBS,
+                         "FNPU_MERCURY_MODEL, FNPU_MERCURY_DETECTOR and FNPU_MERCURY_DET_JOBS required")
+    def test_detector_session_on_native_host(self):
+        """keypoint (3 crops) + detector (2 crops) on the packed-bias wide-window image, both
+        on the native host path, through the lane-simulator device: the same outputs as the
+        NumPy host path."""
+        import numpy as np
+        from unittest.mock import patch
+        from framenpu import mercury_runtime as M
+        from framenpu._mercury_host import NativeDetector, NativeRequest
+        import test_mercury_runtime as T
+
+        rng = np.random.default_rng(5)
+        det_feeds = [{"inputImg": rng.uniform(-1, 2, (1, 1, 160, 160)).astype(np.float32)} for _ in range(3)]
+        kp_feeds = [T.MercurySessionTests.feeds(k + 21) for k in range(3)]
+        results = {}
+        for native in (self.host, False):
+            lease = T._Lease()
+            with patch.object(M, "_lease", return_value=lease):
+                s = M.MercurySession(MODEL, DET_JOBS, require_pin=False, native=native,
+                                     extra_models=[(DET_MODEL, 2)], _device_factory=T._Device,
+                                     _lease_factory=lambda: lease)
+            if native is not False:
+                self.assertIsInstance(s.models[0].native, NativeRequest)
+                self.assertIsInstance(s.models[1].native, NativeDetector)
+            s.__enter__()
+            s.device.owner = s
+            with s:
+                results[native is False] = (s.infer(kp_feeds), s.infer(det_feeds[:1], model=1),
+                                            s.infer(det_feeds[1:], model=1))
+        for a, b in zip(results[False], results[True]):
+            for oa, ob in zip(a, b):
+                self.assertEqual(oa.keys(), ob.keys())
+                for name in oa:
+                    np.testing.assert_allclose(oa[name], ob[name], rtol=0, atol=1e-5, err_msg=name)
 
 
 @unittest.skipUnless(TOOLS and ARCH in ("x86_64", "aarch64"), "clang and ld.lld required")

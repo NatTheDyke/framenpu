@@ -18,8 +18,9 @@ and the same parameter images. Mercury-specific placement:
 * Step 2b bands the 64x64 expansion by channels, not rows: ``Conv_10`` and
   the stride-2 depthwise ``Conv_14`` run per 32-channel group, so the
   192x64x64 tensor (13,728 vectors) never exists; there are no halos.
-* The 1-channel 3x3 stride-2 stem runs on HMX as a K=10 pointwise over host
-  im2col columns of the FP16 image (data movement only on the host).
+* The 3x3 stride-2 stem runs on HMX as a pointwise over host im2col columns
+  of the FP16 image (data movement only on the host): K=10 for Mercury's one
+  channel, K=18 for the stereo student's two (stem_planes).
 * Stride-2 depthwise uses the even decimation phase (symmetric padding).
 
 Plan modes: "merged" runs every op in one request with tensors resident in
@@ -64,6 +65,11 @@ DEC = "heads.dec"  # ConvTranspose_163 as 1x1: 168 channels, phase (2a + b) majo
 E2 = "heads.e2"  # shuffled transposed convolution (42 x 20 x 20) inside a 22x22 ring grid
 HEATMAP = "heads.hm"  # Conv_164 output, 21 channels + 1 zero channel, 22 x 22
 KIND_RG, KIND_P3 = 7, 8
+# The hand detector (mercury.load_detector): every convolution runs on the DSP, the 3x3 stride-2
+# stem as a 1x1 over host im2col columns (as the keypoint prefix); its last convolution's output
+# (160 x 3 x 3) is stored, and the Flatten, three Gemm layers, Slices and Sigmoid run on the host.
+DET_LAST = "Conv_162"
+DET_OUTPUT = "onnx::Flatten_721"
 UNDERFLOW_DW = 18 * 2.0**-14  # qf16 flush-to-zero allowance per depthwise output
 
 
@@ -75,6 +81,11 @@ def _part(name, k):
     return f"{name}.g{k}"
 
 
+def stem_planes(cin):
+    """im2col planes of the stem: 9 taps per input channel, rounded up to an even count"""
+    return 9 * cin + (9 * cin) % 2
+
+
 def _prefix_ops(model):
     """Conv_0 .. Conv_18 rewritten for the resident kernel (see module docstring)."""
     import numpy as np
@@ -83,8 +94,10 @@ def _prefix_ops(model):
     names = [op.name for op in model.ops]
     if names[:6] != ["Conv_0", "Conv_4", "Conv_8", "Conv_10", "Conv_14", "Conv_18"]:
         raise ValueError("unexpected Mercury prefix")
+    cin = stem.params["weight"].shape[1]
     if (
-        stem.params["weight"].shape != (32, 1, 3, 3)
+        stem.params["weight"].shape != (32, cin, 3, 3)
+        or cin not in (1, 2)
         or stem.params["stride"] != (2, 2)
         or stem.params["pads"] != (1, 1, 1, 1)
         or stem.inputs != ("inputImg",)
@@ -95,8 +108,8 @@ def _prefix_ops(model):
         or expand.shape[0] % GROUP
     ):
         raise ValueError("unexpected Mercury prefix geometry")
-    w = np.zeros((32, 10, 1, 1), np.float32)
-    w[:, :9, 0, 0] = stem.params["weight"].reshape(32, 9)
+    w = np.zeros((32, stem_planes(cin), 1, 1), np.float32)
+    w[:, : 9 * cin, 0, 0] = stem.params["weight"].reshape(32, 9 * cin)
     ops = [
         replace(
             stem,
@@ -139,6 +152,8 @@ def _prefix_ops(model):
 
 def composites(model, prefix):
     """parent -> [(part, source)]; parts are pair-major slices in order."""
+    if model.detector:
+        return {}
     out = {CONCAT: [(FEATURES, "device"), (HINT, "host")]}
     if prefix:
         n = model.op("Conv_10").shape[0] // GROUP
@@ -146,14 +161,65 @@ def composites(model, prefix):
     return out
 
 
+def detector_ops(model, cut=DET_LAST):
+    """The detector's device ops: Conv_0 rewritten as a 1x1 over STEM_COLS, then every
+    convolution up to ``cut`` unchanged. The host runs the rest (mercury.run_tail after
+    ``cut``), which may read no device tensor but the cut's output."""
+    import numpy as np
+
+    names = [op.name for op in model.ops]
+    if not model.detector or DET_LAST not in names or cut not in names:
+        raise ValueError("not the Mercury hand detector")
+    last = names.index(cut)
+    if last > names.index(DET_LAST):
+        raise ValueError("the detector's device part ends at or before " + DET_LAST)
+    stem, body, tail = model.ops[0], model.ops[1 : last + 1], model.ops[last + 1 :]
+    if (
+        stem.name != "Conv_0"
+        or stem.params["weight"].shape != (32, 1, 3, 3)
+        or stem.params["stride"] != (2, 2)
+        or stem.params["pads"] != (1, 1, 1, 1)
+        or stem.params["act"] != "relu6"
+        or stem.inputs != ("inputImg",)
+        or model.op(DET_LAST).output != DET_OUTPUT
+        or any(op.kind != "conv" for op in body)
+        or any(op.kind not in ("conv", "reshape", "dense", "slice", "sigmoid") for op in tail)
+        or not {i for op in tail for i in op.inputs} <= {(body or [stem])[-1].output} | {op.output for op in tail}
+    ):
+        raise ValueError("unexpected Mercury detector geometry")
+    w = np.zeros((32, stem_planes(1), 1, 1), np.float32)
+    w[:, :9, 0, 0] = stem.params["weight"].reshape(32, 9)
+    stem = replace(stem, inputs=(STEM_COLS,),
+                   params=stem.params | {"weight": w, "stride": (1, 1), "pads": (0, 0, 0, 0)})
+    program, shape = [stem], {op.output: op.shape for op in model.ops}
+    for op in body:
+        c, h, wd = shape[op.inputs[0]]
+        if op.conv_class == "depthwise" and op.params["stride"] == (2, 2) and (h | wd) & 1:
+            # the stride-2 kernel needs an even input (ws == 2 ow + 2): embed the odd input at
+            # (0, 0) of the next even grid (kind 7 zeroes its destination), so the added row and
+            # column read as the convolution's own zero padding (even phase, outputs 2y, 2x)
+            even = op.inputs[0] + ".even"
+            program.append(replace(op, name=op.name + ".even", kind="regrid", inputs=op.inputs,
+                                   output=even, params={"mode": "embed", "at": 0},
+                                   shape=(c, h + (h & 1), wd + (wd & 1))))
+            op = replace(op, inputs=(even,))
+        program.append(op)
+    return program
+
+
 def shapes(model, prefix=False, heads=False):
     shape = {op.output: op.shape for op in model.ops}
+    if model.detector:
+        shape[STEM_COLS] = (stem_planes(1), *model.op("Conv_0").shape[1:])
+        for op in detector_ops(model):
+            shape[op.output] = op.shape
+        return shape
     if heads:
         for op in head_ops(model):
             shape[op.output] = op.shape
     shape[INPUT] = model.op(HOST_PREFIX).shape
     if prefix:
-        shape[STEM_COLS] = (10, *model.op("Conv_0").shape[1:])
+        shape[STEM_COLS] = (stem_planes(model.views), *model.op("Conv_0").shape[1:])
         for op in _prefix_ops(model):
             shape[op.output] = op.shape
     return shape
@@ -216,9 +282,9 @@ def head_ops(model):
 def regrid_words(op, gin, gout, vin, vout):
     """Kind-7 descriptor words of a head regrid op (see tests/teacher_resident_probe.c)."""
     if op.params["mode"] == "embed":
-        pairs, oh, ow = op.shape[0] // 2, gin.h, gin.w
+        pairs, oh, ow, at = op.shape[0] // 2, gin.h, gin.w, op.params.get("at", 1)
         return [KIND_RG, pairs, 1, oh, ow, gin.nbin, gout.nbin, vin, vout, gin.ws, gout.ws, 1,
-                0, 0, gin.word(0, 0), gout.word(1, 1)]
+                0, 0, gin.word(0, 0), gout.word(at, at)]
     pairs, oh, ow = op.shape[0] // 2, gin.h, gin.w  # 21 pairs per phase, 10 x 10 sources
     phases = []
     for a in (0, 1):
@@ -242,7 +308,17 @@ def _check(op):
 
 def device_ops(model, stop_after=LAST, start=None, prefix=False, heads=False):
     """The resident ops of the request (prefix ops rewritten, then with heads the
-    step 2c head ops), checked."""
+    step 2c head ops), checked. For the detector: detector_ops (start/stop_after/prefix
+    /heads must keep their defaults)."""
+    if model.detector:
+        # stop_after: the detector op the device part ends with (LAST = the default, DET_LAST)
+        if start is not None or heads:
+            raise ValueError("a detector plan starts at the stem and has no heads")
+        program = detector_ops(model, DET_LAST if stop_after == LAST else stop_after)
+        for op in program:
+            if op.kind != "regrid":
+                _check(op)
+        return program
     names = [op.name for op in model.ops]
     lo, last = names.index(FIRST), names.index(LAST)
     skipped = [op.name for op in model.ops[lo : last + 1] if op.kind != "conv"]
@@ -274,7 +350,11 @@ def device_ops(model, stop_after=LAST, start=None, prefix=False, heads=False):
 # ---------------------------------------------------------------- parameter images
 
 
-def pw_image(op, gin, group=1):
+def _bias(values, pairs, cbias):
+    return RL._packed_pairs(values, pairs) if cbias else RL._splat_pairs(values, pairs)
+
+
+def pw_image(op, gin, group=1, cbias=False):
     """Parameter image and VTCM scratch (vectors) of a 1x1 op; an RS_PW_GROUP build
     (group > 1) needs group * (nk + no) * 16 scratch vectors."""
     import numpy as np
@@ -290,12 +370,12 @@ def pw_image(op, gin, group=1):
         for o in range(no)
         for t in range(nk)
     )
-    image = tiles + RL._splat_pairs(op.params["bias"], cout // 2) + gin.mask_bytes()[: gin.nj * 128]
+    image = tiles + _bias(op.params["bias"], cout // 2, cbias) + gin.mask_bytes()[: gin.nj * 128]
     image += bytes(-len(image) % 2048)
     return image, (group * (nk + no) if group > 1 else nk) * 16
 
 
-def dw_image(op, gin):
+def dw_image(op, gin, cbias=False):
     import numpy as np
 
     w, b = op.params["weight"], op.params["bias"]
@@ -304,7 +384,7 @@ def dw_image(op, gin):
     h = np.asarray(w.reshape(c, kk), np.float16).view("<u2").astype("<u4")
     coef = np.zeros(((c // 2 * kk + 31) // 32) * 32, "<u4")
     coef[: c // 2 * kk] = (h[0::2] | (h[1::2] << 16)).reshape(-1)
-    image = coef.tobytes() + RL._splat_pairs(b, c // 2) + gin.mask_bytes()
+    image = coef.tobytes() + _bias(b, c // 2, cbias) + gin.mask_bytes()
     return image, c // 2 * kk
 
 
@@ -328,6 +408,10 @@ class MercuryPlan:
     crops: tuple = ()  # batch: one window map per crop (parameter images shared)
     replay: bool = False  # RS_REPLAY: one crop's table; a request runs 1..batch crops
     resident: bool = False  # RS_RESIDENT: parameter images in the FeatureNN blob region
+    res_end: int = 0  # first blob-region vector after this plan's resident images
+    win_end: int = 0  # first window address after this plan
+    cbias: bool = False  # RS_CBIAS: packed biases
+    win_hi: int = RL.WIN_HI  # the build's window top
 
     def grid(self, name):
         return grid(self.shape[name])
@@ -366,6 +450,10 @@ def build_plan(
     resident=False,
     tiles=False,
     deep8=False,
+    res_base=None,
+    win_base=None,
+    cbias=False,
+    win_hi=None,
 ):
     """batch > 1 (merged only): one request runs the merged sequence once per crop,
     each crop with its own input and final-tensor slots; parameter images are
@@ -390,11 +478,26 @@ def build_plan(
     of a 1x1 descriptor flags its input (1), output (2) and residual (4) in that layout,
     of a depthwise one its output (2). Outputs are unchanged bit for bit.
 
+    res_base / win_base (several models resident at once, an RS_RES_SLOTS build): the
+    first resident slot (default RES_LO) and the window address of the op table
+    (default WIN_LO, 4 KiB aligned), so a second model's plan lies after the first's
+    in both the blob region and the window (MercuryPlan.res_end, .win_end).
+
     deep8 (a tiles plan for an RS_PW_DEEP, RS_PW_LG 3 build): a 1x1 whose input is a
     tile tensor, whose output is no wider (no <= nk) and which spans at least 64
     column blocks gets 32 * no * 16 scratch
     vectors, at least, and word 15 flag 8, so it runs 8-block groups two deep per
-    worker. An unflagged op runs 4-block groups in the usual scratch."""
+    worker. An unflagged op runs 4-block groups in the usual scratch.
+
+    cbias (an RS_CBIAS build, resident only): biases packed one word per channel pair;
+    resident images end RL.XB_N vectors below RES_SPAN. win_hi: the build's window top
+    (RL.WIN_HI_WIDE for an RS_WIN_WIDE build; default RL.WIN_HI)."""
+    win_hi = RL.WIN_HI if win_hi is None else win_hi
+    if win_hi not in (RL.WIN_HI, RL.WIN_HI_WIDE):
+        raise ValueError(f"window top {win_hi:#x}")
+    if cbias and not resident:
+        raise ValueError("packed biases are an option of the resident plan")
+    res_top = RL.RES_SPAN - RL.XB_N if cbias else RL.RES_SPAN
     if mode not in ("merged", "qualify"):
         raise ValueError(mode)
     if batch < 1 or (batch > 1 and mode != "merged"):
@@ -403,7 +506,7 @@ def build_plan(
         raise ValueError(f"replay is a merged plan of at most {RL.MAX_CROPS} crops")
     if heads and (mode != "merged" or start is not None):
         raise ValueError("heads are a whole-network merged plan")
-    if resident and not (replay and heads):
+    if resident and not (replay and (heads or model.detector)):
         raise ValueError("resident parameters need a replay plan with heads")
     if tiles and not resident:
         raise ValueError("tile layout is an option of the resident plan")
@@ -448,7 +551,7 @@ def build_plan(
             continue
         gin = grid(shape[op.inputs[0]])
         images[op.name] = (
-            pw_image(op, gin, pw_group) if op.conv_class == "pointwise" else dw_image(op, gin)
+            pw_image(op, gin, pw_group, cbias) if op.conv_class == "pointwise" else dw_image(op, gin, cbias)
         )
     deep = set()
     if deep8:
@@ -465,7 +568,9 @@ def build_plan(
                 deep.add(op.name)
 
     # window: table | parameter images | tensors (each 4 KiB aligned, never reused)
-    table_at = T.WIN_LO
+    table_at = T.WIN_LO if win_base is None else win_base
+    if table_at & 4095 or not T.WIN_LO <= table_at < win_hi:
+        raise ValueError(f"window base {table_at:#x}")
     cursor = RL._al(table_at + 128 * MAX_DESCRIPTORS * (len(ops) if mode == "qualify" else 1), 4096)
     par_at, fixed = {}, {}
     for op in ops:
@@ -490,7 +595,7 @@ def build_plan(
                 where[n] = where[par] + 128 * off
         crops.append(where)
     where = crops[0]
-    if cursor > T.WIN_HI:
+    if cursor > win_hi:
         raise ValueError(f"window plan ends at {cursor:#x}")
 
     table, jobs = [], []
@@ -500,7 +605,9 @@ def build_plan(
         table.append(RL._words(*w))
 
     cur = dict(where)  # the crop being emitted
-    res_at, res_next = {}, RL.RES_LO  # resident: op name -> permanent image slot
+    res_at, res_next = {}, RL.RES_LO if res_base is None else res_base  # op name -> permanent slot
+    if not RL.RES_LO <= res_next < res_top:
+        raise ValueError(f"resident base {res_next}")
 
     def load(name, to):
         words(RL.KIND["load"], 0, 0, 0, 0, 0, 0, 0, 0, cur[name], vec(name), 0, 0, 0, to)
@@ -523,7 +630,7 @@ def build_plan(
         if resident:
             if op.name not in res_at:
                 at0 = RL._al(res_next * 128, 2048 if pw else 128) // 128
-                if at0 + npar > RL.RES_SPAN:
+                if at0 + npar > res_top:
                     raise ValueError("resident parameter images exceed the blob region")
                 res_at[op.name], res_next = at0, at0 + npar
             vpar = res_at[op.name]
@@ -645,7 +752,7 @@ def build_plan(
                 raise ValueError("crop slots are not a fixed stride apart")
             for n in range(per):
                 got = struct.unpack("<32I", table[k * per + n])
-                want = RL.replay_row(struct.unpack("<32I", table[n]), k, stride)
+                want = RL.replay_row(struct.unpack("<32I", table[n]), k, stride, win_hi)
                 if list(got) != want:
                     raise ValueError(f"crop {k} descriptor {n} is not crop 0's replayed")
         table = table[:per]
@@ -672,6 +779,10 @@ def build_plan(
         tuple(crops) if batch > 1 else (),
         replay,
         resident,
+        res_next if resident else 0,
+        cursor,
+        cbias,
+        win_hi,
     )
 
 
@@ -788,18 +899,23 @@ def compose(mplan, parent, parts):
     )
 
 
-def stem_columns(image):
-    """Host im2col of the FP16 128x128 image for the stride-2 stem (even phase):
-    plane dy*3+dx holds image[2y-1+dy, 2x-1+dx] (zero outside); plane 9 is zero."""
+def stem_columns(image, size=128):
+    """Host im2col of the FP16 C x size x size image (C = 1 or 2; size 128, or 160 for the
+    detector) for the stride-2 stem (even phase): plane 9c + dy*3+dx holds
+    image[c, 2y-1+dy, 2x-1+dx] (zero outside); a last plane that rounds the count up to even
+    (stem_planes) is zero."""
     import numpy as np
 
-    img = np.asarray(image, np.float16).reshape(128, 128)
-    pad = np.zeros((131, 131), np.float16)
-    pad[1:129, 1:129] = img
-    cols = np.zeros((10, 64, 64), np.float16)
-    for dy in range(3):
-        for dx in range(3):
-            cols[3 * dy + dx] = pad[dy : dy + 128 : 2, dx : dx + 128 : 2]
+    img = np.asarray(image, np.float16)
+    img = img.reshape(-1, size, size)
+    h = size // 2
+    cols = np.zeros((stem_planes(len(img)), h, h), np.float16)
+    for c, plane in enumerate(img):
+        pad = np.zeros((size + 3, size + 3), np.float16)
+        pad[1 : size + 1, 1 : size + 1] = plane
+        for dy in range(3):
+            for dx in range(3):
+                cols[9 * c + 3 * dy + dx] = pad[dy : dy + size : 2, dx : dx + size : 2]
     return cols
 
 

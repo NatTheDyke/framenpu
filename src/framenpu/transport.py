@@ -20,6 +20,7 @@ class Transport:
         self.fds = []
         self.poisoned = False
         self.owned = False
+        self.transient_waits = 0  # claims that waited out a transient non-idle master
         try:
             with open(profile.firmware_path, "rb") as stream:
                 digest = hashlib.sha256(stream.read()).hexdigest()
@@ -109,9 +110,20 @@ class Transport:
                 self.base + p.control + 8, ctypes.byref(expected), 4, False, 5, 5
             ):
                 self.owned = True
-                if self.get(p.callback) or self.get(p.control + 4) or self.get(p.control) != 1:
+                seen = (self.get(p.callback), self.get(p.control + 4), self.get(p.control))
+                if seen[0] or seen[1]:
                     self.release_unsubmitted()
-                    raise DeviceBusy("another callback or command is installed")
+                    raise DeviceBusy(
+                        "another callback or command is installed (callback %#x, command %d, state %d)" % seen
+                    )
+                if seen[2] != 1:
+                    # Nothing installed, but the master left idle between the two reads (it does
+                    # so briefly right after a completed job): give the gate back unchanged and
+                    # wait for idle, as for a busy gate.
+                    self.release_unsubmitted()
+                    self.transient_waits += 1
+                    time.sleep(0.0001)
+                    continue
                 return
             time.sleep(0.001)
         raise DeviceBusy("CDSP operation gate is busy")

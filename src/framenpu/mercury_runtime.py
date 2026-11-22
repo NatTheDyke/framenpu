@@ -11,12 +11,13 @@ from pathlib import Path
 import secrets
 import struct
 import threading
+import time
 
 from . import mercury
 from . import _mercury_common as C
 from . import _mercury_layout as L
 from . import _native
-from ._mercury_host import NativeRequest
+from ._mercury_host import NativeDetector, NativeRequest
 from .device import Device
 from .errors import InvalidModel, RecoveryRequired
 from .job import Job
@@ -33,6 +34,22 @@ HEADS_IMAGE_SHA256 = "582d79ce821304ab90b48d18c5e9d7c5e4396614b9c6eb70bf2e7b6feb
 # --tiles --post-batch --pw-deep --pw-lg 3 --code-kib 20: three workers, tile-layout 1x1
 # inputs, 8-block 1x1 groups; same outputs bit for bit, 2.96 -> 1.63 ms DSP per crop.
 RESIDENT_IMAGE_SHA256 = "5d15e715948564ee0546cfb05d5cabb5c767f6f302936dad99716c0b15637ee4"
+# The same build with --res-slots: four residency tag slots, so several models (ft7 and the
+# stereo 3D student) keep their parameter images resident side by side. Without the option the
+# sources still build RESIDENT_IMAGE_SHA256 byte for byte.
+SLOTS_IMAGE_SHA256 = "320ae5c3f856b91ea9cb8b99e0fe04159309624eba13a8fedd8d6d2c8cb1ae6c"
+RES_SLOTS = 4
+# The slots build with --cbias --win-wide --s2-rev: biases packed one word per channel pair
+# (expanded per op at the top of the blob region), the window up to the image reservation
+# (0x1ff0000), so the hand detector fits resident beside ft7, and the stride-2 column blocks
+# stored last to first (the detector's 80 -> 40 layer is wider than one block; the post-batch
+# order clobbered the next row's first columns, 382fe1e6 on device). Same loader.
+DET_IMAGE_SHA256 = "bebc1ea8d758b3b77e46a820344983c8981d4ba288426b527a2b39bba686a705"
+# The same build with --multi: a request may carry two segments (two models' tables, crop counts
+# and residency slots, e.g. the detector and ft7 of one frame), run back to back in one DSP job
+# under one gate hold and one 20 ms budget (infer_frame). One-segment requests run as before.
+MULTI_IMAGE_SHA256 = "ffe783131158f302d28c68812c9d5c4855892dee01e3e4abb0ef18e5c145ec94"
+MULTI_SEGMENTS = 2
 # Straight-line VTCM backup/restore (the uncached slot refetched each loop packet: 385 -> 42 us).
 # The pool loader (workers 1 and 2 enter the image too) for the 20 KiB reservation.
 LOADER_SHA256 = "cc81fb7ec3ad340da8fe3ba7f3c930689cd9fd81861a5fe8cab29babc7247524"
@@ -61,7 +78,8 @@ def reservation(record):
 
 def load_jobs(folder):
     """Accept the qualified replay build only (with or without the DSP heatmap
-    head, and the heads build with resident parameters), including its existing
+    head, and the heads build with resident parameters, with or without
+    residency slots), including its existing
     loader. Returns (loader, image, heads); resident_image(folder) tells the rest."""
     folder = Path(folder)
     record = json.loads((folder / "link.json").read_text())
@@ -70,7 +88,18 @@ def load_jobs(folder):
     heads, resident = image_kind(record)
     if resident and not heads:
         raise InvalidModel("Mercury resident parameters need the heads image")
-    want = RESIDENT_IMAGE_SHA256 if resident else HEADS_IMAGE_SHA256 if heads else IMAGE_SHA256
+    slots = record.get("res_slots") == RES_SLOTS
+    if record.get("res_slots") not in (None, RES_SLOTS) or (slots and not resident):
+        raise InvalidModel("Mercury residency slots differ")
+    wide = bool(record.get("cbias")) or record.get("win_hi") is not None or bool(record.get("s2_rev"))
+    if wide and (not slots or not record.get("cbias") or record.get("win_hi") != "0x1ff0000"
+                 or not record.get("s2_rev")):
+        raise InvalidModel("Mercury packed-bias / wide-window build differs")
+    multi = record.get("multi")
+    if multi not in (None, MULTI_SEGMENTS) or (multi and not wide):
+        raise InvalidModel("Mercury multi-segment build differs")
+    want = (MULTI_IMAGE_SHA256 if multi else DET_IMAGE_SHA256 if wide else SLOTS_IMAGE_SHA256 if slots else RESIDENT_IMAGE_SHA256) if resident else \
+        HEADS_IMAGE_SHA256 if heads else IMAGE_SHA256
     if (
         hashlib.sha256(image).hexdigest() != want
         or hashlib.sha256(loader.code).hexdigest() != LOADER_SHA256
@@ -132,7 +161,27 @@ def replay_metadata(result, count, descriptors, image_bytes, resident=None):
     A resident image reports meta[12] = mode | copied << 1 | tagged << 2, and a
     complete request tags exactly when it copied."""
     _completion(result, C.META_BYTES)
-    m = list(struct.unpack("<256I", result.output))
+    return _segment_metadata(result.output, count, descriptors, image_bytes, resident,
+                             result.kernel_reference_ticks)
+
+
+def frame_metadata(result, segments, image_bytes, resident):
+    """A --multi request's metadata: segments = [(crops, descriptors), ...], one
+    META_BYTES block each (segment k's in block k), the segments' bodies together
+    within the request's one 20 ms budget and the wrapper's time."""
+    _completion(result, C.META_BYTES * len(segments))
+    out = [
+        _segment_metadata(result.output[k * C.META_BYTES : (k + 1) * C.META_BYTES], count, n,
+                          image_bytes, resident, result.kernel_reference_ticks)
+        for k, (count, n) in enumerate(segments)
+    ]
+    if sum(t["crop_end_ticks"][-1] for t in out) > min(384000, result.kernel_reference_ticks):
+        raise RecoveryRequired("Mercury segment bodies exceed the request budget")
+    return out
+
+
+def _segment_metadata(output, count, descriptors, image_bytes, resident, kernel_ticks):
+    m = list(struct.unpack("<256I", output))
     status = m[12]
     if resident is not None:
         if status not in ((3 | 4, 1) if resident else (0,)):
@@ -154,7 +203,7 @@ def replay_metadata(result, count, descriptors, image_bytes, resident=None):
         < ticks[0]
         <= ticks[-1]
         == ends[-1]
-        <= min(384000, result.kernel_reference_ticks)
+        <= min(384000, kernel_ticks)
     ):
         raise RecoveryRequired("Mercury replay metadata or budget differs")
     return {
@@ -166,12 +215,72 @@ def replay_metadata(result, count, descriptors, image_bytes, resident=None):
     }
 
 
+class _Model:
+    """One model a session serves: its lowered graph, plan, residency tag and tag slot."""
+
+    def __init__(self, model, plan, slot, outputs):
+        self.model, self.plan, self.slot, self.outputs = model, plan, slot, outputs
+        self.native = None
+        self.crop_ms = 0.0  # last measured DSP body per crop: the next request sleeps most of it
+        self.tag = (0, 0, 0, 0)  # the kernel copies the images unless the slot holds it
+        while not self.tag[0]:
+            self.tag = struct.unpack("<4I", secrets.token_bytes(16))
+
+
+class _Pending:
+    """One request on its way through host prepare -> device run -> host finish."""
+
+    def __init__(self, sl, count, timed):
+        self.sl, self.count = sl, count
+        self.prepared, self.extra, self.maps, self.timing = [], [], [], None
+        self.marks = {} if timed else None
+        self.restart()
+
+    def restart(self):
+        """start timing on the calling thread (a phase runs on one thread)"""
+        if self.marks is not None:
+            self._t, self._c = time.perf_counter(), time.thread_time()
+
+    def mark(self, name):
+        """wall ms of the phase since the last mark, plus its thread CPU ms and core (profiling)"""
+        if self.marks is not None:
+            now, cpu = time.perf_counter(), time.thread_time()
+            self.marks[name] = (now - self._t) * 1e3
+            self.marks[name + ".cpu"] = (cpu - self._c) * 1e3
+            self.marks[name + ".core"] = _core()
+            self._t, self._c = now, cpu
+
+
+def _core():
+    """the core the calling thread runs on (profiling; -1 if unknown)"""
+    try:
+        with open("/proc/thread-self/stat") as f:
+            return int(f.read().rsplit(")", 1)[1].split()[36])
+    except (OSError, ValueError, IndexError):
+        return -1
+
+
+def _outputs(model):
+    """per-crop outputs: all of Mercury's; for the stereo student only what its 3D hand
+    needs (joints3d, is-hand logit)"""
+    if model.detector:
+        return tuple(model.outputs)
+    return tuple(model.outputs) if model.views == 1 else ("joints3d", "scalar_extras")
+
+
 class MercurySession:
     """One process owns the shared window until close; explicit idle releases HMX.
 
     A session opens lazily on the first infer(), holds power between calls, and
     releases it at idle(). A poisoned session retains its refusal record and
     device bytes and cannot reopen. The caller may use an independent CPU path.
+
+    extra_models (a --res-slots image): further (path, crops per request) models served
+    by the same session, infer(feeds, model=k) with k = 1, 2, ...; each gets its own part
+    of the window and of the blob region and its own residency tag slot, so switching
+    models copies no parameters. An extra model may be Mercury's hand detector
+    (inputImg 160x160 -> hand_exists, cx, cy, size); it needs the packed-bias wide-window
+    image (DET_IMAGE_SHA256) to fit beside a keypoint model.
     """
 
     def __init__(
@@ -182,6 +291,7 @@ class MercurySession:
         require_pin=True,
         native=None,
         resident=None,
+        extra_models=(),
         _device_factory=Device,
         _lease_factory=_lease,
     ):
@@ -192,13 +302,24 @@ class MercurySession:
         requires that, False copies them for every crop (legacy plan, same image)."""
         # require_pin=False accepts retrained weights for the same graph: lower() still validates
         # the structure, shapes and operators, and every plan row is bounds-checked below.
-        self.model = mercury.load_keypoint(model_path, require_pin=require_pin)
+        model = mercury.load_keypoint(model_path, require_pin=require_pin)
         self.loader, self.image, self.heads = load_jobs(jobs)
         self.image_sha256 = hashlib.sha256(self.image).hexdigest()
-        self.resident_image = self.image_sha256 == RESIDENT_IMAGE_SHA256
+        self.res_slots = self.image_sha256 in (SLOTS_IMAGE_SHA256, DET_IMAGE_SHA256, MULTI_IMAGE_SHA256)
+        self.multi = self.image_sha256 == MULTI_IMAGE_SHA256
+        self.resident_image = self.res_slots or self.image_sha256 == RESIDENT_IMAGE_SHA256
+        # RS_CBIAS + RS_WIN_WIDE (load_jobs checked the record against the hash)
+        self.cbias = self.image_sha256 in (DET_IMAGE_SHA256, MULTI_IMAGE_SHA256)
+        self.win_hi = C.WIN_HI_WIDE if self.cbias else C.WIN_HI
+        if extra_models and not self.res_slots:
+            raise InvalidModel("several models need the --res-slots image")
+        if len(extra_models) >= RES_SLOTS:
+            raise InvalidModel(f"at most {RES_SLOTS} models")
         if resident and not self.resident_image:
             raise InvalidModel("this Mercury image has no resident parameter support")
         self.resident = self.resident_image if resident is None else bool(resident)
+        if self.cbias and not self.resident:
+            raise InvalidModel("the packed-bias image runs resident requests only")
         # an RS_TILES build keeps 1x1-only tensors in B-tile layout (no gather). A record
         # that misstates it is harmless: a build without RS_TILES ignores the layout word
         # (every tensor stays planar), and one with it runs flag-free rows planar too.
@@ -210,42 +331,62 @@ class MercurySession:
         self.code_bytes, self.seal_at = reservation(record)
         if len(self.image) > self.seal_at - CODE:
             raise InvalidModel("Mercury image overlaps its seal vector")
-        # the session's residency tag: the kernel copies the images unless the region holds it
-        self.tag = (0, 0, 0, 0)
-        while not self.tag[0]:
-            self.tag = struct.unpack("<4I", secrets.token_bytes(16))
-        self.plan = L.build_plan(
-            self.model, prefix=True, batch=3, replay=True, pw_group=8, heads=self.heads,
-            resident=self.resident, tiles=self.tiles, deep8=self.deep8,
-        )
-        for k in range(3):
-            for row in struct.iter_unpack("<32I", self.plan.plan.table):
-                if row[0] == L.KIND_RG and self.heads:
-                    ok = C.regrid_ok(row)
-                else:
-                    ok = C.native_ok(
-                        C.replay_row(row, k, self.plan.plan.crop_stride),
-                        s2_direct=0,
-                        pw_group=8,
-                        mheads=self.heads,
-                        resident=self.resident_image,
-                        tiles=self.tiles,
-                        deep8=self.deep8,
-                    )
-                if not ok:
-                    raise InvalidModel("Mercury plan exceeds native bounds")
-        self.native = None
+        self.models = []
+        res_base = win_base = None
+        for slot, (m, batch) in enumerate([(model, 3)] + [
+            (mercury.load_model(path, require_pin=False), batch) for path, batch in extra_models
+        ]):
+            if not 1 <= batch <= 3:
+                raise InvalidModel("a model's requests carry one to three crops")
+            try:
+                plan = L.build_plan(
+                    m, prefix=not m.detector, batch=batch, replay=True, pw_group=8,
+                    heads=self.heads and not m.detector, resident=self.resident, tiles=self.tiles,
+                    deep8=self.deep8, res_base=res_base, win_base=win_base, cbias=self.cbias,
+                    win_hi=self.win_hi,
+                )
+            except ValueError as exc:
+                raise InvalidModel(f"model {slot}: {exc}") from exc
+            if extra_models and not self.resident:
+                raise InvalidModel("several models need resident parameters")
+            res_base, win_base = plan.res_end, -(-plan.win_end // 4096) * 4096
+            for k in range(batch):
+                for row in struct.iter_unpack("<32I", plan.plan.table):
+                    if row[0] == L.KIND_RG and self.heads:
+                        ok = C.regrid_ok(row)
+                    else:
+                        ok = C.native_ok(
+                            C.replay_row(row, k, plan.plan.crop_stride, self.win_hi),
+                            s2_direct=0,
+                            pw_group=8,
+                            mheads=self.heads,
+                            resident=self.resident_image,
+                            tiles=self.tiles,
+                            deep8=self.deep8,
+                            cbias=self.cbias,
+                            win_hi=self.win_hi,
+                        )
+                    if not ok:
+                        raise InvalidModel("Mercury plan exceeds native bounds")
+            self.models.append(_Model(m, plan, slot, _outputs(m)))
         if native is not False:
             host = native if isinstance(native, _native.Host) else _native.bundled()
             if host is None:
                 if native is True:
                     raise InvalidModel("the native host kernels are not available here")
             else:
-                try:
-                    self.native = NativeRequest(host, self.model, self.plan, self.heads)
-                except ValueError as exc:
-                    if native is not None:
-                        raise InvalidModel(f"native host path: {exc}") from exc
+                for sl in self.models:
+                    try:
+                        sl.native = (
+                            NativeDetector(host, sl.model, sl.plan, sl.outputs)
+                            if sl.model.detector
+                            else NativeRequest(host, sl.model, sl.plan, self.heads, sl.outputs)
+                        )
+                    except ValueError as exc:
+                        # an explicit request covers the primary model; extra models (other
+                        # graphs) fall back to NumPy where the kernels do not cover them
+                        if native is not None and sl.slot == 0:
+                            raise InvalidModel(f"native host path: {exc}") from exc
         self._device_factory, self._lease_factory = _device_factory, _lease_factory
         self.device = self.lease = self.power = None
         self.closed = self.owned = self.sealed = False
@@ -253,7 +394,16 @@ class MercurySession:
         self.saved = []
         self.lock = threading.RLock()
         self.last_timing = None
-        self.crop_ms = 0.0  # last measured DSP body per crop: the next request sleeps most of it
+        self.phase_times = False  # True: last_timing["phases_ms"] times each host step (profiling)
+        self._host_cost = {}  # (prepare|finish, model, crops) -> seconds, a running estimate
+
+    # the primary model (model 0), as single-model callers use it
+    model = property(lambda self: self.models[0].model)
+    plan = property(lambda self: self.models[0].plan)
+    tag = property(lambda self: self.models[0].tag)
+    native = property(lambda self: self.models[0].native)
+    outputs = property(lambda self: self.models[0].outputs)
+    crop_ms = property(lambda self: self.models[0].crop_ms)
 
     def _owner(self):
         if (
@@ -326,7 +476,7 @@ class MercurySession:
                 self.saved = [
                     (at, bytes(mem[at : at + size]))
                     for at, size in (
-                        (C.WIN_LO, C.WIN_HI - C.WIN_LO),
+                        (C.WIN_LO, self.win_hi - C.WIN_LO),
                         (CODE, self.code_bytes),
                         (CONTROL, 128),
                     )
@@ -335,10 +485,11 @@ class MercurySession:
                 mem[CONTROL : CONTROL + len(self.marker)] = self.marker
                 image = self.image.ljust(self.code_bytes, b"\0")
                 mem[CODE : CODE + self.code_bytes] = image
-                for off, data in C.setup_writes(self.plan.plan).items():
-                    mem[off : off + len(data)] = data
-                    if bytes(mem[off : off + len(data)]) != data:
-                        raise RecoveryRequired("Mercury parameter upload differs")
+                for sl in self.models:
+                    for off, data in C.setup_writes(sl.plan.plan).items():
+                        mem[off : off + len(data)] = data
+                        if bytes(mem[off : off + len(data)]) != data:
+                            raise RecoveryRequired("Mercury parameter upload differs")
                 self._reservation(False)
 
             self._gate(install)
@@ -355,104 +506,265 @@ class MercurySession:
     def __exit__(self, *exc):
         self.close()
 
-    def infer(self, feeds):
-        """Run the available 1..3 normalized crops now, preserving their order."""
+    def infer(self, feeds, model=0):
+        """Run the available 1..3 normalized crops (of extra model k: 1..its crops per
+        request) now, preserving their order."""
+        sl = self._model_for(model, feeds)
+        with self.lock:
+            p = self._host_prepare(sl, feeds)
+            self._device_run(p)
+            outs = self._host_finish(p)
+            self.last_timing = p.timing
+            return outs
+
+    def infer_many(self, requests):
+        """Run several requests [(model, feeds), ...] back to back, in order, overlapping the
+        host side with the DSP: while request i runs on the DSP, the waiting thread prepares
+        request i+1 and finishes request i-1 in the time it would otherwise sleep (only work
+        whose measured cost fits that sleep runs there, so completion is never noticed later
+        than by infer; the rest runs right after). One thread: no hand-off or lock contention.
+        Each request is its own DSP job (the gate is held per job, as with infer). Returns each
+        request's outputs; last_timing holds the per-request timings under "requests". Any
+        failure stops the sequence (no retries)."""
+        reqs = [(self._model_for(m, f), f) for m, f in requests]
+        if not reqs:
+            raise ValueError("infer_many needs at least one request")
+        lanes, seen = [], {}
+        for sl, f in reqs:  # three requests in flight never share a workspace
+            key = (sl.slot, len(f))
+            lanes.append(seen.get(key, 0) % 3)
+            seen[key] = seen.get(key, 0) + 1
+        n = len(reqs)
+        pend, outs, overlapped = [None] * n, [None] * n, [0]
+
+        def step(kind, j):
+            key = (kind, reqs[j][0].slot, len(reqs[j][1]))
+            t = time.perf_counter()
+            if kind == "prepare":
+                pend[j] = self._host_prepare(reqs[j][0], reqs[j][1], lanes[j])
+            else:
+                outs[j] = self._host_finish(pend[j])
+            dt = time.perf_counter() - t
+            old = self._host_cost.get(key)
+            self._host_cost[key] = dt if old is None else 0.8 * old + 0.2 * dt
+
+        with self.lock:
+            step("prepare", 0)
+            for i in range(n):
+                todo = ([("prepare", i + 1)] if i + 1 < n else []) + ([("finish", i - 1)] if i >= 1 else [])
+                sl, count = pend[i].sl, pend[i].count
+                budget, inside = 0.8e-3 * sl.crop_ms * count, []  # infer's expected-time sleep
+                for kind, j in todo:
+                    est = self._host_cost.get((kind, reqs[j][0].slot, len(reqs[j][1])))
+                    if est is None or sum(e for _, _, e in inside) + est * 1.25 + 1e-4 > budget:
+                        break
+                    inside.append((kind, j, est))
+                during = (lambda: [step(k, j) for k, j, _ in inside]) if inside else None
+                overlapped[0] += len(inside)
+                self._device_run(pend[i], during)
+                for kind, j in todo[len(inside):]:
+                    step(kind, j)
+            step("finish", n - 1)
+            self.last_timing = {"requests": [p.timing for p in pend],
+                                "body_ms": sum(p.timing["body_ms"] for p in pend),
+                                "overlapped": overlapped[0], "host_steps": 2 * n}
+            return outs
+
+    def infer_frame(self, requests):
+        """Run one frame's requests [(model, feeds), ...] (distinct models, each 1..its crops
+        per request), in order, as ONE DSP job on a --multi image: each request is a segment of
+        the same submission (one gate hold, one wake and completion, one 20 ms budget), so a
+        frame that runs the detector and ft7 pays one round trip. Up to MULTI_SEGMENTS requests.
+        Without the --multi image the requests run as infer_many. Returns each request's
+        outputs; last_timing holds the per-request timings under "requests". Any failure fails
+        the whole frame (no retries)."""
+        reqs = [(self._model_for(m, f), f) for m, f in requests]
+        if not reqs:
+            raise ValueError("infer_frame needs at least one request")
+        if not self.multi:
+            return self.infer_many(requests)
+        if len(reqs) > MULTI_SEGMENTS:
+            raise ValueError(f"a frame carries at most {MULTI_SEGMENTS} requests")
+        if len({sl.slot for sl, _ in reqs}) != len(reqs):
+            raise ValueError("a frame's requests are of distinct models")  # one workspace each
+        with self.lock:
+            pend = [self._host_prepare(sl, f) for sl, f in reqs]
+            self._device_run_frame(pend)
+            outs = [self._host_finish(p) for p in pend]
+            self.last_timing = {"requests": [p.timing for p in pend],
+                                "body_ms": sum(p.timing["body_ms"] for p in pend), "segments": len(pend)}
+            return outs
+
+    def _model_for(self, model, feeds):
+        sl = self.models[model]
+        if not 1 <= len(feeds) <= sl.plan.batch:
+            raise ValueError(f"requests of this model carry one to {sl.plan.batch} crops")
+        return sl
+
+    def _host_prepare(self, sl, feeds, lane=0):
+        """Check and convert one request's inputs (no device access)."""
         import numpy as np
 
-        if not 1 <= len(feeds) <= 3:
-            raise ValueError("Mercury requests carry one to three crops")
-        prepared = []
-        for feed in feeds if self.native is None else ():
+        p = _Pending(sl, len(feeds), self.phase_times)
+        if sl.native is not None:
+            p.prepared = sl.native.prepare(feeds, lane)
+            p.mark("host_prepare_ms")
+            return p
+        for feed in feeds:
             ts = {}
-            for name, shape in mercury.INPUTS.items():
+            for name, shape in sl.model.inputs.items():
                 v = np.asarray(feed[name], np.float32)
                 if v.shape != shape or not np.isfinite(v).all():
                     raise ValueError(f"{name}: finite values of shape {shape} required")
                 ts[name] = v.reshape(shape[1:] if len(shape) > 1 else shape)
             if not np.isfinite(ts["inputImg"].astype(np.float16)).all():
                 raise ValueError("image exceeds FP16 storage")
+            if sl.model.detector:
+                p.extra.append({})
+                p.prepared.append({L.STEM_COLS: L.stem_columns(ts["inputImg"], mercury.DET_SIZE)})
+                continue
+            p.extra.append({k: ts[k] for k in ts.keys() - mercury.INPUTS.keys()})
             for name in L.HOST_HINT_OPS[:3]:
-                op = self.model.op(name)
+                op = sl.model.op(name)
                 ts[op.output] = mercury._step(op, ts, "fp16", "fp16")
             if not np.isfinite(ts[L.HINT]).all():
                 raise ValueError("hint exceeds FP16 storage")
-            prepared.append({L.STEM_COLS: L.stem_columns(ts["inputImg"]), L.HINT: ts[L.HINT]})
-        with self.lock:
-            if self.native is not None:  # under the lock: the workspace is shared
-                prepared = self.native.prepare(feeds)
-            self._open()
-            if self.power is None:
-                self.power = self.device._hold_power()
-            count, result_maps = len(feeds), []
+            p.prepared.append({L.STEM_COLS: L.stem_columns(ts["inputImg"]), L.HINT: ts[L.HINT]})
+        p.mark("host_prepare_ms")
+        return p
 
-            def stage(mem):
-                self._reservation(True)
-                if self.native is not None:
-                    self.native.stage(mem, prepared)
-                    return
-                for k, ts in enumerate(prepared):
+    def _device_run(self, p, during=None):
+        """Stage, run and read back one prepared request (caller holds the lock). during:
+        host-only work to run while the DSP computes (Device._submit's wait hook)."""
+        self._device_run_frame([p], during)
+
+    def _device_run_frame(self, ps, during=None):
+        """Stage, run and read back prepared requests as one DSP job: one request, or on a
+        --multi image up to MULTI_SEGMENTS of distinct models (segment k = ps[k])."""
+        import numpy as np
+
+        if len(ps) > 1 and not (self.multi and len(ps) <= MULTI_SEGMENTS):
+            raise ValueError("this image runs one request per job")
+        p = ps[0]
+        p.restart()
+        self._open()
+        if self.power is None:
+            self.power = self.device._hold_power()
+        p.mark("open_power_ms")
+
+        def stage(mem):
+            self._reservation(True)
+            for q in ps:
+                if q.sl.native is not None:
+                    q.sl.native.stage(mem, q.prepared)
+                    continue
+                for k, ts in enumerate(q.prepared):
                     L.stage_inputs(
-                        self.plan.crop(k),
+                        q.sl.plan.crop(k),
                         lambda at, data: mem.__setitem__(slice(at, at + len(data)), data),
                         ts,
                     )
 
-            self._gate(stage)
-            job = self.plan.plan.jobs[0]
+        self._gate(stage)
+        p.mark("gate_stage_ms")
+        jobs = [q.sl.plan.plan.jobs[0] for q in ps]
+        if len(ps) > 1 and any(j.first or j.end != len(q.sl.plan.plan.table) // 128 for j, q in zip(jobs, ps)):
+            raise ValueError("a segment runs its whole table")  # the kernel runs segment 1 whole
+        job = jobs[0]
+        phases = {} if p.marks is not None else None
+        resident = self.resident if self.resident_image else None
 
-            def validate(result):
-                self._reservation(True)
-                self.last_timing = replay_metadata(
-                    result, count, job.end - job.first, len(self.image),
-                    resident=self.resident if self.resident_image else None,
-                )
-                get = lambda at, n: bytes(self.device._transport.memory[at : at + n])  # noqa: E731
-                for k in range(count):
-                    if self.native is not None:
-                        if not self.native.read(prepared, get, k):
-                            raise RecoveryRequired("Mercury output has invalid padding or values")
-                        continue
-                    maps = {}
-                    for name in (L.OUTPUT, L.HEATMAP) if self.heads else (L.OUTPUT,):
-                        out, stray = L.read_tensor(self.plan.crop(k), get, name)
-                        if stray or not np.isfinite(out).all():
-                            raise RecoveryRequired("Mercury output has invalid padding or values")
-                        maps[name] = out.astype(np.float32)
-                    result_maps.append(maps)
+        def validate(result):
+            self._reservation(True)
+            if len(ps) == 1:
+                p.timing = replay_metadata(result, p.count, job.end - job.first, len(self.image), resident=resident)
+            else:
+                for q, t in zip(ps, frame_metadata(result, [(q.count, j.end - j.first) for q, j in zip(ps, jobs)],
+                                                   len(self.image), resident)):
+                    q.timing = t
+            get = lambda at, n: bytes(self.device._transport.memory[at : at + n])  # noqa: E731
+            for q in ps:
+                read_outputs(q, get)
 
-            self.device._submit(
-                self.loader,
-                self._payload(count),
-                opcode=C.RS_OPCODE,
-                params=(1, job.first, job.end, 0, 0, 0),
-                output_size=C.META_BYTES,
-                use_direct=True,
-                _prepare=lambda t: self._reservation(True),
-                _completion_validator=_completion_guard(validate),
-                _held_power=self.power,
-                _expect_s=0.8e-3 * self.crop_ms * count,
-            )
-            self.crop_ms = self.last_timing["body_ms"] / count
-            if self.native is not None:
-                return self.native.finish(prepared)
-            if not self.heads:
-                return [mercury.run_tail(self.model, m, L.LAST) for m in result_maps]
+        def read_outputs(p, get):
+            sl, count, prepared = p.sl, p.count, p.prepared
+            for k in range(count):
+                if sl.native is not None:
+                    if not sl.native.read(prepared, get, k):
+                        raise RecoveryRequired("Mercury output has invalid padding or values")
+                    continue
+                maps = {}
+                names = (sl.plan.final,) if sl.model.detector else (L.OUTPUT, L.HEATMAP) if self.heads else (L.OUTPUT,)
+                for name in names:
+                    out, stray = L.read_tensor(sl.plan.crop(k), get, name)
+                    if stray or not np.isfinite(out).all():
+                        raise RecoveryRequired("Mercury output has invalid padding or values")
+                    maps[name] = out.astype(np.float32)
+                p.maps.append(maps)
+
+        self.device._submit(
+            self.loader,
+            b"".join(self._payload(q.count, q.sl) for q in ps),
+            opcode=C.RS_OPCODE,
+            params=(1, job.first, job.end, 0, 0, 0),
+            output_size=C.META_BYTES * len(ps),
+            use_direct=True,
+            _prepare=lambda t: self._reservation(True),
+            _completion_validator=_completion_guard(validate),
+            _held_power=self.power,
+            _expect_s=0.8e-3 * sum(q.sl.crop_ms * q.count for q in ps),
+            _phase_times=phases,
+            _while_waiting=during,
+        )
+        p.mark("submit_ms")
+        if phases is not None:
+            p.marks["submit"] = phases
+        for q in ps:
+            q.sl.crop_ms = q.timing["body_ms"] / q.count
+
+    def _host_finish(self, p):
+        """The request's outputs from its read-back maps (no device access)."""
+        sl = p.sl
+        p.restart()
+        if sl.native is not None:
+            outs = sl.native.finish(p.prepared)
+        elif sl.model.detector:
+            # the device ran the convolutions; the dense tail is 8 outputs per crop
+            outs = [
+                mercury.run_tail(sl.model, m, sl.plan.ops[-1].name, outputs=sl.outputs)
+                for m in p.maps
+            ]
+        elif not self.heads:
+            outs = [
+                mercury.run_tail(sl.model, m | x, L.LAST, outputs=sl.outputs)
+                for m, x in zip(p.maps, p.extra)
+            ]
+        else:
             # the heatmap head ran on the DSP: only the pooled vector heads remain
-            return [
+            names = sl.outputs if sl.model.views == 1 else sl.outputs + ("heatmap_xy",)
+            outs = [
                 mercury.run_tail(
-                    self.model,
-                    {L.OUTPUT: m[L.OUTPUT], "heatmap_xy": m[L.HEATMAP][:21]},
+                    sl.model,
+                    {L.OUTPUT: m[L.OUTPUT], "heatmap_xy": m[L.HEATMAP][:21]} | x,
                     L.LAST,
                     skip=L.HEAD_OPS,
+                    outputs=names,
                 )
-                for m in result_maps
+                for m, x in zip(p.maps, p.extra)
             ]
+        p.mark("host_finish_ms")
+        if p.marks is not None:
+            p.timing["phases_ms"] = p.marks
+        return outs
 
-    def _payload(self, count):
-        """Request words; a resident image adds the tag (words 5..8) and mode (word 9)."""
-        words = bytearray(C.payload(self.plan.plan, count))
+    def _payload(self, count, sl=None):
+        """Request words; a resident image adds the tag (words 5..8) and mode (word 9,
+        1 | slot << 1 on a --res-slots image)."""
+        sl = self.models[0] if sl is None else sl
+        words = bytearray(C.payload(sl.plan.plan, count))
         if self.resident_image:
-            struct.pack_into("<5I", words, 20, *self.tag, int(self.resident))
+            mode = int(self.resident) | (sl.slot << 1 if self.resident else 0)
+            struct.pack_into("<5I", words, 20, *sl.tag, mode)
         return bytes(words)
 
     def idle(self):

@@ -70,6 +70,35 @@ class ReplayCompletionTests(unittest.TestCase):
                     with self.assertRaises(RecoveryRequired):
                         parse(bad)
 
+    def test_frame_metadata(self):
+        """--multi: one metadata block per segment, both within the one budget"""
+        from types import SimpleNamespace
+
+        (w0, workers), (w1, _) = self.result(2), self.result(1)
+        w0[12] = w1[12] = 1  # resident, nothing copied
+
+        def parse(a, b, ticks=4000, segs=((2, 55), (1, 55))):
+            out = struct.pack("<256I", *a) + struct.pack("<256I", *b)
+            return M.frame_metadata(SimpleNamespace(output=out, workers=workers, kernel_reference_ticks=ticks),
+                                    list(segs), 6960, True)
+
+        t = parse(w0, w1)
+        self.assertEqual([x["crops"] for x in t], [2, 1])
+        self.assertEqual([x["body_ms"] for x in t], [w0[49] / 19200, w1[96 + 54] / 19200])
+        for bad in (
+            lambda: parse(w0, w1, ticks=w0[49] + w1[96 + 54] - 1),  # over the wrapper's time
+            lambda: parse(w0, w1, segs=((1, 55), (2, 55))),  # blocks in the other order
+            lambda: parse(w0, w1, segs=((2, 55),)),  # one block expected
+        ):
+            with self.assertRaises(RecoveryRequired):
+                bad()
+        for k, w in ((0, w0), (1, w1)):
+            for index in (0, 2, 3, 12, 151):
+                c = list(w)
+                c[index] += 1
+                with self.subTest(segment=k, word=index), self.assertRaises(RecoveryRequired):
+                    parse(c, w1) if k == 0 else parse(w0, c)
+
     def test_residency_status(self):
         from types import SimpleNamespace
 
@@ -146,6 +175,7 @@ class _Device:
         struct.pack_into("<I", self._transport.memory, C.BLOB_FLAG, 1)
         self.vt = None
         self.tag = (0, 0, 0, 0)
+        self.tags = {}  # --res-slots image: slot -> tag
         self.copied = []
 
     def claim(self, timeout):
@@ -177,47 +207,85 @@ class _Device:
         import teacher_resident_layout as oracle
 
         self.claim(1)
+        hook, hook_error = kwargs.get("_while_waiting"), None
         try:
             _prepare(self._transport)
             words, workers = ReplayCompletionTests.result()
             if opcode == M.ADMIN_OPCODE:
                 after = struct.unpack_from("<I", data, 4)[0] == 7
-                struct.pack_into("<I", self._transport.memory, M.SEAL_AT, M.SEAL if after else 0)
+                code, size = struct.unpack_from("<2I", data, 8)  # the reservation (16 or 20 KiB)
+                struct.pack_into("<I", self._transport.memory, code + size - 128, M.SEAL if after else 0)
                 out = struct.pack(
                     "<3I", M.ADMIN_MAGIC, M.SLOT_UNCACHED + 4, M.SEAL if after else 0
                 ).ljust(256, b"\0")
             else:
-                count = struct.unpack_from("<I", data, 12)[0] or 1
-                self.submitted.append(count)
-                p = self.owner.plan.plan
-                window = self._transport.memory[C.WIN_LO : C.WIN_HI]
-                status, kw = 0, {}
-                if self.owner.resident_image:
-                    import numpy as np
+                # a --multi image runs each 128-byte segment in turn, metadata block g each
+                nseg = len(data) // 128
+                self.jobs = getattr(self, "jobs", []) + [nseg]  # segments per submission
+                assert len(data) in (128, 256) and output_size == C.META_BYTES * nseg
+                outs = []
+                for g in range(nseg):
+                    count = struct.unpack_from("<I", data, 128 * g + 12)[0] or 1
+                    self.submitted.append(count)
+                    table_at = struct.unpack_from("<I", data, 128 * g + 4)[0]
+                    models = getattr(self.owner, "models", None)
+                    p = next(m.plan.plan for m in models if m.plan.plan.table_at == table_at) if models \
+                        else self.owner.plan.plan
+                    hi = getattr(self.owner, "win_hi", C.WIN_HI)  # RS_WIN_WIDE image: 0x1ff0000
+                    window = self._transport.memory[C.WIN_LO : hi]
+                    status, kw = 0, {}
+                    # the kernel's stride-2 store order: the tile-layout images (--post-batch)
+                    # store rows in pairs, the packed-bias wide-window one (--s2-rev) with the
+                    # column blocks last to first; the older images row by row
+                    sha = getattr(self.owner, "image_sha256", "")
+                    post = (M.RESIDENT_IMAGE_SHA256, M.SLOTS_IMAGE_SHA256, M.DET_IMAGE_SHA256)
+                    kw.update(s2_order="pairs_rev" if sha in (M.DET_IMAGE_SHA256, M.MULTI_IMAGE_SHA256) else "pairs" if sha in post else "rows")
+                    if getattr(self.owner, "cbias", False):
+                        kw.update(cbias=True, win_hi=hi)
+                    if self.owner.resident_image:
+                        import numpy as np
 
-                    tag, mode = struct.unpack_from("<4I", data, 20), struct.unpack_from("<I", data, 36)[0]
-                    if mode:
-                        flag = struct.unpack_from("<I", self._transport.memory, C.BLOB_FLAG)[0]
-                        load = bool(flag) or tag != self.tag
-                        if load:
-                            struct.pack_into("<I", self._transport.memory, C.BLOB_FLAG, 0)
-                            self.tag = (0, 0, 0, 0)
-                        if self.vt is None:
-                            self.vt = np.full((oracle.RES_SPAN, 32, 2), np.nan, np.float16)
-                        kw = dict(resident=self.vt, load=load)
-                        status = 1 | 6 * load
-                        self.copied.append(load)
-                oracle.simulate(p, window, s2_phase=0, s2_direct=True, crops=count, **kw)
-                if status & 4:
-                    self.tag = tag
-                self._transport.memory[C.WIN_LO : C.WIN_HI] = window
-                words, workers = ReplayCompletionTests.result(count, len(p.table) // 128)
-                words[12] = status
-                out = struct.pack("<256I", *words)
+                        tag, mode = struct.unpack_from("<4I", data, 128 * g + 20), struct.unpack_from("<I", data, 128 * g + 36)[0]
+                        slots = getattr(self.owner, "res_slots", False)
+                        slot, mode = (mode >> 1, mode & 1) if slots else (0, mode)
+                        if mode:
+                            flag = struct.unpack_from("<I", self._transport.memory, C.BLOB_FLAG)[0]
+                            load = bool(flag) or tag != (self.tags.get(slot) if slots else self.tag)
+                            if load:
+                                struct.pack_into("<I", self._transport.memory, C.BLOB_FLAG, 0)
+                                self.tag = (0, 0, 0, 0)
+                                if flag:
+                                    self.tags.clear()  # a refilled region invalidates every slot
+                                self.tags.pop(slot, None)
+                            if self.vt is None:
+                                self.vt = np.full((oracle.RES_SPAN, 32, 2), np.nan, np.float16)
+                            kw.update(resident=self.vt, load=load)
+                            status = 1 | 6 * load
+                            self.copied.append(load)
+                    if hook is not None and g == 0:  # the device's wait hook: host work while the DSP runs
+                        self.hooked = getattr(self, "hooked", 0) + 1
+                        try:
+                            hook()
+                        except BaseException as exc:
+                            hook_error = exc
+                    oracle.simulate(p, window, s2_phase=0, s2_direct=True, crops=count, **kw)
+                    if status & 4:
+                        self.tag = tag
+                        if getattr(self.owner, "res_slots", False):
+                            self.tags[slot] = tag
+                    self._transport.memory[C.WIN_LO : hi] = window
+                    words, workers = ReplayCompletionTests.result(count, len(p.table) // 128)
+                    words[12] = status
+                    outs.append(struct.pack("<256I", *words))
+                out = b"".join(outs)
                 if self.fail:
                     workers[0] = tuple(list(workers[0][:2]) + [1] + list(workers[0][3:]))
-            result = SimpleNamespace(output=out, workers=workers, kernel_reference_ticks=2000)
+            # the wrapper's time spans every segment of the job
+            ticks = 2000 * (len(out) // C.META_BYTES if opcode != M.ADMIN_OPCODE else 1)
+            result = SimpleNamespace(output=out, workers=workers, kernel_reference_ticks=ticks)
             _completion_validator(result)
+            if hook_error is not None:
+                raise hook_error
             return result
         except RecoveryRequired:
             self._transport.poisoned = True
