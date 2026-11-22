@@ -166,6 +166,9 @@ class _Device:
             claim=self.claim,
             release_unsubmitted=self.release,
         )
+        mem = self._transport.memory
+        self._transport.get = lambda off: struct.unpack_from("<I", mem, off)[0]
+        self._transport.put = lambda off, v: struct.pack_into("<I", mem, off, v)
         self.claimed = self.closed = self.fail = False
         self.submitted = []
         self.powers = []
@@ -223,8 +226,25 @@ class _Device:
                 nseg = len(data) // 128
                 self.jobs = getattr(self, "jobs", []) + [nseg]  # segments per submission
                 assert len(data) in (128, 256) and output_size == C.META_BYTES * nseg
+                from framenpu.profile import PROFILE
+
+                arena, late = PROFILE.arena, False
+                self._transport.memory[arena : arena + len(data) + output_size] = data + bytes(output_size)
                 outs = []
                 for g in range(nseg):
+                    # a --stream request: segment 1 waits for the host's release (word 12 = nonce,
+                    # written in the wait hook, which runs while segment 0 ran)
+                    strm, nonce = struct.unpack_from("<2I", data, 128 * g + 40)
+                    if strm and g == 1:
+                        if hook is not None:
+                            self.hooked = getattr(self, "hooked", 0) + 1
+                            try:
+                                hook()
+                            except BaseException as exc:
+                                hook_error = exc
+                        if struct.unpack_from("<I", self._transport.memory, arena + 128 + 48)[0] != nonce:
+                            late = True  # the kernel returns RS_STREAM_LATE
+                            break
                     count = struct.unpack_from("<I", data, 128 * g + 12)[0] or 1
                     self.submitted.append(count)
                     table_at = struct.unpack_from("<I", data, 128 * g + 4)[0]
@@ -239,7 +259,7 @@ class _Device:
                     # column blocks last to first; the older images row by row
                     sha = getattr(self.owner, "image_sha256", "")
                     post = (M.RESIDENT_IMAGE_SHA256, M.SLOTS_IMAGE_SHA256, M.DET_IMAGE_SHA256)
-                    kw.update(s2_order="pairs_rev" if sha in (M.DET_IMAGE_SHA256, M.MULTI_IMAGE_SHA256) else "pairs" if sha in post else "rows")
+                    kw.update(s2_order="pairs_rev" if sha in (M.DET_IMAGE_SHA256, M.MULTI_IMAGE_SHA256, M.STREAM_IMAGE_SHA256) else "pairs" if sha in post else "rows")
                     if getattr(self.owner, "cbias", False):
                         kw.update(cbias=True, win_hi=hi)
                     if self.owner.resident_image:
@@ -262,7 +282,7 @@ class _Device:
                             kw.update(resident=self.vt, load=load)
                             status = 1 | 6 * load
                             self.copied.append(load)
-                    if hook is not None and g == 0:  # the device's wait hook: host work while the DSP runs
+                    if hook is not None and g == 0 and not strm:  # the device's wait hook: host work while the DSP runs
                         self.hooked = getattr(self, "hooked", 0) + 1
                         try:
                             hook()
@@ -276,9 +296,12 @@ class _Device:
                     self._transport.memory[C.WIN_LO : hi] = window
                     words, workers = ReplayCompletionTests.result(count, len(p.table) // 128)
                     words[12] = status
+                    if strm:
+                        words[13] = nonce  # published after the segment's outputs
                     outs.append(struct.pack("<256I", *words))
-                out = b"".join(outs)
-                if self.fail:
+                    struct.pack_into("<256I", self._transport.memory, arena + len(data) + C.META_BYTES * g, *words)
+                out = b"".join(outs).ljust(output_size, b"\0")
+                if self.fail or late:
                     workers[0] = tuple(list(workers[0][:2]) + [1] + list(workers[0][3:]))
             # the wrapper's time spans every segment of the job
             ticks = 2000 * (len(out) // C.META_BYTES if opcode != M.ADMIN_OPCODE else 1)

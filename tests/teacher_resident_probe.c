@@ -828,6 +828,10 @@ static __attribute__((noinline)) void rs_gather(const rs_op *d, volatile HVX_Vec
     defined(RS_MULTI) && (defined(RS_DIAG_WRAP) || defined(RS_DIAG_TAIL))
 #error "RS_MULTI is an option of the pooled --res-slots replay build"
 #endif
+#if defined(RS_STREAM) && !defined(RS_MULTI)
+#error "RS_STREAM is an option of the RS_MULTI build"
+#endif
+#define RS_STREAM_LATE 0x7du /* segment 1's inputs were not staged in time */
 #if defined(RS_TILES) && !(defined(RS_PW_PIPE) && defined(RS_STRIDE2) && defined(RS_DW_FAST) && defined(RS_RESIDENT))
 #error "RS_TILES is an option of the pipelined resident heads build"
 #endif
@@ -1861,6 +1865,24 @@ fnpu_u32 frame_job(const fnpu_context *c) {
 #ifdef RS_CBIAS
     if (!rmode) return FNPU_BAD_ARGUMENT; /* RS_XB lies in the blob region */
 #endif
+#ifdef RS_STREAM
+    /* A streamed request (word 10 = 1, word 11 = its nonce): segment 1 starts once the
+     * host has staged its inputs while segment 0 ran; the host writes word 12 = nonce
+     * after them (its seq-cst store orders the staging first, as for publish). Bounded
+     * by 5 ms and the request's budget. Each segment then publishes meta word 13 =
+     * nonce after its metadata, so the host reads its outputs while the next one runs. */
+    const fnpu_u32 strm = in[10];
+    if ((strm > 1) | (strm & (in[11] == 0))) return FNPU_BAD_ARGUMENT;
+    if (strm & (seg != 0)) {
+        const fnpu_u32 w0 = rs_ticks();
+        while (in[12] != in[11]) {
+            const fnpu_u32 now = rs_ticks();
+            if ((now - w0 > 96000u) | (now - RS_MB[17] > 384000u)) return RS_STREAM_LATE;
+            RS_PAUSE();
+        }
+        __asm__ volatile("barrier" ::: "memory");
+    }
+#endif
     fnpu_u32 t0 = rs_ticks();
 #ifdef RS_MULTI
     /* one 20 ms budget for the whole request (the gate hold): segment 0's start
@@ -2008,6 +2030,12 @@ fnpu_u32 frame_job(const fnpu_context *c) {
 #endif
     ((volatile HVX_Vector *)meta)[2] = RS_FLAGS[0];
     __asm__ volatile("barrier" ::: "memory");
+#ifdef RS_STREAM
+    if (strm) { /* last: every output and metadata store above has completed */
+        meta[13] = in[11];
+        __asm__ volatile("barrier" ::: "memory");
+    }
+#endif
     return FNPU_OK;
 }
 

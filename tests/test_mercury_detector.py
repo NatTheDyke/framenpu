@@ -19,6 +19,7 @@ KEYPOINT = os.environ.get("FNPU_MERCURY_MODEL")
 DET_JOBS = os.environ.get("FNPU_MERCURY_DET_JOBS")  # the --cbias --win-wide slots build
 SLOTS_JOBS = os.environ.get("FNPU_MERCURY_JOBS")  # optional: the --res-slots build, for comparison
 MULTI_JOBS = os.environ.get("FNPU_MERCURY_MULTI_JOBS")  # optional: the same build with --multi
+STREAM_JOBS = os.environ.get("FNPU_MERCURY_STREAM_JOBS")  # optional: --multi --stream
 
 try:
     import numpy as np
@@ -303,6 +304,51 @@ class DetectorSessionTests(unittest.TestCase):
                 s.infer_frame([(0, kf), (0, kf)])  # one workspace per model
             with self.assertRaises(ValueError):
                 s.infer_frame([])
+
+    @unittest.skipUnless(STREAM_JOBS, "FNPU_MERCURY_STREAM_JOBS (the --multi --stream build) required")
+    def test_streamed_frame(self):
+        """--stream: segment 1 prepared and staged, segment 0 read and finished while the DSP
+        runs; outputs equal the separate requests' bit for bit."""
+        s = self.session(STREAM_JOBS, [(MODEL, 2)])
+        self.assertTrue(s.stream and s.multi)
+        imgs = crops(3, 13)
+        with s:
+            for rnd in range(4):
+                kf = [self.kp_feed(50 + rnd * 10 + k) for k in range(1 + rnd % 3)]
+                df = [{"inputImg": x[None, None]} for x in imgs[: 1 + rnd % 2]]
+                order = [(1, df), (0, kf)] if rnd % 2 == 0 else [(0, kf), (1, df)]
+                got = s.infer_frame(order)
+                self.assertTrue(s.last_timing["streamed"] and s.last_timing["early_finish"])
+                self.assertEqual(s.device.jobs[-1], 2)
+                want = [s.infer(f, model=m) for m, f in order]
+                for g, w, (m, _) in zip(got, want, order):
+                    self.assertEqual(len(g), len(w))
+                    for a, b in zip(g, w):
+                        for name in mercury_outputs(m):
+                            np.testing.assert_array_equal(a[name], b[name])
+            self.assertEqual(s.device.copied[:2], [True, True])
+            self.assertFalse(any(s.device.copied[2:]))
+
+            # segment 1's prepare fails in the wait hook: the job still completes cleanly (no
+            # recovery), the original error is raised, and the next frame runs
+            bad = dict(kf[0], inputImg=np.full((1, 1, 128, 128), np.nan, np.float32))
+            with self.assertRaises(ValueError):
+                s.infer_frame([(1, df), (0, [bad])])
+            self.assertFalse(s.device._transport.poisoned)
+            got = s.infer_frame([(1, df), (0, kf)])
+            for a, b in zip(got[1], s.infer(kf)):
+                for name in mercury_outputs(0):
+                    np.testing.assert_array_equal(a[name], b[name])
+
+            # segment 1 never released: the kernel's error requires recovery
+            from framenpu.errors import RecoveryRequired
+
+            put = s.device._transport.put
+            s.device._transport.put = lambda off, v: None
+            with self.assertRaises(RecoveryRequired):
+                s.infer_frame([(1, df), (0, kf)])
+            s.device._transport.put = put
+            self.assertTrue(s.device._transport.poisoned)
 
     def test_three_models_do_not_fit(self):
         from framenpu.errors import InvalidModel

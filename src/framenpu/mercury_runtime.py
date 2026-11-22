@@ -50,6 +50,12 @@ DET_IMAGE_SHA256 = "bebc1ea8d758b3b77e46a820344983c8981d4ba288426b527a2b39bba686
 # under one gate hold and one 20 ms budget (infer_frame). One-segment requests run as before.
 MULTI_IMAGE_SHA256 = "ffe783131158f302d28c68812c9d5c4855892dee01e3e4abb0ef18e5c145ec94"
 MULTI_SEGMENTS = 2
+# The --multi build with --stream: in a streamed request segment 1 starts once the host has
+# staged it (request word 12 = the nonce in word 11), and each segment publishes meta word 13 =
+# nonce after its outputs. infer_frame then prepares and stages segment 1 and reads and finishes
+# segment 0 while the DSP runs; only segment 0's prepare and segment 1's finish stay serial.
+STREAM_IMAGE_SHA256 = "cd656b5d4641ac37b1820549dacef93859412f42fb60fe093641907f4630e5de"
+STREAM_LATE = 0x7D  # the kernel's error when segment 1 was not staged within 5 ms
 # Straight-line VTCM backup/restore (the uncached slot refetched each loop packet: 385 -> 42 us).
 # The pool loader (workers 1 and 2 enter the image too) for the 20 KiB reservation.
 LOADER_SHA256 = "cc81fb7ec3ad340da8fe3ba7f3c930689cd9fd81861a5fe8cab29babc7247524"
@@ -95,10 +101,11 @@ def load_jobs(folder):
     if wide and (not slots or not record.get("cbias") or record.get("win_hi") != "0x1ff0000"
                  or not record.get("s2_rev")):
         raise InvalidModel("Mercury packed-bias / wide-window build differs")
-    multi = record.get("multi")
-    if multi not in (None, MULTI_SEGMENTS) or (multi and not wide):
+    multi, stream = record.get("multi"), record.get("stream")
+    if multi not in (None, MULTI_SEGMENTS) or (multi and not wide) or stream not in (None, True) or (
+            stream and not multi):
         raise InvalidModel("Mercury multi-segment build differs")
-    want = (MULTI_IMAGE_SHA256 if multi else DET_IMAGE_SHA256 if wide else SLOTS_IMAGE_SHA256 if slots else RESIDENT_IMAGE_SHA256) if resident else \
+    want = (STREAM_IMAGE_SHA256 if stream else MULTI_IMAGE_SHA256 if multi else DET_IMAGE_SHA256 if wide else SLOTS_IMAGE_SHA256 if slots else RESIDENT_IMAGE_SHA256) if resident else \
         HEADS_IMAGE_SHA256 if heads else IMAGE_SHA256
     if (
         hashlib.sha256(image).hexdigest() != want
@@ -165,14 +172,14 @@ def replay_metadata(result, count, descriptors, image_bytes, resident=None):
                              result.kernel_reference_ticks)
 
 
-def frame_metadata(result, segments, image_bytes, resident):
+def frame_metadata(result, segments, image_bytes, resident, done=None):
     """A --multi request's metadata: segments = [(crops, descriptors), ...], one
     META_BYTES block each (segment k's in block k), the segments' bodies together
     within the request's one 20 ms budget and the wrapper's time."""
     _completion(result, C.META_BYTES * len(segments))
     out = [
         _segment_metadata(result.output[k * C.META_BYTES : (k + 1) * C.META_BYTES], count, n,
-                          image_bytes, resident, result.kernel_reference_ticks)
+                          image_bytes, resident, result.kernel_reference_ticks, done)
         for k, (count, n) in enumerate(segments)
     ]
     if sum(t["crop_end_ticks"][-1] for t in out) > min(384000, result.kernel_reference_ticks):
@@ -180,8 +187,13 @@ def frame_metadata(result, segments, image_bytes, resident):
     return out
 
 
-def _segment_metadata(output, count, descriptors, image_bytes, resident, kernel_ticks):
+def _segment_metadata(output, count, descriptors, image_bytes, resident, kernel_ticks, done=None):
+    """done: a streamed request's nonce, which the segment publishes in word 13."""
     m = list(struct.unpack("<256I", output))
+    if done is not None:
+        if m[13] != done:
+            raise RecoveryRequired("Mercury segment completion word differs")
+        m[13] = 0
     status = m[12]
     if resident is not None:
         if status not in ((3 | 4, 1) if resident else (0,)):
@@ -305,11 +317,13 @@ class MercurySession:
         model = mercury.load_keypoint(model_path, require_pin=require_pin)
         self.loader, self.image, self.heads = load_jobs(jobs)
         self.image_sha256 = hashlib.sha256(self.image).hexdigest()
-        self.res_slots = self.image_sha256 in (SLOTS_IMAGE_SHA256, DET_IMAGE_SHA256, MULTI_IMAGE_SHA256)
-        self.multi = self.image_sha256 == MULTI_IMAGE_SHA256
+        self.res_slots = self.image_sha256 in (SLOTS_IMAGE_SHA256, DET_IMAGE_SHA256, MULTI_IMAGE_SHA256,
+                                               STREAM_IMAGE_SHA256)
+        self.stream = self.image_sha256 == STREAM_IMAGE_SHA256
+        self.multi = self.stream or self.image_sha256 == MULTI_IMAGE_SHA256
         self.resident_image = self.res_slots or self.image_sha256 == RESIDENT_IMAGE_SHA256
         # RS_CBIAS + RS_WIN_WIDE (load_jobs checked the record against the hash)
-        self.cbias = self.image_sha256 in (DET_IMAGE_SHA256, MULTI_IMAGE_SHA256)
+        self.cbias = self.image_sha256 in (DET_IMAGE_SHA256, MULTI_IMAGE_SHA256, STREAM_IMAGE_SHA256)
         self.win_hi = C.WIN_HI_WIDE if self.cbias else C.WIN_HI
         if extra_models and not self.res_slots:
             raise InvalidModel("several models need the --res-slots image")
@@ -588,11 +602,19 @@ class MercurySession:
         if len({sl.slot for sl, _ in reqs}) != len(reqs):
             raise ValueError("a frame's requests are of distinct models")  # one workspace each
         with self.lock:
-            pend = [self._host_prepare(sl, f) for sl, f in reqs]
-            self._device_run_frame(pend)
-            outs = [self._host_finish(p) for p in pend]
+            if self.stream and len(reqs) == 2:
+                p0 = self._host_prepare(*reqs[0])
+                p1, early = self._device_run_streamed(p0, *reqs[1])
+                pend = [p0, p1]
+                outs = [early if early is not None else self._host_finish(p0), self._host_finish(p1)]
+            else:
+                early = None
+                pend = [self._host_prepare(sl, f) for sl, f in reqs]
+                self._device_run_frame(pend)
+                outs = [self._host_finish(p) for p in pend]
             self.last_timing = {"requests": [p.timing for p in pend],
-                                "body_ms": sum(p.timing["body_ms"] for p in pend), "segments": len(pend)}
+                                "body_ms": sum(p.timing["body_ms"] for p in pend), "segments": len(pend),
+                                "streamed": self.stream and len(reqs) == 2, "early_finish": early is not None}
             return outs
 
     def _model_for(self, model, feeds):
@@ -655,15 +677,7 @@ class MercurySession:
         def stage(mem):
             self._reservation(True)
             for q in ps:
-                if q.sl.native is not None:
-                    q.sl.native.stage(mem, q.prepared)
-                    continue
-                for k, ts in enumerate(q.prepared):
-                    L.stage_inputs(
-                        q.sl.plan.crop(k),
-                        lambda at, data: mem.__setitem__(slice(at, at + len(data)), data),
-                        ts,
-                    )
+                self._stage(mem, q)
 
         self._gate(stage)
         p.mark("gate_stage_ms")
@@ -682,25 +696,8 @@ class MercurySession:
                 for q, t in zip(ps, frame_metadata(result, [(q.count, j.end - j.first) for q, j in zip(ps, jobs)],
                                                    len(self.image), resident)):
                     q.timing = t
-            get = lambda at, n: bytes(self.device._transport.memory[at : at + n])  # noqa: E731
             for q in ps:
-                read_outputs(q, get)
-
-        def read_outputs(p, get):
-            sl, count, prepared = p.sl, p.count, p.prepared
-            for k in range(count):
-                if sl.native is not None:
-                    if not sl.native.read(prepared, get, k):
-                        raise RecoveryRequired("Mercury output has invalid padding or values")
-                    continue
-                maps = {}
-                names = (sl.plan.final,) if sl.model.detector else (L.OUTPUT, L.HEATMAP) if self.heads else (L.OUTPUT,)
-                for name in names:
-                    out, stray = L.read_tensor(sl.plan.crop(k), get, name)
-                    if stray or not np.isfinite(out).all():
-                        raise RecoveryRequired("Mercury output has invalid padding or values")
-                    maps[name] = out.astype(np.float32)
-                p.maps.append(maps)
+                self._read_outputs(q)
 
         self.device._submit(
             self.loader,
@@ -721,6 +718,147 @@ class MercurySession:
             p.marks["submit"] = phases
         for q in ps:
             q.sl.crop_ms = q.timing["body_ms"] / q.count
+
+    def _stage(self, mem, q):
+        """Write one prepared request's inputs into its window part."""
+        if q.sl.native is not None:
+            q.sl.native.stage(mem, q.prepared)
+            return
+        for k, ts in enumerate(q.prepared):
+            L.stage_inputs(q.sl.plan.crop(k), lambda at, data: mem.__setitem__(slice(at, at + len(data)), data), ts)
+
+    def _read_outputs(self, p):
+        """Read and check one request's outputs from the window (into its workspace or p.maps)."""
+        import numpy as np
+
+        sl, count, prepared = p.sl, p.count, p.prepared
+        get = lambda at, n: bytes(self.device._transport.memory[at : at + n])  # noqa: E731
+        p.maps = []
+        for k in range(count):
+            if sl.native is not None:
+                if not sl.native.read(prepared, get, k):
+                    raise RecoveryRequired("Mercury output has invalid padding or values")
+                continue
+            maps = {}
+            names = (sl.plan.final,) if sl.model.detector else (L.OUTPUT, L.HEATMAP) if self.heads else (L.OUTPUT,)
+            for name in names:
+                out, stray = L.read_tensor(sl.plan.crop(k), get, name)
+                if stray or not np.isfinite(out).all():
+                    raise RecoveryRequired("Mercury output has invalid padding or values")
+                maps[name] = out.astype(np.float32)
+            p.maps.append(maps)
+
+    def _device_run_streamed(self, p0, sl1, feeds1):
+        """A --stream frame of two segments: p0 (prepared) is staged before the job; while the DSP
+        runs it, the waiting thread prepares and stages segment 1 (sl1, feeds1), releases it (word
+        12 = nonce, a seq-cst store after the staging), then waits for segment 0's completion word
+        and reads and finishes its outputs. Returns (segment 1's pending request, segment 0's
+        outputs or None when segment 0 had not published in time: then they are read after the
+        job like any other). A failure of the early read or finish is left to the normal path."""
+        from .profile import PROFILE
+
+        if sl1.slot == p0.sl.slot:
+            raise ValueError("a frame's requests are of distinct models")
+        t = self.device._transport
+        nonce = 0
+        while not nonce:
+            nonce = struct.unpack("<I", secrets.token_bytes(4))[0]
+        ready_at = PROFILE.arena + 128 + 48  # segment 1's request word 12
+        done_at = PROFILE.arena + 256 + 13 * 4  # segment 0's meta word 13 (output at 256)
+        box = {"p1": None, "early": None, "read0": False, "error": None}
+        p0.restart()
+        self._open()
+        if self.power is None:
+            self.power = self.device._hold_power()
+        p0.mark("open_power_ms")
+
+        def stage0(mem):
+            self._reservation(True)
+            self._stage(mem, p0)
+
+        self._gate(stage0)
+        p0.mark("gate_stage_ms")
+        job0, job1 = p0.sl.plan.plan.jobs[0], sl1.plan.plan.jobs[0]
+        for j, sl in ((job0, p0.sl), (job1, sl1)):
+            if j.first or j.end != len(sl.plan.plan.table) // 128:
+                raise ValueError("a segment runs its whole table")
+        phases = {} if p0.marks is not None else None
+        resident = self.resident if self.resident_image else None
+
+        def during():
+            try:
+                p1 = self._host_prepare(sl1, feeds1)
+                box["p1"] = p1
+                self._reservation(True)
+                self._stage(t.memory, p1)
+            except BaseException as exc:  # raised after the job, which still completes cleanly
+                box["error"] = exc
+            # after the staging (seq-cst); on a failure too, so segment 1 runs (on whatever the
+            # window holds: its outputs are discarded) instead of stalling the gate for 5 ms
+            t.put(ready_at, nonce)
+            if box["error"] is not None:
+                return
+            # segment 0 publishes after its outputs; bounded: else read after the job
+            end = time.monotonic() + 2e-3 + 3e-3 * p0.sl.crop_ms * p0.count
+            while t.get(done_at) != nonce:
+                if time.monotonic() > end:
+                    return
+                time.sleep(5e-5)
+            try:
+                self._read_outputs(p0)
+                box["read0"] = True
+                box["early"] = self._host_finish(p0)
+            except RecoveryRequired:
+                box["read0"] = False  # validate reads it again and decides
+                box["early"] = None
+
+        def validate(result):
+            self._reservation(True)
+            if box["error"] is not None:
+                _completion(result, 2 * C.META_BYTES)  # the job itself completed cleanly
+                if isinstance(box["error"], RecoveryRequired):
+                    raise box["error"]
+                return
+            p1 = box["p1"]
+            t0, t1 = frame_metadata(result, [(p0.count, job0.end), (p1.count, job1.end)], len(self.image),
+                                    resident, done=nonce)
+            p0.timing, p1.timing = t0, t1
+            if not box["read0"]:
+                box["early"] = None
+                self._read_outputs(p0)
+            self._read_outputs(p1)
+
+        def payload(q_count, sl):
+            w = bytearray(self._payload(q_count, sl))
+            struct.pack_into("<3I", w, 40, 1, nonce, 0)
+            return bytes(w)
+
+        count1 = len(feeds1)
+        self.device._submit(
+            self.loader,
+            payload(p0.count, p0.sl) + payload(count1, sl1),
+            opcode=C.RS_OPCODE,
+            params=(1, job0.first, job0.end, 0, 0, 0),
+            output_size=2 * C.META_BYTES,
+            use_direct=True,
+            _prepare=lambda t: self._reservation(True),
+            _completion_validator=_completion_guard(validate),
+            _held_power=self.power,
+            _expect_s=0.8e-3 * (p0.sl.crop_ms * p0.count + sl1.crop_ms * count1),
+            _phase_times=phases,
+            _while_waiting=during,
+        )
+        if box["error"] is not None:
+            raise box["error"]
+        p0.mark("submit_ms")
+        if phases is not None:
+            p0.marks["submit"] = phases
+        p1 = box["p1"]
+        for q in (p0, p1):
+            q.sl.crop_ms = q.timing["body_ms"] / q.count
+        if box["early"] is not None and phases is not None:
+            p0.timing["phases_ms"] = p0.marks
+        return p1, box["early"]
 
     def _host_finish(self, p):
         """The request's outputs from its read-back maps (no device access)."""
@@ -753,7 +891,7 @@ class MercurySession:
                 for m, x in zip(p.maps, p.extra)
             ]
         p.mark("host_finish_ms")
-        if p.marks is not None:
+        if p.marks is not None and p.timing is not None:  # a streamed early finish: set after the job
             p.timing["phases_ms"] = p.marks
         return outs
 

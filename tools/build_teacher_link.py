@@ -122,6 +122,7 @@ def build(
     win_wide=False,
     s2_rev=False,
     multi=False,
+    stream=False,
     loader_stamp=False,
     pw_ablate=0,
     clock_probe=False,
@@ -165,6 +166,8 @@ def build(
         raise ValueError("--s2-rev is an option of the --post-batch build")
     if multi and not (res_slots and pool and replay) or multi and pool_diag:
         raise ValueError("--multi is an option of the pooled --res-slots replay build")
+    if stream and not multi:
+        raise ValueError("--stream is an option of the --multi build")
     if resident and not (replay and mheads):
         raise ValueError("resident parameters are an option of the replay + mheads image")
     if mheads and (not stride2 or heads or stem):
@@ -301,6 +304,7 @@ def build(
             *(["-DRS_WIN_WIDE"] if win_wide else []),
             *(["-DRS_S2_REV"] if s2_rev else []),
             *(["-DRS_MULTI"] if multi else []),
+            *(["-DRS_STREAM"] if stream else []),
             *([f"-DRS_PW_ABLATE={pw_ablate}"] if pw_ablate else []),
             *(["-DRS_CLOCK_PROBE"] if clock_probe else []),
             *(["-DRS_PW_PIPE"] if pw_pipe else []),
@@ -358,6 +362,7 @@ def build(
         **({"win_hi": "0x1ff0000"} if win_wide else {}),
         **({"s2_rev": True} if s2_rev else {}),
         **({"multi": 2} if multi else {}),
+        **({"stream": True} if stream else {}),
         **({"pw_ablate": pw_ablate} if pw_ablate else {}),
         **({"clock_probe": True} if clock_probe else {}),
         **({"pw_pipe": True} if pw_pipe else {}),
@@ -459,6 +464,8 @@ def main():
                    help="(--res-slots) window up to the image reservation at 0x1ff0000 (5.69 MiB)")
     p.add_argument("--multi", action="store_true",
                    help="(--res-slots --pool) requests of one or two segments (two models' tables)")
+    p.add_argument("--stream", action="store_true",
+                   help="(--multi) segment 1 starts when the host has staged it; segments publish completion")
     p.add_argument("--s2-rev", action="store_true",
                    help="(--post-batch) stride-2 column blocks last to first (rows wider than 32)")
     p.add_argument("--hmx-inline", action="store_true",
@@ -489,6 +496,7 @@ def main():
         win_wide=args.win_wide,
         s2_rev=args.s2_rev,
         multi=args.multi,
+        stream=args.stream,
         loader_stamp=args.loader_stamp,
         pw_ablate=args.pw_ablate,
         clock_probe=args.clock_probe,
