@@ -28,6 +28,8 @@ rules, lanes and DSP layout stay below.
 | `max_crops(model)` | Crops one request may carry on this backend now (it can change after a fallback) |
 | `infer(model, crops)` | One request of 1..`max_crops` crops, run now; outputs per crop, in order |
 | `infer_frame([(model, crops), ...])` | A frame's requests of distinct models: one submission where the backend can, else back to back |
+| `infer_many([(model, crops), ...])` | Several requests, models may repeat, in order: one round trip where the backend can (the service overlaps their host work) |
+| `backend_of(model)` | Where the model runs now: the backend's name, or `"cpu"` (a service may not serve every model; a fallback moves all) |
 | `last_timing` | The last call's timing record, or None |
 | `idle()` | Release held clocks; keep plans and resident parameters |
 | `close()` | Release everything; a session that needs recovery stays refused |
@@ -38,6 +40,7 @@ Rules carried over from the tracker today:
 - Any backend failure latches that session to the CPU for its lifetime; `RecoveryRequired` is
   never retried.
 - Models are addressed by manifest name, not by number (the service's 0/1/2 is wire detail).
+- A model the service does not serve runs on the CPU without moving the others.
 
 Entry point: `framenpu.open(manifests, backend="auto"|"cpu"|"device"|"service", jobs=None,
 socket=None, threads=1)` (`framenpu.session`). `manifests` are `model.json` files or the folders

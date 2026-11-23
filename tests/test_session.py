@@ -26,9 +26,18 @@ from test_service import FakeSession, det_crop, feed  # noqa: E402
 KP, DET, S3D = "mercury-ft7", "mercury-detector-160", "mercury-stereo3d-tpc1"
 
 
+def pair_feed(v):
+    return {
+        "inputImg": np.full((1, 2, 128, 128), v, np.float32),
+        "lastKeypoints": np.zeros((1, 84), np.float32),
+        "useLastKeypoints": np.array([1.0], np.float32),
+        "geom": np.ones((1, 16), np.float32),
+    }
+
+
 def model_dir(root, name):
     """A copy of the bundled manifest with a stand-in weights file of matching hash."""
-    doc = json.loads((ROOT / "models" / name / "model.json").read_text())
+    doc = json.loads((ROOT / "src/framenpu/manifests" / f"{name}.json").read_text())
     d = Path(root) / name
     d.mkdir()
     blob = ("weights of " + name).encode()
@@ -110,6 +119,38 @@ class CPUTests(SessionTestBase):
         with self.assertRaises(ValueError):
             s.infer_frame([(KP, [feed(1)]), (KP, [feed(2)])])
 
+    def test_a_weights_file_finds_its_manifest_beside_it_or_bundled(self):
+        w = self.dirs[KP] / "student_ft7.onnx"
+        self.assertEqual(S.Entry(w).name, KP)  # model.json beside it
+        lone = Path(self.tmp.name) / "lone.onnx"
+        lone.write_bytes(w.read_bytes())
+        with patch.object(S, "BUNDLED", self.dirs[KP].parent / "bundled"):
+            (self.dirs[KP].parent / "bundled").mkdir()
+            with self.assertRaises(ValueError):
+                S.Entry(lone)
+            (self.dirs[KP].parent / "bundled" / "mercury-ft7.json").write_text(
+                (self.dirs[KP] / "model.json").read_text()
+            )
+            e = S.Entry(lone)
+        self.assertEqual((e.name, e.weights), (KP, lone))
+
+    def test_an_unlisted_retrained_model_borrows_a_bundled_manifest(self):
+        other = Path(self.tmp.name) / "retrained.onnx"
+        other.write_bytes(b"retrained weights")
+        with self.assertRaises(ValueError):
+            S.Entry(other)
+        e = S.Entry((other, KP))
+        self.assertEqual((e.name, e.weights), (KP, other))
+        self.assertEqual(
+            e.manifest.weights_sha256, hashlib.sha256(b"retrained weights").hexdigest()
+        )
+        e.verified_weights()
+        s = framenpu.open([(other, KP)], backend="cpu")
+        self.assertEqual(s.models, (KP,))
+
+    def test_bundled_manifests_load(self):
+        self.assertEqual(set(S.bundled_manifests()), {KP, DET, S3D, "mercury-keypoint-jan18"})
+
     def test_weights_that_differ_from_the_manifest_are_refused(self):
         (self.dirs[KP] / "student_ft7.onnx").write_bytes(b"other weights")
         with self.assertRaises(ValueError):
@@ -177,9 +218,35 @@ class ServiceSessionTests(SessionTestBase):
         self.assertEqual(FakeOrt.runs, [])  # nothing ran on the CPU
         s.close()
 
-    def test_a_model_the_service_does_not_serve_falls_back_to_cpu(self):
+    def test_a_model_the_service_does_not_serve_runs_on_the_cpu_alone(self):
+        s = self.open((KP, DET, S3D))
+        self.assertEqual(s.name, "framenpu")
+        self.assertEqual([s.backend_of(m) for m in (KP, DET, S3D)], ["framenpu", "framenpu", "cpu"])
+        self.assertEqual(s.max_crops(S3D), 4)
+        kp, j3 = s.infer_frame([(KP, [feed(1)]), (S3D, [pair_feed(2)])])
+        self.assertEqual(float(kp[0]["curls"].flat[0]), 128 * 128 + 1)
+        self.assertEqual(set(j3[0]), {"joints3d", "scalar_extras"})
+        self.assertEqual(
+            [r[0] for r in FakeOrt.runs], ["student_s3d_tpc1.onnx"]
+        )  # only the student
+        self.assertEqual(s.backend_of(KP), "framenpu")  # no latch
+
+    def test_infer_many_is_one_round_trip_and_keeps_order(self):
+        s = self.open()
+        calls = []
+        orig = s.accelerator.client.infer_many
+        s.accelerator.client.infer_many = lambda reqs, **k: (
+            calls.append([(m, len(f)) for m, f in reqs]) or orig(reqs, **k)
+        )
+        outs = s.infer_many([(DET, [det_crop(1)]), (KP, [feed(1), feed(2)]), (KP, [feed(3)])])
+        self.assertEqual(calls, [[(2, 1), (0, 2), (0, 1)]])
+        self.assertEqual([len(o) for o in outs], [1, 2, 1])
+        self.assertEqual(float(outs[2][0]["curls"].flat[0]), 3 * 128 * 128 + 1)
+        self.assertEqual(len(s.last_timing["requests"]), 3)
+
+    def test_a_service_serving_none_of_the_models_leaves_the_cpu(self):
         with self.assertLogs("framenpu.session", "WARNING"):
-            s = self.open((KP, S3D))
+            s = self.open((S3D,))
         self.assertEqual(s.name, "cpu")
 
     def test_a_device_fault_latches_the_session_to_cpu(self):
@@ -243,6 +310,8 @@ class DeviceSessionTests(SessionTestBase):
         fake.infer.assert_called_with(["c"], model=1)
         d.infer_frame([(DET, ["c"]), (KP, ["k"])])
         fake.infer_frame.assert_called_with([(1, ["c"]), (0, ["k"])])
+        d.infer_many([(KP, ["a"]), (DET, ["b"]), (KP, ["c"])])
+        fake.infer_many.assert_called_with([(0, ["a"]), (1, ["b"]), (0, ["c"])])
         with self.assertRaises(ValueError):
             S.DeviceSession([S.Entry(self.dirs[DET])], "jobs")
 

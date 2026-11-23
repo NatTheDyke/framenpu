@@ -98,6 +98,11 @@ class ProtocolTests(unittest.TestCase):
             def infer_frame(self, requests):
                 return [self.infer(m, c) for m, c in requests]
 
+            infer_many = infer_frame
+
+            def backend_of(self, model):
+                return "cpu"
+
             def idle(self):
                 pass
 

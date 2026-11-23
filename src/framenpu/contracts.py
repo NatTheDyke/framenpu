@@ -60,6 +60,13 @@ class Session(Protocol):
         """Run one frame's requests (distinct models) as one submission where the backend can,
         else back to back. Returns each request's outputs."""
 
+    def infer_many(self, requests: Sequence[tuple[str, Sequence[Feed]]]) -> list[list[Outputs]]:
+        """Run several requests (models may repeat) in order, in one round trip where the
+        backend can. Returns each request's outputs."""
+
+    def backend_of(self, model: str) -> str:
+        """Where the model runs now: the backend's name, or "cpu"."""
+
     def idle(self) -> None:
         """Release held clocks; keep plans and resident parameters."""
 

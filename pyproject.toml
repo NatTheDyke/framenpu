@@ -37,7 +37,7 @@ include = ["framenpu", "framenpu_cdsp"]
 namespaces = false
 
 [tool.setuptools.package-data]
-framenpu = ["data/*.json", "data/*.so", "host/*.c", "host/*.h"]
+framenpu = ["data/*.json", "data/*.so", "host/*.c", "host/*.h", "manifests/*.json"]
 framenpu_cdsp = [
     "data/*.bin", "data/*.json", "data/*.so", "host/*.c", "host/*.h",
     "sdk/*.S", "sdk/*.c", "sdk/*.ld", "sdk/include/*.h",

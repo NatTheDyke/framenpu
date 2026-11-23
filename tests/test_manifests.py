@@ -1,4 +1,4 @@
-"""The bundled model manifests (models/*/model.json) against the specs the code still carries.
+"""The bundled model manifests (src/framenpu/manifests/*.json) against the specs the code still carries.
 
 Until sessions are opened by manifest, mercury.py, service.py and backends.py hold their own
 copies of each model's inputs and outputs; this test keeps the four in step. With
@@ -18,11 +18,11 @@ sys.path.insert(0, str(ROOT / "src"))
 from framenpu import backends, mercury, service  # noqa: E402
 from framenpu.contracts import load_manifest  # noqa: E402
 
-MODELS = ROOT / "models"
+MODELS = ROOT / "src/framenpu/manifests"
 
 
 def manifests():
-    return {p.parent.name: load_manifest(p) for p in sorted(MODELS.glob("*/model.json"))}
+    return {p.stem: load_manifest(p) for p in sorted(MODELS.glob("*.json"))}
 
 
 def spec(tensors):
@@ -30,7 +30,7 @@ def spec(tensors):
 
 
 class ManifestTests(unittest.TestCase):
-    def test_every_manifest_is_valid_and_named_for_its_folder(self):
+    def test_every_manifest_is_valid_and_named_for_its_file(self):
         found = manifests()
         self.assertEqual(
             set(found),

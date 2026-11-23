@@ -1,8 +1,8 @@
 # Model manifests
 
-One folder per model, holding its `model.json` ([manifest v1](../docs/CONTRACTS.md#model-manifest)).
-The weights are not in this repository. Put the ONNX file named in `weights.file` beside its
-manifest; its SHA-256 must match `weights.sha256`.
+One manifest per model ([manifest v1](../../../docs/CONTRACTS.md#model-manifest)), shipped with framenpu.
+The weights are not in this repository. `framenpu.open` takes a weights file and finds its
+manifest here by the file's SHA-256 (or uses a `model.json` beside the file).
 
 | Manifest | Kind | Notes |
 | --- | --- | --- |
