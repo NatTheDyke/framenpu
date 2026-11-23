@@ -103,3 +103,6 @@ include evidence/mercury-live-validation.json
 include evidence/mercury-fresh-live.json
 include evidence/mercury-thermal-placement.json
 include evidence/mercury-thermal-session.json
+include evidence/mercury-heads-device.json
+include evidence/mercury-native-host-device.json
+include evidence/mercury-resident-device.json
