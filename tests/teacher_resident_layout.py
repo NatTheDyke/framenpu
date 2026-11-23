@@ -1,11 +1,11 @@
-"""Host side of the resident teacher tail (tests/teacher_resident_probe.c,
+"""Host side of the resident teacher tail (kernels/teacher_resident_probe.c,
 opcode 111): op tables, VTCM and window plans, parameter images and a
 lane-level simulator of the kernel. Opens no device.
 
 A plan is a sequence of jobs. A resident job runs a range of 128-byte
 descriptors (1x1, stride-1 depthwise, load, store) with tensors kept in VTCM
 between ops; the three stride-2 depthwise layers run as
-tests/teacher_dw_probe.c jobs (opcode 110) from and to the window.
+kernels/teacher_dw_probe.c jobs (opcode 110) from and to the window.
 
 Plan modes:
 - "resident": one resident job per stride-1 segment (4 jobs + 3 stride-2
@@ -478,7 +478,7 @@ def _s2_store_order(oh, ow, order):
 
 
 def _s2_direct(row, vt, phase, bias_at=None, order="rows"):
-    """Word-level model of rs_s2 under RS_S2_DIRECT (tests/teacher_resident_probe.c):
+    """Word-level model of rs_s2 under RS_S2_DIRECT (kernels/teacher_resident_probe.c):
     the kernel's word offsets, 32-word loads, deals and zero-lane stores in the kernel's
     store order (_s2_store_order), with the simulator's arithmetic. Raises if any access
     leaves the bounds the native check promises (reads inside the input planes, writes
@@ -748,7 +748,7 @@ def simulate(plan, window, *, s2_phase=1, s2_direct=False, crops=1, resident=Non
 
 def native_ok(row, *, dw_blocks=2, s2_direct=None, pw_group=1, mheads=False, resident=False, tiles=False, deep8=False,
               cbias=False, win_hi=None):
-    """Mirror of rs_get in tests/teacher_resident_probe.c (True = accepted).
+    """Mirror of rs_get in kernels/teacher_resident_probe.c (True = accepted).
     s2_direct: the decimation phase (0 even, 1 odd) of an RS_S2_DIRECT build, which
     adds bounds on the direct kernel's reads and zero-lane store spill. pw_group: an
     RS_PW_GROUP build's 1x1 scratch, pw_group * (nk + no) * 16 vectors. mheads: an
@@ -854,7 +854,7 @@ def native_ok(row, *, dw_blocks=2, s2_direct=None, pw_group=1, mheads=False, res
 
 
 def regrid_ok(row):
-    """Mirror of rg_bad in tests/teacher_resident_probe.c (True = accepted)."""
+    """Mirror of rg_bad in kernels/teacher_resident_probe.c (True = accepted)."""
     w = [int(x) for x in row[:32]]
     big = 0
     for x in w:

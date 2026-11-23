@@ -1,7 +1,7 @@
 /* Hardware-only fixture: exercise the runtime's actual packing helper in DDR.
    It does not add a diagnostic opcode to the shipped runtime. */
 #define frame_job runtime_frame_job
-#include "../src/framenpu/sdk/runtime.c"
+#include "../src/framenpu_cdsp/sdk/runtime.c"
 #undef frame_job
 
 fnpu_u32 frame_job(const fnpu_context *ctx) {

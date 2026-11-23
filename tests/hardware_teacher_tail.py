@@ -3,7 +3,7 @@ crop) on the qualified corpus crops, with host FP32 pooling and heads.
 
 Each crop starts from its ncnn FP32 blobs 8 and 10 (rounded to FP16) and
 runs layer by layer on the DSP: tests/teacher_pw_probe.c for 1x1 layers
-(HMX, fused bias/clip/residual) and tests/teacher_dw_probe.c for depthwise
+(HMX, fused bias/clip/residual) and kernels/teacher_dw_probe.c for depthwise
 layers (HVX QFloat16, stride 1/2). Activations live in grid buffers in the
 arena window; each layer's weights are staged just before its job. Checks
 per layer: metadata, finite flags, zero padding lanes and |device - exact|

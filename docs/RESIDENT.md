@@ -12,7 +12,7 @@ with frozen ncnn numerical comparisons. The separate
 v20a graph with persistent weights and FP32 activations. General graph loading
 and execution of the generic planner's schedules remain future work.
 
-The design targets the exact firmware hash in [profile.py](../src/framenpu/profile.py).
+The design targets the exact firmware hash in [profile.py](../src/framenpu_cdsp/profile.py).
 Its evidence is the [memory map](MEMMAP.md), [direct dispatcher](DISPATCH.md),
 [cached-code experiment](HMX_CACHE.md) and [fault-unwind qualification](FAULT_UNWIND.md).
 The fixed proof's new hardware qualification is documented separately.

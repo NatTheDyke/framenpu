@@ -41,7 +41,7 @@ META = 256
 OUTPUT_BYTES = META + CHUNKS * 16
 DUMP_BYTES = 65536
 SOURCE = ROOT / "tests/vtcm_survey_probe.c"
-ENTRY = ROOT / "tests/resident_graph_entry.S"
+ENTRY = ROOT / "kernels/resident_graph_entry.S"
 
 # Static firmware map (cdsp.analysis.elf, see docs/VTCM_MAP.md).
 STATIC = (
@@ -73,6 +73,8 @@ def build(output, source=SOURCE, name="vtcm_survey_v1"):
                 str(SDK / "include"),
                 "-I",
                 str(ROOT / "tests"),
+                "-I",
+                str(ROOT / "kernels"),
                 "-c",
                 str(p),
                 "-o",

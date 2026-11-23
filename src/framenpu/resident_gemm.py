@@ -8,26 +8,22 @@ or service restart is performed here.
 
 import hashlib
 import secrets
-import socket
 import struct
 import threading
 import time
 
 from .device import Device, _matrix, _fp32
-from .errors import DeviceBusy, JobFailed, RecoveryRequired
+from .errors import JobFailed, RecoveryRequired
 from .job import Job
-from .resident import ARENA_START, plan_resident
+from .resident import ARENA_START, CONTROL, RECORD, SSR, arena_lease as _lease, plan_resident
 
 SPAN = 32768
-CONTROL = ARENA_START + 4096
 STATE = CONTROL + 128
 WEIGHTS = ARENA_START + 8192
 INPUT = ARENA_START + 16384
 OUTPUT = ARENA_START + 24576
 GUARD = ARENA_START + 28672
-RECORD = b"FRGRES01"
 MAGIC = 0x5247454D
-SSR = (0x81840200, 0x89840200, 0x91840200)
 
 
 def proof_layout():
@@ -72,16 +68,6 @@ def proof_layout():
     ):
         raise ValueError("proof layout no longer matches the native fixed descriptor bounds")
     return plan
-
-
-def _lease():
-    lease = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    try:
-        lease.bind("\0framenpu-resident-cdsp-abi9")
-    except OSError as exc:
-        lease.close()
-        raise DeviceBusy("another process owns the resident arena") from exc
-    return lease
 
 
 def packed_weights(raw):

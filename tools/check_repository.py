@@ -26,9 +26,9 @@ PUBLIC_DIRS = (
 )
 IGNORED_PARTS = {"__pycache__", ".ruff_cache", ".pytest_cache", "build", "dist"}
 BINARY_FILES = {
-    "src/framenpu/data/runtime.bin",
-    "src/framenpu/data/dispatch.bin",
-    "src/framenpu/data/dispatch_patch.bin",
+    "src/framenpu_cdsp/data/runtime.bin",
+    "src/framenpu_cdsp/data/dispatch.bin",
+    "src/framenpu_cdsp/data/dispatch_patch.bin",
     "src/framenpu/data/host_aarch64.so",
     "examples/vector_add.fjob",
     "examples/xor.fnpu",
@@ -123,7 +123,7 @@ def check(root=ROOT):
             raise ValueError(f"CI action must use a verified full revision: {action}")
     if "pull_request_target" in ci:
         raise ValueError("untrusted PR code must not run in a privileged workflow")
-    verify_kernel(root / "src/framenpu")
+    verify_kernel(root / "src/framenpu_cdsp")
     verify_host_native(root / "src/framenpu")
     Job.load(root / "examples/vector_add.fjob")
     Model.load(root / "examples/xor.fnpu").plan(4)

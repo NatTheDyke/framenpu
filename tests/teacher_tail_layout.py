@@ -1,7 +1,7 @@
 """Host side of the FP16 teacher-tail run: the public v20a teacher from the
 56x56 stage to the heads (conv_12 .. convdwclip_15, then pooling/heads on the
 host), executed layer by layer by tests/teacher_pw_probe.c (HMX 1x1, fused
-bias/clip/residual) and tests/teacher_dw_probe.c (HVX depthwise, stride 1/2).
+bias/clip/residual) and kernels/teacher_dw_probe.c (HVX depthwise, stride 1/2).
 Opens no device.
 
 Grid layout, shared by every tensor at one resolution: per channel pair,

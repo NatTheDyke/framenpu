@@ -20,7 +20,7 @@ FP32 addition consumes each converted product in the original depth-tile
 order. Its NaN handling and rounding remain those of the previous scalar
 implementation. Bias and optional ReLU still apply after reduction.
 
-The shared [SDK helper](../src/framenpu/sdk/include/fnpu_readback.h) is included
+The shared [SDK helper](../src/framenpu_cdsp/sdk/include/fnpu_readback.h) is included
 by the runtime and hardware fixture, and its source hash is part of payload
 provenance. LLVM disassembly confirms vector extraction/conversion and scalar
 `sfadd` accumulation. Readback has no vector stack spills; keeping it in a

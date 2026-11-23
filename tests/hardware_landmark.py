@@ -214,9 +214,9 @@ def main():
             "tests/landmark_hmx.c",
             "tests/landmark_hvx.c",
             "tests/landmark_sigmoid.c",
-            "tests/landmark_common.h",
+            "kernels/landmark_common.h",
             "tools/landmark_reference.py",
-            "src/framenpu/sdk/entry.S",
+            "src/framenpu_cdsp/sdk/entry.S",
         )
     }
     manifest_sha = digest(args.corpus / "manifest.json")

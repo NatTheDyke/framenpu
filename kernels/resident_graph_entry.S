@@ -450,7 +450,7 @@ resident_cache_fault_return:
  { jump recover }
 
 #if defined(RG_LINK_ENTRY) && defined(TL_LINK_ENTRY)
-/* Teacher linked loader (tests/teacher_link_admin.c): opcodes 110 and 111
+/* Teacher linked loader (kernels/teacher_link_admin.c): opcodes 110 and 111
  * enter the teacher operator image only while the seal word in the last
  * vector of its reservation (0x1ff3f80) holds the seal; the admin seal and
  * retire commands set and clear it. Everything else reaches frame_job. */

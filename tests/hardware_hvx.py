@@ -132,7 +132,7 @@ def run(probe_path, baseline_path, iterations):
                 != "6a7eaa2a42bb727f6bec3b4036a8d377edc0b77dfd936dea78c3e9245d690ef2"
             ):
                 raise ValueError("expected the qualified 3380-byte pre-HVX runtime")
-            vector = (ROOT / "src/framenpu/data/runtime.bin").read_bytes()
+            vector = (ROOT / "src/framenpu_cdsp/data/runtime.bin").read_bytes()
             # Compare the same wire requests under one clock/power policy.
             with Device(dispatch="direct") as device:
                 for label, code in (("scalar", scalar), ("hvx", vector)):

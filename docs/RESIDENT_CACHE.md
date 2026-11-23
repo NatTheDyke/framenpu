@@ -23,8 +23,8 @@ python tools/check_resident_cache.py --jobs /path/to/cache-jobs --output /path/t
 The replacement/fault controls use two small images built with the same entry:
 
 ```sh
-python handoff-tools/build_mw.py tests/resident_graph_entry.S tests/resident_cache_probe.c /path/to/probe-a.fjob /path/to/build-a
-python handoff-tools/build_mw.py tests/resident_graph_entry.S tests/resident_cache_probe_v2.c /path/to/probe-b.fjob /path/to/build-b
+python handoff-tools/build_mw.py kernels/resident_graph_entry.S tests/resident_cache_probe.c /path/to/probe-a.fjob /path/to/build-a
+python handoff-tools/build_mw.py kernels/resident_graph_entry.S tests/resident_cache_probe_v2.c /path/to/probe-b.fjob /path/to/build-b
 ```
 
 Each FJOB carries the `resident_graph_KIND_cache_v1` name. The controller checks

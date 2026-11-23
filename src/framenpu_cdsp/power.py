@@ -228,7 +228,7 @@ class HmxPower:
         if host is None:
             if self._factory is not None:
                 return None  # simulated registers: keep the Python path
-            from . import _native
+            from framenpu import _native
 
             host = _native.bundled()
             if host is None:

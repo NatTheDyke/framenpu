@@ -97,6 +97,6 @@ separate experiments. A zero flag reproduces the prior baseline native bytes.
 Build the mask control fixture with the existing experimental-entry builder:
 
 ```sh
-python handoff-tools/build_mw.py tests/resident_graph_entry.S tests/resident_dw_reuse_probe.c /path/to/masks.fjob /path/to/masks-build
+python handoff-tools/build_mw.py kernels/resident_graph_entry.S tests/resident_dw_reuse_probe.c /path/to/masks.fjob /path/to/masks-build
 sudo .venv/bin/python tests/hardware_dw_reuse.py --run-on-device --probe /path/to/masks.fjob --output /path/to/masks.json
 ```

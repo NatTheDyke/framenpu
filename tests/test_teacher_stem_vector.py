@@ -56,7 +56,7 @@ class VectorStemTests(unittest.TestCase):
                 B.build(Path(tmp) / "invalid", stride2=True, heads=True, stem_vector=True)
 
     def test_actual_vector_operations_match_scalar_and_preserve_owned_memory(self):
-        source = (ROOT / "tests/teacher_stem_impl.h").read_text()
+        source = (ROOT / "kernels/teacher_stem_impl.h").read_text()
         operations = source[
             source.index("static inline fnpu_u32 ts_hmax") : source.index("static void ts_observe")
         ]
@@ -113,7 +113,17 @@ int main(void) {
             path = folder / "vector.c"
             path.write_text(code)
             result = subprocess.run(
-                ["cc", "-O2", "-I", str(ROOT / "tests"), str(path), "-o", str(folder / "vector")],
+                [
+                    "cc",
+                    "-O2",
+                    "-I",
+                    str(ROOT / "tests"),
+                    "-I",
+                    str(ROOT / "kernels"),
+                    str(path),
+                    "-o",
+                    str(folder / "vector"),
+                ],
                 capture_output=True,
                 text=True,
             )

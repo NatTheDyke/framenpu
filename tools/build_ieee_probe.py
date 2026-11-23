@@ -19,7 +19,7 @@ def build(source, output, *, defines=()):
     tools = Toolchain.discover()
     objects = []
     flags = [*BUILD_FLAGS, "-mhvx-ieee-fp", "-fno-jump-tables", *defines]
-    for i, path in enumerate((ROOT / "tests/resident_graph_entry.S", source)):
+    for i, path in enumerate((ROOT / "kernels/resident_graph_entry.S", source)):
         obj = output / f"{i:02d}-{path.name}.o"
         _run(
             [
@@ -29,6 +29,8 @@ def build(source, output, *, defines=()):
                 str(SDK / "include"),
                 "-I",
                 str(ROOT / "tests"),
+                "-I",
+                str(ROOT / "kernels"),
                 "-c",
                 str(path),
                 "-o",
@@ -47,8 +49,8 @@ def build(source, output, *, defines=()):
     job.save(output / "probe.fjob")
     sources = [
         source,
-        ROOT / "tests/resident_graph_entry.S",
-        ROOT / "tests/landmark_common.h",
+        ROOT / "kernels/resident_graph_entry.S",
+        ROOT / "kernels/landmark_common.h",
         SDK / "include/framenpu.h",
         SDK / "include/fnpu_readback.h",
         SDK / "link.ld",

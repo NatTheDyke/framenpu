@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- The device backend now lives in its own package, `framenpu_cdsp`, in the
+  same distribution: transport, power and clocks, dispatch, residency, the
+  Mercury kernel ABI planner, the DSP payloads and the SDK. The old
+  `framenpu.<module>` names are aliases of the same modules, so imports,
+  exception identity and test patches are unchanged. The Mercury session is
+  split in two: `framenpu_cdsp.mercury_device.MercuryLease` validates the image
+  and owns the arena, seal, staging, submission and completion checks;
+  `framenpu.mercury_runtime.MercurySession` keeps model loading, planning, host
+  work and scheduling. Image features now come from the link record instead of
+  membership tests on the pinned hashes. The shipping DSP kernel sources moved
+  from `tests/` to `kernels/`. All six pinned 20 KiB images and their loader
+  rebuild byte for byte.
+
 - The library split has started: [CONTRACTS.md](docs/CONTRACTS.md) specifies
   the four interfaces between framehands, framenpu and the framenpu-cdsp device
   backend (session API, model manifest, device plugin ABI, service protocol).

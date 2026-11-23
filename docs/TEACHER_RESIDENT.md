@@ -24,7 +24,7 @@ and the accuracy is unchanged. Per frame (median of 20 frames):
 Evidence: [evidence/teacher-resident-fp16.json](../evidence/teacher-resident-fp16.json)
 (statistics only).
 
-## Kernel (`tests/teacher_resident_probe.c`, opcode 111, 4,068 B)
+## Kernel (`kernels/teacher_resident_probe.c`, opcode 111, 4,068 B)
 
 **Inputs.** A job runs descriptors `params[1] .. params[2]-1` of an op table in
 the arena window. Each descriptor is 128 bytes and has one of four kinds:

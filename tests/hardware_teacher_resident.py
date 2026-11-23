@@ -3,7 +3,7 @@ qualified corpus crops, with host FP32 pooling and heads.
 
 Phase A (qualification, plan mode "qualify"): every compute op runs as its own
 job with the resident kernel (opcode 111) or, for the three stride-2 layers,
-tests/teacher_dw_probe.c (opcode 110). Every output is read back and checked
+kernels/teacher_dw_probe.c (opcode 110). Every output is read back and checked
 against an FP16 error bound computed from the device's actual input, and
 compared with the crop's ncnn blobs.
 

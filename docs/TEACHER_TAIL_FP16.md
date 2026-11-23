@@ -22,7 +22,7 @@ tensors leave the device.
 |---|---|
 | `tests/teacher_tail_layout.py` | Grid layout, op list (Split aliases resolved, adds fused), weight packing, descriptors, arena plan, the FP16 contract model, per-layer error bounds and lane-level kernel models |
 | `tests/teacher_pw_probe.c` (opcode 109, 3,816 B) | HMX 1x1: B-tile pack per block, `nk` loads per output tile, then FP16 bias, optional clip6, optional FP16 residual, interior mask |
-| `tests/teacher_dw_probe.c` (opcode 110, 4,044 B) | HVX QFloat16 depthwise, k3/k5, stride 1 or 2, built on the v2 inner loop |
+| `kernels/teacher_dw_probe.c` (opcode 110, 4,044 B) | HVX QFloat16 depthwise, k3/k5, stride 1 or 2, built on the v2 inner loop |
 | `tests/hardware_teacher_tail.py` | Device run: lease, refusal record, window save/restore with whole-arena hash, audited direct dispatch, controls |
 | `tools/teacher_tail_accuracy.py` | Host emulation of the contract on the corpus, with no device |
 | `tools/build_teacher_tail.py`, `tests/test_teacher_tail.py` | Build (with source pins) and offline tests: the kernel models match the math model on all 42 ops; both images fit in 4 KiB |

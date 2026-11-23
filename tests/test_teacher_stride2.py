@@ -41,7 +41,7 @@ class NativeStride2Checks(unittest.TestCase):
         cls.R = R
         # Compile the actual descriptor checker on the host. Only the vector
         # copy and address macros are stubbed; its validation code is verbatim.
-        source = (ROOT / "tests/teacher_resident_probe.c").read_text()
+        source = (ROOT / "kernels/teacher_resident_probe.c").read_text()
         struct = source[
             source.index("typedef struct {") : source.index("} rs_op;") + len("} rs_op;")
         ]

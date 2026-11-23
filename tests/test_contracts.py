@@ -13,7 +13,9 @@ REV = "0123456789abcdef0123456789abcdef01234567"
 
 def manifest_for(name, kind, inputs, outputs, preferred=3):
     doc = {
-        "manifest_version": 1, "name": name, "kind": kind,
+        "manifest_version": 1,
+        "name": name,
+        "kind": kind,
         "weights": {"file": "model.onnx", "sha256": SHA},
         "inputs": [{"name": k, "shape": list(v)} for k, v in inputs.items()],
         "outputs": [{"name": k, "shape": list(v)} for k, v in outputs.items()],

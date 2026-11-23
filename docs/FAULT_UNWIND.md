@@ -19,7 +19,7 @@ does not redirect `deallocframe`, which reads the saved FP/LR through FP. The
 old recovery path could return into an abandoned call and publish completion
 again instead of returning directly to firmware.
 
-[entry.S](../src/framenpu/sdk/entry.S) now uses a shared frame-size constant
+[entry.S](../src/framenpu_cdsp/sdk/entry.S) now uses a shared frame-size constant
 for allocation and reconstructs `FP = saved_SP + frame_size` before restoring
 VTCM/registers and deallocating the entry frame. The existing fault handler and
 completion protocol remain intact. The public change is the frame-pointer

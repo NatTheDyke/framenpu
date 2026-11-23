@@ -17,7 +17,7 @@ def build(output, mode):
     t = Toolchain.discover()
     objects = []
     sources = [
-        ROOT / "tests/resident_graph_entry.S",
+        ROOT / "kernels/resident_graph_entry.S",
         SDK / "hmx.S",
         ROOT / "tests/hmx_model_probe.c",
     ]
@@ -33,6 +33,8 @@ def build(output, mode):
                 str(SDK / "include"),
                 "-I",
                 str(ROOT / "tests"),
+                "-I",
+                str(ROOT / "kernels"),
                 "-c",
                 str(p),
                 "-o",
@@ -50,7 +52,7 @@ def build(output, mode):
     job.save(output / "probe.fjob")
     (output / "disassembly.txt").write_text(_run(["llvm-objdump", "-d", str(elf)]))
     sources += [
-        ROOT / "tests/landmark_common.h",
+        ROOT / "kernels/landmark_common.h",
         SDK / "include/framenpu.h",
         SDK / "include/fnpu_readback.h",
         SDK / "link.ld",

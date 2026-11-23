@@ -32,11 +32,12 @@ PROTOCOL_VERSION = 4
 DEVICE_ENTRY_POINTS = "framenpu.devices"
 
 # Inputs and outputs are numpy arrays; typed as Any so this module does not import numpy.
-Feed = Mapping[str, Any]            # one crop: input name -> array of the manifest's shape
-Outputs = dict                      # one crop: output name -> array of the manifest's shape
+Feed = Mapping[str, Any]  # one crop: input name -> array of the manifest's shape
+Outputs = dict  # one crop: output name -> array of the manifest's shape
 
 
 # --- Session API ---------------------------------------------------------------------------
+
 
 @runtime_checkable
 class Session(Protocol):
@@ -126,7 +127,9 @@ def _tensors(items, where):
             raise ManifestError(f"{at}name: empty or repeated")
         seen.add(name)
         shape = _need(t, "shape", list, at)
-        if not shape or not all(isinstance(n, int) and not isinstance(n, bool) and n > 0 for n in shape):
+        if not shape or not all(
+            isinstance(n, int) and not isinstance(n, bool) and n > 0 for n in shape
+        ):
             raise ManifestError(f"{at}shape: expected positive integers")
         if shape[0] != 1:
             raise ManifestError(f"{at}shape: the leading dimension is one crop (1)")
@@ -143,7 +146,9 @@ def validate_manifest(doc: Mapping[str, Any]) -> Manifest:
         raise ManifestError("manifest: expected an object")
     version = _need(doc, "manifest_version", int, "")
     if version != MANIFEST_VERSION:
-        raise ManifestError(f"manifest_version: {version} is not supported (this is {MANIFEST_VERSION})")
+        raise ManifestError(
+            f"manifest_version: {version} is not supported (this is {MANIFEST_VERSION})"
+        )
     name = _need(doc, "name", str, "")
     if not _NAME.match(name):
         raise ManifestError("name: lowercase letters, digits, '.', '_' or '-', at most 64")
@@ -168,8 +173,12 @@ def validate_manifest(doc: Mapping[str, Any]) -> Manifest:
         raise ManifestError("decode: expected an object")
     if kind == "keypoint":
         off = decode.get("heatmap_cell_offset")
-        if not isinstance(off, (int, float)) or isinstance(off, bool) or not math.isfinite(off) \
-                or off not in (0, 0.5):
+        if (
+            not isinstance(off, (int, float))
+            or isinstance(off, bool)
+            or not math.isfinite(off)
+            or off not in (0, 0.5)
+        ):
             raise ManifestError("decode.heatmap_cell_offset: 0 or 0.5 (keypoint models must say)")
     source = doc.get("source", {})
     if not isinstance(source, dict):
@@ -179,8 +188,18 @@ def validate_manifest(doc: Mapping[str, Any]) -> Manifest:
         rev = _need(source, "revision", str, "source.")
         if not re.match(r"^[0-9a-f]{40}$", rev):
             raise ManifestError("source.revision: a full 40-digit commit hash, not a branch")
-    known = {"manifest_version", "name", "kind", "weights", "inputs", "outputs", "batch", "decode",
-             "source", "description"}
+    known = {
+        "manifest_version",
+        "name",
+        "kind",
+        "weights",
+        "inputs",
+        "outputs",
+        "batch",
+        "decode",
+        "source",
+        "description",
+    }
     extra = sorted(set(doc) - known)
     if extra:
         raise ManifestError(f"{extra[0]}: unknown field")
@@ -199,15 +218,17 @@ def load_manifest(path: str | os.PathLike) -> Manifest:
 
 # --- Device plugin ABI ---------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class Capabilities:
     """What a device backend's loaded image supports, read from its image record."""
+
     abi: int
     image_sha256: str
     max_crops: int
-    segments: int = 1                 # requests per submission (infer_frame); 1 = no frames
-    stream: bool = False              # segment 2 staged while segment 1 runs
-    resident_slots: int = 0           # models whose parameters stay resident together
+    segments: int = 1  # requests per submission (infer_frame); 1 = no frames
+    stream: bool = False  # segment 2 staged while segment 1 runs
+    resident_slots: int = 0  # models whose parameters stay resident together
     features: frozenset[str] = frozenset()
 
 
@@ -215,11 +236,13 @@ class Capabilities:
 class Refusal:
     """compile()'s answer for a graph or part of one the device will not run; framenpu runs
     that part on the host instead. ``reason`` is for logs and is never parsed."""
+
     reason: str
 
 
 class Plan(Protocol):
     """An opaque compiled model for one backend; only that backend reads its contents."""
+
     model: str
     max_crops: int
 

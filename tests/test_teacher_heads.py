@@ -27,7 +27,7 @@ class HeadsNativeChecks(unittest.TestCase):
     def setUpClass(cls):
         cls.tmp = tempfile.TemporaryDirectory()
         folder = Path(cls.tmp.name)
-        source = (ROOT / "tests/teacher_heads.c").read_text()
+        source = (ROOT / "kernels/teacher_heads.c").read_text()
         sigmoid = source[
             source.index("static __attribute__((noinline)) float th_sigmoid") : source.index(
                 "static __attribute__((noinline)) void th_fault"
@@ -45,6 +45,8 @@ class HeadsNativeChecks(unittest.TestCase):
                 "-O2",
                 "-I",
                 str(ROOT / "tests"),
+                "-I",
+                str(ROOT / "kernels"),
                 str(folder / "check.c"),
                 "-o",
                 str(folder / "check.so"),

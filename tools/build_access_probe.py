@@ -26,7 +26,7 @@ def main():
         folder.mkdir(parents=True, exist_ok=True)
         objects = []
         for i, source in enumerate(
-            (ROOT / "tests/resident_graph_entry.S", ROOT / "tests/resident_access_probe.c")
+            (ROOT / "kernels/resident_graph_entry.S", ROOT / "tests/resident_access_probe.c")
         ):
             obj = folder / f"{i:02d}-{source.name}.o"
             _run(
@@ -39,6 +39,8 @@ def main():
                     str(SDK / "include"),
                     "-I",
                     str(ROOT / "tests"),
+                    "-I",
+                    str(ROOT / "kernels"),
                     "-c",
                     str(source),
                     "-o",

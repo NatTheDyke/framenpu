@@ -116,7 +116,7 @@ while retaining the existing scalar FP32 accumulation. A subsequent comparison
 reduced the same two-depth-tile job interval from 15.82 ms to 6.99 ms; see
 [READBACK.md](docs/READBACK.md).
 
-Implement [the C job ABI](src/framenpu/sdk/include/framenpu.h), as demonstrated
+Implement [the C job ABI](src/framenpu_cdsp/sdk/include/framenpu.h), as demonstrated
 by [vector_add.c](examples/vector_add.c), and compile on your workstation:
 
 ~~~sh
@@ -153,7 +153,7 @@ Rebuild older custom FJOBs to receive the fix; see
 | Item | Current support |
 |---|---|
 | Hardware | SM8650 / Hexagon v75 Steam Frame |
-| Tested firmware | SteamOS 0.5.8, CDSP ABI 9; exact hashes in [profile.py](src/framenpu/profile.py) |
+| Tested firmware | SteamOS 0.5.8, CDSP ABI 9; exact hashes in [profile.py](src/framenpu_cdsp/profile.py) |
 | Models | Sequential Dense, ReLU and Clip |
 | Kernels | At most 4 KiB native code; 128 KiB job arena |
 | HMX scratch | First 8 KiB of VTCM, saved/restored |

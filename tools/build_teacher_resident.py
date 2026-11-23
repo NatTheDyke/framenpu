@@ -1,6 +1,6 @@
-"""Build the resident teacher-tail kernel (tests/teacher_resident_probe.c) into
+"""Build the resident teacher-tail kernel (kernels/teacher_resident_probe.c) into
 <output>/rs and the stride-2 depthwise kernel it hands off to
-(tests/teacher_dw_probe.c) into <output>/dw; opens no device.
+(kernels/teacher_dw_probe.c) into <output>/dw; opens no device.
 
 Writes probe.fjob, build.json (source pins, size) and disassembly.txt. The
 build fails on non-PC-relative relocations or vector stack accesses.
@@ -20,14 +20,14 @@ from framenpu.compiler import BUILD_FLAGS, SDK, Toolchain, _run
 
 KERNELS = {
     "rs": (
-        ROOT / "tests/resident_graph_entry.S",
+        ROOT / "kernels/resident_graph_entry.S",
         SDK / "hmx.S",
-        ROOT / "tests/teacher_resident_probe.c",
+        ROOT / "kernels/teacher_resident_probe.c",
     ),
-    "dw": (ROOT / "tests/resident_graph_entry.S", ROOT / "tests/teacher_dw_probe.c"),
+    "dw": (ROOT / "kernels/resident_graph_entry.S", ROOT / "kernels/teacher_dw_probe.c"),
 }
 COMMON = (
-    ROOT / "tests/landmark_common.h",
+    ROOT / "kernels/landmark_common.h",
     ROOT / "tests/teacher_tail_layout.py",
     ROOT / "tests/teacher_resident_layout.py",
     ROOT / "tests/hmx_block_layout.py",
@@ -53,6 +53,8 @@ def build_one(output, name, SOURCES):
                 str(SDK / "include"),
                 "-I",
                 str(ROOT / "tests"),
+                "-I",
+                str(ROOT / "kernels"),
                 "-c",
                 str(p),
                 "-o",

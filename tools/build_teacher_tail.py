@@ -1,4 +1,4 @@
-"""Build the teacher-tail kernels (tests/teacher_pw_probe.c, tests/teacher_dw_probe.c)
+"""Build the teacher-tail kernels (tests/teacher_pw_probe.c, kernels/teacher_dw_probe.c)
 into <output>/pw and <output>/dw; opens no device.
 
 Writes probe.fjob, build.json (source pins, size) and disassembly.txt. The
@@ -18,11 +18,15 @@ from framenpu import Job
 from framenpu.compiler import BUILD_FLAGS, SDK, Toolchain, _run
 
 KERNELS = {
-    "pw": (ROOT / "tests/resident_graph_entry.S", SDK / "hmx.S", ROOT / "tests/teacher_pw_probe.c"),
-    "dw": (ROOT / "tests/resident_graph_entry.S", ROOT / "tests/teacher_dw_probe.c"),
+    "pw": (
+        ROOT / "kernels/resident_graph_entry.S",
+        SDK / "hmx.S",
+        ROOT / "tests/teacher_pw_probe.c",
+    ),
+    "dw": (ROOT / "kernels/resident_graph_entry.S", ROOT / "kernels/teacher_dw_probe.c"),
 }
 COMMON = (
-    ROOT / "tests/landmark_common.h",
+    ROOT / "kernels/landmark_common.h",
     ROOT / "tests/teacher_tail_layout.py",
     ROOT / "tests/hmx_block_layout.py",
     SDK / "include/framenpu.h",
@@ -47,6 +51,8 @@ def build_one(output, name, SOURCES):
                 str(SDK / "include"),
                 "-I",
                 str(ROOT / "tests"),
+                "-I",
+                str(ROOT / "kernels"),
                 "-c",
                 str(p),
                 "-o",

@@ -1,5 +1,5 @@
 /* Teacher linked loader: admin commands for the operator image in the owned
- * DDR reservation 0x1ff0000..0x1ff4000 (tests/teacher_link.c).
+ * DDR reservation 0x1ff0000..0x1ff4000 (kernels/teacher_link.c).
  *
  * The slot entry (resident_graph_entry.S, RG_LINK_ENTRY + TL_LINK_ENTRY)
  * runs uncached, publishes nothing, and enters the image for opcodes 110/111

@@ -113,7 +113,7 @@ class Device:
 
     @staticmethod
     def builtin(*, hmx):
-        resource = files("framenpu").joinpath("data")
+        resource = files("framenpu_cdsp").joinpath("data")
         import json
 
         manifest = json.loads(resource.joinpath("runtime.json").read_text())

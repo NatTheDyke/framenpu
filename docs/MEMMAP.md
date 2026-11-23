@@ -9,7 +9,7 @@ sees the buffer at cached VA `0x87000000` and uncached VA `0xf0000000`.
 
 The map is static-analysis plus on-device evidence, not a Qualcomm memory
 specification. It applies only to the firmware hash pinned in
-[profile.py](../src/framenpu/profile.py).
+[profile.py](../src/framenpu_cdsp/profile.py).
 
 ## Address translation (TLB)
 

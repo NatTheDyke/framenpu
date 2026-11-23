@@ -12,16 +12,33 @@ Every module is assigned to the library it moves to in the split:
 KNOWN is today's coupling across those lines. A new crossing fails the test; so does an entry
 that no longer occurs, so the list only shrinks as the split proceeds.
 """
+
 import ast
 import pathlib
 import unittest
 
-PKG = pathlib.Path(__file__).resolve().parents[1] / "src" / "framenpu"
+SRC = pathlib.Path(__file__).resolve().parents[1] / "src"
+PKG, CDSP = SRC / "framenpu", SRC / "framenpu_cdsp"
+ALIAS = "this name stays an alias during the library split"
 
 LAYERS = {
     "api": {"__init__", "__main__", "cli", "mercury", "model", "onnx_graph"},
-    "device": {"_mercury_common", "_mercury_layout", "axi", "compiler", "device", "dispatch", "errors",
-               "job", "power", "profile", "provenance", "resident", "transport"},
+    "device": {
+        "_mercury_common",
+        "_mercury_layout",
+        "axi",
+        "compiler",
+        "device",
+        "dispatch",
+        "errors",
+        "job",
+        "mercury_device",
+        "power",
+        "profile",
+        "provenance",
+        "resident",
+        "transport",
+    },
     "mixed": {"_mercury_host", "_native", "mercury_runtime"},
     "research": {"convolution", "landmark", "ncnn", "resident_gemm", "resident_landmark"},
     "contracts": {"contracts"},
@@ -33,19 +50,21 @@ ALLOWED = {
     "research": {"api", "device", "mixed", "research", "contracts"},
     "contracts": set(),
 }
-SHARED = {"errors"}   # owned by the device backend, re-exported by framenpu: any layer may import
+SHARED = {"errors"}  # owned by the device backend, re-exported by framenpu: any layer may import
 
 KNOWN = {
     # the package root still exposes the device and early compiler API
-    ("__init__", "device"), ("__init__", "job"),
+    ("__init__", "device"),
+    ("__init__", "job"),
     # the early CLI drives the device directly
-    ("cli", "compiler"), ("cli", "ncnn"), ("cli", "resident"),
+    ("cli", "compiler"),
+    ("cli", "ncnn"),
+    ("cli", "resident"),
     # the early Dense/ReLU model packs matrices with device helpers
-    ("model", "device"), ("model", "profile"),
+    ("model", "device"),
+    ("model", "profile"),
     # power's read-only verify path uses the native host library
     ("power", "_native"),
-    # the runtime borrows the lease and control words from the FrameTop research modules
-    ("mercury_runtime", "resident_gemm"), ("mercury_runtime", "resident_landmark"),
 }
 
 
@@ -54,6 +73,21 @@ def layer_of(module):
         if module in members:
             return name
     raise KeyError(module)
+
+
+def sources():
+    """Module name -> file, for both packages; framenpu's alias files are not sources."""
+    out = {}
+    for pkg in (PKG, CDSP):
+        for p in sorted(pkg.glob("*.py")):
+            if pkg == CDSP and p.stem == "__init__":
+                continue
+            if pkg == PKG and ALIAS in p.read_text():
+                continue
+            if p.stem in out:
+                raise AssertionError(f"{p.stem} is a source in both packages")
+            out[p.stem] = p
+    return out
 
 
 def imports(path):
@@ -65,22 +99,25 @@ def imports(path):
                 found.add(node.module.split(".")[0])
             elif node.level == 1:
                 found.update(a.name for a in node.names)
-            elif node.level == 0 and node.module and node.module.split(".")[0] == "framenpu":
+            elif (
+                node.level == 0
+                and node.module
+                and node.module.split(".")[0] in ("framenpu", "framenpu_cdsp")
+            ):
                 parts = node.module.split(".")
                 found.update([parts[1]] if len(parts) > 1 else [a.name for a in node.names])
         elif isinstance(node, ast.Import):
             for a in node.names:
                 parts = a.name.split(".")
-                if parts[0] == "framenpu" and len(parts) > 1:
+                if parts[0] in ("framenpu", "framenpu_cdsp") and len(parts) > 1:
                     found.add(parts[1])
-    modules = {p.stem for p in PKG.glob("*.py")}
-    return {m for m in found if m in modules}
+    return {m for m in found if m in sources()}
 
 
 def crossings():
     out = set()
-    for path in sorted(PKG.glob("*.py")):
-        src, sl = path.stem, layer_of(path.stem)
+    for src, path in sources().items():
+        sl = layer_of(src)
         for dst in imports(path) - {src}:
             dl = layer_of(dst)
             if sl == "contracts" or (dst not in SHARED and dl != sl and dl not in ALLOWED[sl]):
@@ -90,10 +127,28 @@ def crossings():
 
 class BoundaryTests(unittest.TestCase):
     def test_every_module_has_a_layer(self):
-        modules = {p.stem for p in PKG.glob("*.py")}
+        modules = set(sources())
         assigned = set().union(*LAYERS.values())
         self.assertEqual(modules - assigned, set(), "assign new modules to a layer")
         self.assertEqual(assigned - modules, set(), "drop removed modules from LAYERS")
+
+    def test_device_modules_live_in_framenpu_cdsp(self):
+        where = {m: p.parent.name for m, p in sources().items()}
+        for m, pkg in where.items():
+            self.assertEqual(pkg, "framenpu_cdsp" if layer_of(m) == "device" else "framenpu", m)
+
+    def test_old_names_are_aliases_of_the_same_module(self):
+        import importlib
+
+        for m in sorted(m for m in LAYERS["device"] if (PKG / f"{m}.py").exists()):
+            self.assertIs(
+                importlib.import_module(f"framenpu.{m}"),
+                importlib.import_module(f"framenpu_cdsp.{m}"),
+            )
+        from framenpu import RecoveryRequired
+        from framenpu_cdsp.errors import RecoveryRequired as moved
+
+        self.assertIs(RecoveryRequired, moved)
 
     def test_no_new_crossings(self):
         self.assertEqual(crossings() - KNOWN, set())

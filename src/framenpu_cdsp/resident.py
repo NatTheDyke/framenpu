@@ -3,7 +3,9 @@
 import json
 from pathlib import Path
 import re
+import socket
 
+from .errors import DeviceBusy
 from .profile import PROFILE
 
 # Firmware-profile-specific DDR offsets, qualified in docs/MEMMAP.md. These
@@ -12,6 +14,13 @@ ARENA_START = 0x1A22000
 ARENA_END = 0x2000000
 ARENA_BYTES = ARENA_END - ARENA_START
 CACHE_ALIGNMENT = 128
+
+# Arena ownership shared by every resident executor (GEMM, landmark, Mercury): an uncached DDR
+# ownership record at CONTROL and an abstract-socket lease. A vanished lease never authorizes
+# adopting a marked arena.
+CONTROL = ARENA_START + 4096
+RECORD = b"FRGRES01"
+SSR = (0x81840200, 0x89840200, 0x91840200)  # the three workers' expected SSR words
 DTYPES = {"u8": 1, "f16": 2, "f32": 4}
 MAX_ITEMS = 1024
 
@@ -344,3 +353,14 @@ def load_resident_plan(path):
     except (ValueError, RecursionError) as exc:
         raise ValueError("invalid resident plan JSON") from exc
     return plan_resident(spec)
+
+
+def arena_lease():
+    """The process-wide resident arena lease (an abstract Unix socket name)."""
+    lease = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        lease.bind("\0framenpu-resident-cdsp-abi9")
+    except OSError as exc:
+        lease.close()
+        raise DeviceBusy("another process owns the resident arena") from exc
+    return lease

@@ -33,6 +33,8 @@ class ProfileNativeTests(unittest.TestCase):
                     "-fPIC",
                     "-I",
                     str(ROOT / "tests"),
+                    "-I",
+                    str(ROOT / "kernels"),
                     str(folder / "check.c"),
                     "-o",
                     str(folder / "check.so"),

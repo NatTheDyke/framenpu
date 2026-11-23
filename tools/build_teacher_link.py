@@ -2,10 +2,10 @@
 
 <output>/rs and <output>/dw are the ordinary cached-entry kernels from
 tools/build_teacher_resident.py (the qualification reference). <output>/loader
-is the 4 KiB slot loader (tests/resident_graph_entry.S with RG_LINK_ENTRY and
-TL_LINK_ENTRY, plus tests/teacher_link_admin.c). <output>/linked is the
-operator image for the reservation at 0x1ff0000: tests/teacher_link.c at
-offset zero, then tests/teacher_resident_probe.c and tests/teacher_dw_probe.c
+is the 4 KiB slot loader (kernels/resident_graph_entry.S with RG_LINK_ENTRY and
+TL_LINK_ENTRY, plus kernels/teacher_link_admin.c). <output>/linked is the
+operator image for the reservation at 0x1ff0000: kernels/teacher_link.c at
+offset zero, then kernels/teacher_resident_probe.c and kernels/teacher_dw_probe.c
 compiled as tl_rs and tl_dw. --stride2 enables the resident stride-2 extension
 in tl_rs only; --dw-blocks 4 restores four-block coefficient sharing there.
 --s2-even (Mercury, with --stride2 only) keeps the even stride-2 phase.
@@ -48,27 +48,28 @@ from check_resident_cache import verify_relocations, verify_vectors
 from check_resident_link import _constants, _symbols, verify_image
 
 TESTS = ROOT / "tests"
+KERNELS = ROOT / "kernels"
 CODE, CODE_BYTES, SEAL_AT = 0x1FF0000, 0x4000, 0x1FF3F80
 SEAL = 0x544C4E4B
 UNCACHED, CACHED = 0xF0000000, 0x87000000
 LOADER_NAME = "teacher_link_loader_v1"
 SOURCES = (
-    TESTS / "resident_graph_entry.S",
-    TESTS / "teacher_link_admin.c",
-    TESTS / "teacher_link.c",
-    TESTS / "teacher_link.ld",
-    TESTS / "teacher_resident_probe.c",
-    TESTS / "teacher_dw_probe.c",
-    TESTS / "teacher_heads.c",
-    TESTS / "teacher_heads_check.h",
+    KERNELS / "resident_graph_entry.S",
+    KERNELS / "teacher_link_admin.c",
+    KERNELS / "teacher_link.c",
+    KERNELS / "teacher_link.ld",
+    KERNELS / "teacher_resident_probe.c",
+    KERNELS / "teacher_dw_probe.c",
+    KERNELS / "teacher_heads.c",
+    KERNELS / "teacher_heads_check.h",
     TESTS / "teacher_heads_layout.py",
-    TESTS / "teacher_stem_check.h",
-    TESTS / "teacher_stem_impl.h",
-    TESTS / "teacher_stem_vector.h",
+    KERNELS / "teacher_stem_check.h",
+    KERNELS / "teacher_stem_impl.h",
+    KERNELS / "teacher_stem_vector.h",
     TESTS / "teacher_stem_layout.py",
-    TESTS / "teacher_stem_profile.h",
+    KERNELS / "teacher_stem_profile.h",
     TESTS / "teacher_stem_profile.py",
-    TESTS / "landmark_common.h",
+    KERNELS / "landmark_common.h",
     TESTS / "teacher_tail_layout.py",
     TESTS / "teacher_resident_layout.py",
     TESTS / "hmx_block_layout.py",
@@ -229,6 +230,8 @@ def build(
                 str(SDK / "include"),
                 "-I",
                 str(TESTS),
+                "-I",
+                str(ROOT / "kernels"),
                 "-c",
                 str(source),
                 "-o",
@@ -262,12 +265,12 @@ def build(
     folder = output / "loader"
     folder.mkdir(parents=True, exist_ok=True)
     objects = [
-        compile_(folder, 0, TESTS / "resident_graph_entry.S", "-DRG_LINK_ENTRY", "-DTL_LINK_ENTRY",
+        compile_(folder, 0, KERNELS / "resident_graph_entry.S", "-DRG_LINK_ENTRY", "-DTL_LINK_ENTRY",
                  *(("-DRG_STAMP_RESTORED",) if loader_stamp else ()),
                  *(("-DRG_POOL",) if pool or pool_diag == "loader" else ()),
                  *((f"-DTL_SEAL_VA={UNCACHED + seal_at:#x}",) if code_kib != 16 else ())),
         compile_(folder, 1, SDK / "hmx.S"),
-        compile_(folder, 2, TESTS / "teacher_link_admin.c",
+        compile_(folder, 2, KERNELS / "teacher_link_admin.c",
                  *((f"-DTL_CODE_BYTES={code_bytes:#x}u",) if code_kib != 16 else ())),
     ]
     code = link(folder, SDK / "link.ld", objects, lambda t, s: verify_loader(t, s, seal_at))
@@ -279,12 +282,12 @@ def build(
     folder = output / "linked"
     folder.mkdir(parents=True, exist_ok=True)
     objects = [
-        compile_(folder, 0, TESTS / "teacher_link.c", *(("-DRS_POOL",) if pool or pool_diag == "loader" else ()),
+        compile_(folder, 0, KERNELS / "teacher_link.c", *(("-DRS_POOL",) if pool or pool_diag == "loader" else ()),
                  *((f"-DTL_DIAG_CODE_PAD={code_pad}",) if code_pad else ())),
         compile_(
             folder,
             1,
-            TESTS / "teacher_resident_probe.c",
+            KERNELS / "teacher_resident_probe.c",
             "-Dframe_job=tl_rs",
             *(["-DRS_STRIDE2"] if stride2 else []),
             *(["-DRS_DW_BLOCKS=4"] if dw_blocks == 4 else []),
@@ -324,18 +327,18 @@ def build(
             *({"wrap": ["-DRS_DIAG_WRAP"], "loader": ["-DRS_DIAG_LOADER"], "tail": ["-DRS_DIAG_TAIL"]}.get(pool_diag, [])),
             *([f"-DRS_DIAG_PAD={diag_pad}"] if diag_pad else []),
         ),
-        compile_(folder, 2, TESTS / "teacher_dw_probe.c", "-Dframe_job=tl_dw"),
+        compile_(folder, 2, KERNELS / "teacher_dw_probe.c", "-Dframe_job=tl_dw"),
         compile_(folder, 3, SDK / "hmx.S"),
     ]
     if heads:
-        objects.append(compile_(folder, 4, TESTS / "teacher_heads.c"))
+        objects.append(compile_(folder, 4, KERNELS / "teacher_heads.c"))
 
     def check_image(text, symbols):
         if symbols.get("tl_entry") != UNCACHED + CODE:
             raise ValueError("image entry is not at offset zero")
         verify_image(text, symbols | {"rg_batch": UNCACHED + CODE}, seal_at - CODE)
 
-    script = TESTS / "teacher_link.ld"
+    script = KERNELS / "teacher_link.ld"
     if code_kib != 16:  # the same script with the payload bound moved below the new seal vector
         ld = script.read_text()
         if ld.count("<= 0x3f80,") != 1:

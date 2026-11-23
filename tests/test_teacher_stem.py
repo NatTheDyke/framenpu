@@ -25,7 +25,7 @@ class StemNativeChecks(unittest.TestCase):
     def setUpClass(cls):
         cls.tmp = tempfile.TemporaryDirectory()
         folder = Path(cls.tmp.name)
-        source = (ROOT / "tests/teacher_stem_impl.h").read_text()
+        source = (ROOT / "kernels/teacher_stem_impl.h").read_text()
         scalar = source[
             source.index("static inline fnpu_u32 ts_hmax") : source.index(
                 "static __attribute__((noinline)) void ts_skip"
@@ -44,6 +44,8 @@ class StemNativeChecks(unittest.TestCase):
                 "-O2",
                 "-I",
                 str(ROOT / "tests"),
+                "-I",
+                str(ROOT / "kernels"),
                 str(folder / "check.c"),
                 "-o",
                 str(folder / "check.so"),
@@ -76,7 +78,7 @@ class StemNativeChecks(unittest.TestCase):
 
     def test_actual_vector_packer_matches_scalar_gather_for_every_tile(self):
         folder = Path(self.tmp.name)
-        source = (ROOT / "tests/teacher_stem_impl.h").read_text()
+        source = (ROOT / "kernels/teacher_stem_impl.h").read_text()
         packer = source[
             source.index("typedef long ts_uv2") : source.index(
                 "static __attribute__((noinline)) void ts_stem"
@@ -115,6 +117,8 @@ int main(void) {
                 "-O2",
                 "-I",
                 str(ROOT / "tests"),
+                "-I",
+                str(ROOT / "kernels"),
                 str(folder / "pack.c"),
                 "-o",
                 str(folder / "pack"),

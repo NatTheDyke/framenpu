@@ -254,10 +254,10 @@ def main(argv=None):
         "tests/hardware_hmx.py",
         "tests/hardware_resident.py",
         "src/framenpu/resident_landmark.py",
-        "src/framenpu/device.py",
-        "src/framenpu/transport.py",
-        "src/framenpu/power.py",
-        "src/framenpu/dispatch.py",
+        "src/framenpu_cdsp/device.py",
+        "src/framenpu_cdsp/transport.py",
+        "src/framenpu_cdsp/power.py",
+        "src/framenpu_cdsp/dispatch.py",
     ]
     report = {
         "format": "framenpu-host-profile",

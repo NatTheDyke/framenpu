@@ -23,7 +23,7 @@ from framenpu.compiler import BUILD_FLAGS, SDK, Toolchain, _run
 from hmx_block_layout import GEOMETRIES
 
 SOURCES = (
-    ROOT / "tests/resident_graph_entry.S",
+    ROOT / "kernels/resident_graph_entry.S",
     SDK / "hmx.S",
     ROOT / "tests/hmx_block_probe.c",
 )
@@ -32,7 +32,7 @@ PINNED = (
     SOURCES
     + RESIDENT_SOURCES[2:]
     + (
-        ROOT / "tests/landmark_common.h",
+        ROOT / "kernels/landmark_common.h",
         ROOT / "tests/hmx_block_layout.py",
         SDK / "include/framenpu.h",
         SDK / "include/fnpu_readback.h",
@@ -99,6 +99,8 @@ def build(output, g, variant, flags):
                 str(SDK / "include"),
                 "-I",
                 str(ROOT / "tests"),
+                "-I",
+                str(ROOT / "kernels"),
                 "-c",
                 str(p),
                 "-o",

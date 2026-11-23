@@ -283,7 +283,7 @@ def payload(plan, crops=1):
 
 def native_ok(row, *, dw_blocks=2, s2_direct=None, pw_group=1, mheads=False, resident=False, tiles=False, deep8=False,
               cbias=False, win_hi=WIN_HI):
-    """Mirror of rs_get in tests/teacher_resident_probe.c (True = accepted).
+    """Mirror of rs_get in kernels/teacher_resident_probe.c (True = accepted).
     s2_direct: the decimation phase (0 even, 1 odd) of an RS_S2_DIRECT build, which
     adds bounds on the direct kernel's reads and zero-lane store spill. pw_group: an
     RS_PW_GROUP build's 1x1 scratch, pw_group * (nk + no) * 16 vectors. mheads: an
@@ -390,7 +390,7 @@ def native_ok(row, *, dw_blocks=2, s2_direct=None, pw_group=1, mheads=False, res
 
 
 def regrid_ok(row):
-    """Mirror of rg_bad in tests/teacher_resident_probe.c (True = accepted)."""
+    """Mirror of rg_bad in kernels/teacher_resident_probe.c (True = accepted)."""
     w = [int(x) for x in row[:32]]
     big = 0
     for x in w:

@@ -36,6 +36,8 @@ class GrayNativeTests(unittest.TestCase):
                     "-O2",
                     "-I",
                     str(ROOT / "tests"),
+                    "-I",
+                    str(ROOT / "kernels"),
                     str(path),
                     "-o",
                     str(folder / "check.so"),
@@ -88,7 +90,7 @@ class GrayNativeTests(unittest.TestCase):
             self.assertFalse(accepted(r))
 
     def test_gray_actual_packer_matches_replicated_rgb_every_tile(self):
-        source = (ROOT / "tests/teacher_stem_impl.h").read_text()
+        source = (ROOT / "kernels/teacher_stem_impl.h").read_text()
         packer = source[
             source.index("typedef long ts_uv2") : source.index(
                 "static __attribute__((noinline)) void ts_stem"
@@ -128,7 +130,17 @@ int main(void) {
             path = folder / "pack.c"
             path.write_text(code)
             subprocess.run(
-                ["cc", "-O2", "-I", str(ROOT / "tests"), str(path), "-o", str(folder / "pack")],
+                [
+                    "cc",
+                    "-O2",
+                    "-I",
+                    str(ROOT / "tests"),
+                    "-I",
+                    str(ROOT / "kernels"),
+                    str(path),
+                    "-o",
+                    str(folder / "pack"),
+                ],
                 check=True,
                 capture_output=True,
             )

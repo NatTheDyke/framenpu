@@ -1,8 +1,8 @@
 /* Teacher linked operator image entry, at image offset zero. The slot loader
- * (tests/teacher_link_admin.c) tail-jumps here for opcodes 110 and 111 while
+ * (kernels/teacher_link_admin.c) tail-jumps here for opcodes 110 and 111 while
  * the image is sealed, with r0 = context and the uncached entry's return in
- * r31. tests/teacher_resident_probe.c (opcode 111, built as tl_rs) and
- * tests/teacher_dw_probe.c (opcode 110, built as tl_dw) are linked unchanged
+ * r31. kernels/teacher_resident_probe.c (opcode 111, built as tl_rs) and
+ * kernels/teacher_dw_probe.c (opcode 110, built as tl_dw) are linked unchanged
  * in source; each still validates its own context, opcode and descriptors. */
 #include "landmark_common.h"
 

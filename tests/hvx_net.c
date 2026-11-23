@@ -1,7 +1,7 @@
 /* Hardware-only fixture: the network's 1x1 gather and post HVX code, run alone.
 
    rs_gather and rs_pw_post below are verbatim copies of the RS_MHEADS/RS_PW_GROUP
-   paths in tests/teacher_resident_probe.c, and run_op is that file's grouped
+   paths in kernels/teacher_resident_probe.c, and run_op is that file's grouped
    rs_pw with the HMX tiles removed (the --pw-ablate 2 variant). They run on a
    full-resolution descriptor (cpi 16, cpo 16, nk 1, nbin 143, nj 132) in VTCM
    from 0x31010000 (inside the borrowed span every Mercury request overwrites),
@@ -92,7 +92,7 @@ static __attribute__((noinline)) void rs_pw_post(const rs_op *d, fnpu_u32 o, fnp
     RS_FLAGS[0] = Q6_V_vor_VV(RS_FLAGS[0], fl);
 }
 #else
-/* ---- verbatim from tests/teacher_resident_probe.c (RS_PW_GROUP, RS_MHEADS kind 1) ---- */
+/* ---- verbatim from kernels/teacher_resident_probe.c (RS_PW_GROUP, RS_MHEADS kind 1) ---- */
 static __attribute__((noinline)) void rs_pw_post(const rs_op *d, fnpu_u32 o, fnpu_u32 j,
                                                  const volatile HVX_Vector *tile) {
 #define RS_TILE(rr) tile[rr]

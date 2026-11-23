@@ -69,8 +69,8 @@ or tensor storage outside the existing per-job gate.
 
 No firmware file on disk is modified and no proprietary firmware bytes are
 bundled. The replacement is built from
-[dispatch.S](../src/framenpu/sdk/dispatch.S); the helper is
-[dispatch_patch.c](../src/framenpu/sdk/dispatch_patch.c).
+[dispatch.S](../src/framenpu_cdsp/sdk/dispatch.S); the helper is
+[dispatch_patch.c](../src/framenpu_cdsp/sdk/dispatch_patch.c).
 
 ## Compatibility and failures
 

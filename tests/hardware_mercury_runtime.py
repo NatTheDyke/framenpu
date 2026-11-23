@@ -81,8 +81,9 @@ def main():
             n: hashlib.sha256((ROOT / n).read_bytes()).hexdigest()
             for n in (
                 "src/framenpu/mercury_runtime.py",
-                "src/framenpu/_mercury_layout.py",
-                "src/framenpu/_mercury_common.py",
+                "src/framenpu_cdsp/mercury_device.py",
+                "src/framenpu_cdsp/_mercury_layout.py",
+                "src/framenpu_cdsp/_mercury_common.py",
                 "tests/hardware_mercury_runtime.py",
             )
         },

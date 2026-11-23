@@ -163,7 +163,7 @@ def run(probe_path, baseline_path, iterations):
         print("READBACK_CORRECTNESS", json.dumps(correctness), flush=True)
         timings = []
         if baseline is not None:
-            current = (ROOT / "src/framenpu/data/runtime.bin").read_bytes()
+            current = (ROOT / "src/framenpu_cdsp/data/runtime.bin").read_bytes()
             with Device(dispatch="direct") as device:
                 # Install before timing either payload; first calls remain excluded.
                 device.submit(device.builtin(hmx=False), opcode=4)

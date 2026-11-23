@@ -17,11 +17,11 @@ from framenpu import Job
 from framenpu.compiler import BUILD_FLAGS, SDK, Toolchain, _run
 
 SOURCES = (
-    ROOT / "tests/resident_graph_entry.S",
+    ROOT / "kernels/resident_graph_entry.S",
     ROOT / "tests/hvx_rate_probe.c",
 )
 PINNED = SOURCES + (
-    ROOT / "tests/landmark_common.h",
+    ROOT / "kernels/landmark_common.h",
     ROOT / "tests/hmx_block_layout.py",
     SDK / "include/framenpu.h",
     SDK / "include/fnpu_readback.h",
@@ -44,6 +44,8 @@ def build(output):
                 str(SDK / "include"),
                 "-I",
                 str(ROOT / "tests"),
+                "-I",
+                str(ROOT / "kernels"),
                 "-c",
                 str(p),
                 "-o",

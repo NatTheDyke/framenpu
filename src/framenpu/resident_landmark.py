@@ -15,13 +15,11 @@ import threading
 import time
 
 from .landmark import PARAM_SHA, WEIGHTS_SHA, OUTPUTS, ALIASES, specifications
-from .resident import ARENA_START, ARENA_END
+from .resident import ARENA_START, ARENA_END, CONTROL, RECORD, SSR, arena_lease as _lease
 from .errors import InvalidModel, UnsupportedOperator, RecoveryRequired, JobFailed
 from .device import Device, _fp32
 from .job import Job
-from .resident_gemm import _lease, RECORD, SSR
 
-CONTROL = ARENA_START + 4096
 STATE = CONTROL + 128
 PROGRAM = ARENA_START + 8192
 PROGRAM_BYTES = 8192

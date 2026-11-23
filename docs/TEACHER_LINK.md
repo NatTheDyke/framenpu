@@ -35,8 +35,8 @@ Evidence: [evidence/teacher-link-fp16.json](../evidence/teacher-link-fp16.json)
 | Loader | 4 KiB code slot, uncached | 1,960 B | entry and fault vectors, dispatch, seal and retire commands |
 | Operator image | owned DDR `0x1ff0000`, 16 KiB reservation | 4,848 B | `tl_entry`, the resident kernel (opcode 111) and the stride-2 depthwise kernel (opcode 110) |
 
-**The loader** is `tests/resident_graph_entry.S` built with `RG_LINK_ENTRY` and
-`TL_LINK_ENTRY`, plus `tests/teacher_link_admin.c`.
+**The loader** is `kernels/resident_graph_entry.S` built with `RG_LINK_ENTRY` and
+`TL_LINK_ENTRY`, plus `kernels/teacher_link_admin.c`.
 
 - **Dispatch.** Opcodes 110 and 111 tail-jump into the image only while the
   seal word holds `TL_SEAL`. The seal word is the last vector of the
@@ -52,7 +52,7 @@ Evidence: [evidence/teacher-link-fp16.json](../evidence/teacher-link-fp16.json)
   define. The ResidentLandmark loader and image, and the two cached-entry
   teacher kernels, rebuild byte-identical.
 
-**The image** is `tests/teacher_link.c` at offset zero, then
+**The image** is `kernels/teacher_link.c` at offset zero, then
 `teacher_resident_probe.c` and `teacher_dw_probe.c` compiled unchanged in
 source as `tl_rs` and `tl_dw`. Each kernel still validates its own context,
 opcode and descriptors.

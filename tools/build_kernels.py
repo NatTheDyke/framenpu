@@ -47,7 +47,7 @@ def main(argv=None):
             SDK / "dispatch_patch.c", build_dir=Path(directory) / "patcher", toolchain=tools
         )
     extra = {"dispatch.bin": dispatch, "dispatch_patch.bin": patcher.code}
-    data = ROOT / "src/framenpu/data"
+    data = ROOT / "src/framenpu_cdsp/data"
     if args.check:
         manifest = verify_kernel()
         if runtime.code != (data / "runtime.bin").read_bytes():

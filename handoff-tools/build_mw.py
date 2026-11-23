@@ -17,7 +17,7 @@ def run(cmd):
 
 def build(entry, source, output, outdir):
     t = Toolchain.discover()
-    sdk = ROOT / "src/framenpu/sdk"
+    sdk = ROOT / "src/framenpu_cdsp/sdk"
     outdir = Path(outdir)
     outdir.mkdir(parents=True, exist_ok=True)
     objs = []

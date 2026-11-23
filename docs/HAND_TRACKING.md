@@ -32,7 +32,7 @@ format executes only sequential Dense, ReLU and Clip layers.
 The default benchmark path has three costs that dominate a convolutional workload:
 
 - Every submission invokes the stock FLOPS benchmark, costing roughly 13 ms.
-  [Device.matmul](../src/framenpu/device.py) submits each depth/output tile
+  [Device.matmul](../src/framenpu_cdsp/device.py) submits each depth/output tile
   separately, reads partial results into Python and submits DSP additions.
 - Each job uploads code and operands, backs up/restores borrowed memory, and
   scopes HMX power to that submission. Weights and intermediate tensors have

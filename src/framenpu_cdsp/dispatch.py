@@ -39,7 +39,7 @@ def _acquire_lease(name="\0framenpu-direct-cdsp-abi9"):
 class DirectDispatcher:
     def __init__(self):
         verify_kernel()
-        resource = files("framenpu").joinpath("data")
+        resource = files("framenpu_cdsp").joinpath("data")
         self.original = _firmware_original()
         self.code = resource.joinpath("dispatch.bin").read_bytes()
         self.patcher = Job(resource.joinpath("dispatch_patch.bin").read_bytes(), "dispatch-patch")

@@ -5,11 +5,13 @@ recursive-include tools *.py
 recursive-include tools *.cpp
 recursive-include examples *.py *.c *.param *.fjob *.fnpu *.json
 recursive-include tests *.py *.c *.h *.S *.ld
+recursive-include kernels *.c *.h *.S *.ld
 exclude HANDOFF.md
 prune handoff-tools
 include handoff-tools/build_mw.py
-recursive-include src/framenpu/data *.bin *.json
-recursive-include src/framenpu/sdk *.h *.S *.c *.ld
+recursive-include src/framenpu/data *.json
+recursive-include src/framenpu_cdsp/data *.bin *.json
+recursive-include src/framenpu_cdsp/sdk *.h *.S *.c *.ld
 include evidence/validation.json
 include evidence/dispatch-validation.json
 include evidence/hmx-dispatch-validation.json

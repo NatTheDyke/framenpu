@@ -5,11 +5,11 @@
  * (128-byte descriptors, tests/teacher_resident_layout.py). Tensors stay in
  * borrowed VTCM between ops of a job at host-planned vector offsets; load and
  * store ops move whole tensors between VTCM and the window. The stride-2
- * depthwise layers run as separate tests/teacher_dw_probe.c jobs unless
+ * depthwise layers run as separate kernels/teacher_dw_probe.c jobs unless
  * RS_STRIDE2 is defined for the linked image.
  *
  * Arithmetic per output vector is that of tests/teacher_pw_probe.c (1x1) and
- * tests/teacher_dw_probe.c (stride 1): one shared post adds the bias (here a
+ * kernels/teacher_dw_probe.c (stride 1): one shared post adds the bias (here a
  * pre-splatted vector), clips, adds the residual, masks to interior lanes and
  * stores straight into the zeroed output grid.
  *

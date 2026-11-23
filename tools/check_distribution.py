@@ -75,7 +75,12 @@ def main(argv=None):
             "landmark.py",
             "resident_landmark.py",
         ):
-            if f"framenpu/{suffix}" not in names:
+            package = (
+                "framenpu_cdsp"
+                if suffix.startswith(("sdk/", "data/")) or suffix == "resident.py"
+                else "framenpu"
+            )
+            if f"{package}/{suffix}" not in names:
                 raise ValueError(f"wheel is missing SDK/payload resource: {suffix}")
     env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTHONNOUSERSITE="1")
     env.pop("PYTHONPATH", None)

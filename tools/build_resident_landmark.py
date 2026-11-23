@@ -13,12 +13,13 @@ from framenpu import Job
 from framenpu.resident_landmark import JOB_KINDS, CODE, CODE_LAYOUTS
 
 TESTS = ROOT / "tests"
+KERNELS = ROOT / "kernels"
 LINK_SOURCES = (
     [SDK / "hmx.S", SDK / "link.ld", SDK / "include/framenpu.h", SDK / "include/fnpu_readback.h"]
+    + [KERNELS / "resident_graph_entry.S", KERNELS / "landmark_common.h"]
     + [
         TESTS / name
         for name in (
-            "resident_graph_entry.S",
             "resident_link.ld",
             "resident_graph_link.c",
             "resident_graph.h",
@@ -26,7 +27,6 @@ LINK_SOURCES = (
             "resident_dw_masks.h",
             "resident_dw_tile.h",
             "resident_fp16.h",
-            "landmark_common.h",
         )
     ]
     + [TESTS / f"resident_graph_{name}.c" for name in JOB_KINDS.values()]
@@ -52,7 +52,7 @@ def build_linked(output, tools=None, profile_dw=0, dw_reuse=0, dw_row_tile=False
         raise ValueError("reuse builds require ordinary graph timing, not component timer modes")
     tools = tools or Toolchain.discover()
     output.mkdir(parents=True, exist_ok=True)
-    flags = [*BUILD_FLAGS, "-fno-jump-tables", "-I", str(SDK / "include")]
+    flags = [*BUILD_FLAGS, "-fno-jump-tables", "-I", str(SDK / "include"), "-I", str(KERNELS)]
 
     def compile_(folder, index, source, *defines):
         obj = folder / f"{index:02d}-{source.name}.o"
@@ -73,7 +73,7 @@ def build_linked(output, tools=None, profile_dw=0, dw_reuse=0, dw_row_tile=False
     folder = output / "loader"
     folder.mkdir(parents=True, exist_ok=True)
     objects = [
-        compile_(folder, 0, TESTS / "resident_graph_entry.S", "-DRG_LINK_ENTRY"),
+        compile_(folder, 0, KERNELS / "resident_graph_entry.S", "-DRG_LINK_ENTRY"),
         compile_(folder, 1, SDK / "hmx.S"),
         compile_(folder, 2, TESTS / "resident_graph_admin.c", "-DRG_LOADER", *wide),
     ]
@@ -168,7 +168,9 @@ def main():
             folder = args.output / name
             folder.mkdir(parents=True, exist_ok=True)
             objects = []
-            for i, src in enumerate((ROOT / "tests/resident_graph_entry.S", SDK / "hmx.S", source)):
+            for i, src in enumerate(
+                (ROOT / "kernels/resident_graph_entry.S", SDK / "hmx.S", source)
+            ):
                 obj = folder / f"{i:02d}-{src.name}.o"
                 _run(
                     [
@@ -177,6 +179,8 @@ def main():
                         "-fno-jump-tables",
                         "-I",
                         str(SDK / "include"),
+                        "-I",
+                        str(KERNELS),
                         "-c",
                         str(src),
                         "-o",
@@ -208,7 +212,7 @@ def main():
             "flags": [*BUILD_FLAGS, "-fno-jump-tables"],
             "toolchain": tools.versions(),
             "entry_sha256": hashlib.sha256(
-                (ROOT / "tests/resident_graph_entry.S").read_bytes()
+                (ROOT / "kernels/resident_graph_entry.S").read_bytes()
             ).hexdigest(),
             "sources": {
                 str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest()

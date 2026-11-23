@@ -137,8 +137,8 @@ def main():
             n: digest(ROOT / n)
             for n in (
                 "tests/hardware_ieee_probe.py",
-                "src/framenpu/device.py",
-                "src/framenpu/transport.py",
+                "src/framenpu_cdsp/device.py",
+                "src/framenpu_cdsp/transport.py",
             )
         },
         "audits": {"restored_jobs": 0, "restored_hmx_jobs": 0},

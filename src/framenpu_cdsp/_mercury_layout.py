@@ -2,7 +2,7 @@
 
 Step 2a runs ``Conv_19 .. Conv_139`` of the lowered Mercury graph (the 32x32
 stage to the 160x8x8 feature map); step 2b (``prefix=True``) also runs the
-64x64 prefix ``Conv_0 .. Conv_18``. Both use tests/teacher_resident_probe.c
+64x64 prefix ``Conv_0 .. Conv_18``. Both use kernels/teacher_resident_probe.c
 built with RS_STRIDE2 and RS_S2_EVEN, through the linked operator image. The
 42->8192 hint branch, pooling and all heads stay on the host. Opens no device.
 
@@ -280,7 +280,7 @@ def head_ops(model):
 
 
 def regrid_words(op, gin, gout, vin, vout):
-    """Kind-7 descriptor words of a head regrid op (see tests/teacher_resident_probe.c)."""
+    """Kind-7 descriptor words of a head regrid op (see kernels/teacher_resident_probe.c)."""
     if op.params["mode"] == "embed":
         pairs, oh, ow, at = op.shape[0] // 2, gin.h, gin.w, op.params.get("at", 1)
         return [KIND_RG, pairs, 1, oh, ow, gin.nbin, gout.nbin, vin, vout, gin.ws, gout.ws, 1,
