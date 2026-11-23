@@ -13,6 +13,13 @@
   FP16, hint, pooled heads) and binds to the staging workspace's buffers, so a request runs the
   same kernel calls in the same order. Plans and outputs are bit-identical to 0.2.0's (lane
   simulator, both host paths).
+- The job-scoped AXI-master raise is a plugin setting: `CDSPPlugin(axi_mhz=748.8)`, or
+  `FNPU_AXI_MHZ=748.8` in the service's environment (no framenpu option). An unknown rate is
+  refused when the plugin loads; `capabilities().features` then lists `axi`, and each device
+  session gets its own clock owner. Still off by default.
+- The HMX clock rate is a plugin setting too: `CDSPPlugin(hmx_mhz=499.2)` or `FNPU_HMX_MHZ=499.2`
+  (default 192 MHz). Each device session's power owner runs at the plugin's rate; an unknown rate
+  is refused at load, and a raised one is listed as `hmx_fast`.
 
 ## 0.2.0
 

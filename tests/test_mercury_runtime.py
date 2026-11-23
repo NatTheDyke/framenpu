@@ -158,8 +158,10 @@ class _Device:
 
     claim_timeout = 1
 
-    def __init__(self, dispatch):
+    def __init__(self, dispatch, _axi=None, _power_factory=None):
         from types import SimpleNamespace
+
+        self.axi, self.power_factory = _axi, _power_factory
 
         self._transport = SimpleNamespace(
             memory=bytearray(0x2000000),

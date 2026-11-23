@@ -341,6 +341,7 @@ class MercuryLease:
         models,
         resident,
         device_factory=Device,
+        device_options=dict,
         lease_factory=arena_lease,
     ):
         self.loader, self.image, self.features = loader, image, features
@@ -355,6 +356,7 @@ class MercuryLease:
         self.resident = bool(resident) if features.resident else False
         self.models = models
         self._device_factory, self._lease_factory = device_factory, lease_factory
+        self._device_options = device_options  # per device session: extra Device keywords
         self.device = self.arena = self.power = None
         self.closed = self.owned = self.sealed = False
         self.marker = RECORD + secrets.token_bytes(16) + bytes.fromhex(self.image_sha256)
@@ -434,7 +436,7 @@ class MercuryLease:
             return
         self.arena = self._lease_factory()
         try:
-            self.device = self._device_factory(dispatch="direct")
+            self.device = self._device_factory(dispatch="direct", **self._device_options())
             self.device.__enter__()
 
             def install(mem):

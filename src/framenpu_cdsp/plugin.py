@@ -6,10 +6,18 @@ Registered as ``cdsp`` under the ``framenpu.devices`` entry-point group; framenp
 A plugin is one opened Mercury image: construction loads and validates the image folder (the
 bundled one when jobs is None) against the pinned hashes, and capabilities() reports what its link
 record says it supports. Code branches on those fields, never on which pinned hash matched.
+
+Clock settings are the plugin's, so a service turns them on in its unit's environment without
+any framenpu option, and each device session the lease opens gets them from here:
+- axi_mhz: the job-scoped AXI-master raise (axi.py), off unless set; default FNPU_AXI_MHZ.
+  capabilities() then lists "axi".
+- hmx_mhz: the HMX clock while HMX is held (power.py HMX_RATES); default FNPU_HMX_MHZ, else
+  the 192 MHz bring-up rate. A faster rate is listed as "hmx_fast".
 """
 
 from __future__ import annotations
 
+import logging
 import secrets
 import struct
 from dataclasses import dataclass, field
@@ -21,6 +29,9 @@ from . import _layout_native
 from . import _mercury_common as C
 from . import _mercury_layout as L
 from . import staging as S
+from .axi import AXI_RATES, AxiClock, rate_from_env
+from .power import DEFAULT_HMX_MHZ, HmxPower
+from .power import _rate as hmx_rate
 from .device import Device
 from .errors import InvalidModel
 from .mercury_device import BUNDLED_JOBS, MULTI_SEGMENTS, RES_SLOTS, MercuryLease, open_image
@@ -28,6 +39,8 @@ from .resident import arena_lease
 
 # ImageFeatures flags reported in Capabilities.features
 FEATURE_FLAGS = ("heads", "resident", "res_slots", "cbias", "multi", "stream", "tiles", "deep8")
+_UNSET = object()
+LOG = logging.getLogger(__name__)
 
 
 def _tag():
@@ -69,12 +82,28 @@ class CDSPPlugin:
     name = "cdsp"
 
     def __init__(
-        self, jobs=None, *, resident=None, _device_factory=Device, _lease_factory=arena_lease
+        self,
+        jobs=None,
+        *,
+        resident=None,
+        axi_mhz=_UNSET,
+        hmx_mhz=None,
+        _device_factory=Device,
+        _lease_factory=arena_lease,
     ):
         """jobs: a qualified Mercury build folder (link.json, image, loader); None: the image
         shipped in framenpu_cdsp/data/mercury. resident: None keeps parameter images in the
         FeatureNN blob region when the image supports it, True requires that, False copies them
-        for every crop (legacy plan, same image). The factories are for tests."""
+        for every crop (legacy plan, same image). axi_mhz: an AXI_RATES rate or None (off); left
+        out, FNPU_AXI_MHZ decides. hmx_mhz: an HMX_RATES rate; None: FNPU_HMX_MHZ,
+        else 192. A rate either does not know is a ValueError here,
+        before any device work. The factories are for tests."""
+        if axi_mhz is _UNSET:
+            axi_mhz = rate_from_env()
+        if axi_mhz is not None and axi_mhz not in AXI_RATES:
+            raise ValueError("AXI rate must be one of %s MHz" % sorted(AXI_RATES))
+        self.axi_mhz = axi_mhz
+        self.hmx_mhz = hmx_rate(hmx_mhz)
         self.jobs = str(BUNDLED_JOBS if jobs is None else jobs)
         self.loader, self.image, f = open_image(self.jobs)
         self.features = f
@@ -93,6 +122,10 @@ class CDSPPlugin:
         self.plans = []
         self._res_base = self._win_base = None
         self._device_factory, self._lease_factory = _device_factory, _lease_factory
+        if axi_mhz is not None:
+            LOG.info("AXI master raised to %s MHz inside each job", axi_mhz)
+        if self.hmx_mhz != DEFAULT_HMX_MHZ:
+            LOG.info("HMX clock %s MHz while held", self.hmx_mhz)
 
     def capabilities(self):
         f = self.features
@@ -103,7 +136,9 @@ class CDSPPlugin:
             segments=MULTI_SEGMENTS if f.multi else 1,
             stream=f.stream,
             resident_slots=RES_SLOTS if f.res_slots else int(f.resident),
-            features=frozenset(n for n in FEATURE_FLAGS if getattr(f, n)),
+            features=frozenset(n for n in FEATURE_FLAGS if getattr(f, n))
+            | ({"axi"} if self.axi_mhz is not None else set())
+            | ({"hmx_fast"} if self.hmx_mhz != DEFAULT_HMX_MHZ else set()),
         )
 
     def compile(self, graph, batch):
@@ -186,4 +221,14 @@ class CDSPPlugin:
             self.resident,
             device_factory=self._device_factory,
             lease_factory=self._lease_factory,
+            device_options=self._device_options,
         )
+
+    def _device_options(self):
+        """the clock settings for one device session: its own AXI owner (False: none, so the
+        device does not read FNPU_AXI_MHZ itself) and HMX power at this plugin's rate"""
+        mhz = self.hmx_mhz
+        return {
+            "_axi": AxiClock(self.axi_mhz) if self.axi_mhz is not None else False,
+            "_power_factory": lambda: HmxPower(mhz=mhz),
+        }
