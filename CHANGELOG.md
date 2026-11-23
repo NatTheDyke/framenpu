@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0
 
 - The device backend is now a plugin: `framenpu_cdsp` registers `CDSPPlugin` under the
   `framenpu.devices` entry point and framenpu finds it with `framenpu.devices.load()`
