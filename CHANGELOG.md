@@ -20,6 +20,11 @@
 - The HMX clock rate is a plugin setting too: `CDSPPlugin(hmx_mhz=499.2)` or `FNPU_HMX_MHZ=499.2`
   (default 192 MHz). Each device session's power owner runs at the plugin's rate; an unknown rate
   is refused at load, and a raised one is listed as `hmx_fast`.
+- The students' weights are on Hugging Face (`natthedyke1/mercury-ft7`,
+  `natthedyke1/mercury-stereo3d-tpc1`, CC BY-NC-SA 4.0); their manifests record the repo and
+  commit as `source`. `tools/fetch_models.py DIR` fetches every bundled manifest's weights by hash
+  (Mercury's own models from Monado's repository, which framenpu does not re-host) and prints the
+  model-gated tests' variables with `--env`.
 
 ## 0.2.0
 

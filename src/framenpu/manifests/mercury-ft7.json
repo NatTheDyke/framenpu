@@ -69,5 +69,9 @@
   },
   "decode": {
     "heatmap_cell_offset": 0
+  },
+  "source": {
+    "repo": "natthedyke1/mercury-ft7",
+    "revision": "419b7a4b06c8f540991745c10a0f4cf0f3fcfb14"
   }
 }

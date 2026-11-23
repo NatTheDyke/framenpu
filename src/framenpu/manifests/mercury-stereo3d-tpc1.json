@@ -56,5 +56,9 @@
   ],
   "batch": {
     "preferred": 2
+  },
+  "source": {
+    "repo": "natthedyke1/mercury-stereo3d-tpc1",
+    "revision": "f727a846a96cef7c1c23b64efd6e392f4ee3cd58"
   }
 }
