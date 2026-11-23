@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- The library split has started: [CONTRACTS.md](docs/CONTRACTS.md) specifies
+  the four interfaces between framehands, framenpu and the framenpu-cdsp device
+  backend (session API, model manifest, device plugin ABI, service protocol).
+  `framenpu.contracts` gives the session and plugin protocols and a manifest
+  validator, using only the standard library. `tests/test_boundaries.py` assigns
+  every module to its future library and fails on any new import across those
+  lines; today's ten crossings are listed and may only shrink. Nothing at run
+  time changes.
+
 - The resident Mercury image is now `5d15e715…` with loader `cc81fb7e…`, built
   with `--hmx-inline --pool --tiles --post-batch --pw-deep --pw-lg 3 --code-kib
   20`. Workers 1 and 2 run the depthwise, stride-2 and 1x1 post work while
