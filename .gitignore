@@ -30,3 +30,6 @@ evidence/raw/
 /HANDOFF.md
 /handoff-tools/*
 !/handoff-tools/build_mw.py
+
+# model weights: fetched beside each manifest, never committed
+models/*/*.onnx

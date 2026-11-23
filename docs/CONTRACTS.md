@@ -39,7 +39,10 @@ Rules carried over from the tracker today:
   never retried.
 - Models are addressed by manifest name, not by number (the service's 0/1/2 is wire detail).
 
-Planned entry point (phase 3): `framenpu.open(manifests, backend="auto"|"cpu"|"device"|"service")`.
+Entry point: `framenpu.open(manifests, backend="auto"|"cpu"|"device"|"service", jobs=None,
+socket=None, threads=1)` (`framenpu.session`). `manifests` are `model.json` files or the folders
+holding them; the CPU and device backends check each weights file against its manifest. "auto"
+is the service when its socket exists, else the CPU.
 
 ## Model manifest
 

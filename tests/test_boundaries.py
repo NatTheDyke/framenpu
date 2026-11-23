@@ -40,7 +40,8 @@ LAYERS = {
         "resident",
         "transport",
     },
-    "mixed": {"_mercury_host", "_native", "mercury_runtime"},
+    # backends and service run a MercurySession directly until framenpu.open (phase 3)
+    "mixed": {"_mercury_host", "_native", "backends", "mercury_runtime", "service", "session"},
     "research": {"convolution", "landmark", "ncnn", "resident_gemm", "resident_landmark"},
     "contracts": {"contracts"},
 }
@@ -61,6 +62,10 @@ KNOWN = {
     ("cli", "compiler"),
     ("cli", "ncnn"),
     ("cli", "resident"),
+    # framenpu serve runs the service, which opens a MercurySession until framenpu.open
+    ("cli", "service"),
+    # framenpu.open lives in session, which still opens a MercurySession or the service client
+    ("__init__", "session"),
     # the early Dense/ReLU model packs matrices with device helpers
     ("model", "device"),
     ("model", "profile"),

@@ -13,6 +13,14 @@ from .resident import load_resident_plan
 
 
 def main(argv=None):
+    import sys
+
+    argv = sys.argv[1:] if argv is None else list(argv)
+    if argv[:1] == ["serve"]:
+        # the NPU service parses its own options; it sets its BLAS thread count before numpy loads
+        from . import service
+
+        return service.main(argv[1:])
     parser = argparse.ArgumentParser(prog="framenpu")
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -33,6 +41,9 @@ def main(argv=None):
     build.add_argument("source", type=Path)
     build.add_argument("--output", type=Path, required=True)
     build.add_argument("--hmx", action="store_true")
+    sub.add_parser(
+        "serve", help="run the NPU service (root): framenpu serve --model M --jobs DIR --user U"
+    )
     args = parser.parse_args(argv)
     try:
         if args.command == "inspect-ncnn":

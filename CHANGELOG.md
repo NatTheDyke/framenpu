@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- `framenpu.open(manifests, backend=...)` opens models by manifest name on the CPU
+  (onnxruntime), the device or the NPU service, behind the CPU fallback latch
+  (`framenpu.session`). The inference backends and the NPU service moved here from
+  steam-frame-hand-tracking as `framenpu.backends` and `framenpu.service`; the service runs as
+  `framenpu serve` with the same wire protocol (version 4). `models/` holds manifests for ft7,
+  Mercury's keypoint model, the stereo student and the detector (weights not included). New
+  extra: `framenpu[cpu]` (onnxruntime).
+
 - The device backend now lives in its own package, `framenpu_cdsp`, in the
   same distribution: transport, power and clocks, dispatch, residency, the
   Mercury kernel ABI planner, the DSP payloads and the SDK. The old
