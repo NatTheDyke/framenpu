@@ -25,6 +25,11 @@
   commit as `source`. `tools/fetch_models.py DIR` fetches every bundled manifest's weights by hash
   (Mercury's own models from Monado's repository, which framenpu does not re-host) and prints the
   model-gated tests' variables with `--env`.
+- `tests/sim_plugin.py` is a `cdsp` plugin with no DSP: the real `CDSPPlugin` on the lane
+  simulator, selected with `FRAMENPU_DEVICES=cdsp=sim_plugin:SimPlugin`, so `framenpu.open(...,
+  "device")` and `framenpu serve` run their device path in CI and return the FP16 contract bit
+  for bit. CI gains a `models` job (the whole suite with the fetched weights). The simulator
+  now restores the job arena after each job, as the device does.
 
 ## 0.2.0
 
