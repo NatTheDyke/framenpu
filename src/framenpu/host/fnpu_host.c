@@ -216,9 +216,15 @@ EXPORT void fnpu_grid_unpack(const u16 *raw, i32 c, i32 hw, const i32 *idx, i32 
  * of two FP32 values is exact in FP64, so widening here equals FP64 weights. One pass over the
  * weights serves every input (these layers are bound by weight bandwidth); each output's sum
  * keeps the same order, so a batch equals nb single calls bit for bit. (Holding blocks of
- * outputs in registers measured slower on the Frame.) */
+ * outputs in registers measured slower on the Frame.) More than three inputs run as three,
+ * then the rest (same per-output order, so still equal to single calls). */
 static void dot_columns(const float *wt, const float *x, i32 nb, i32 n_out, i32 n_in,
                         double *acc) {
+    if (nb > 3) {
+        dot_columns(wt, x, 3, n_out, n_in, acc);
+        dot_columns(wt, x + 3 * (usize)n_in, nb - 3, n_out, n_in, acc + 3 * (usize)n_out);
+        return;
+    }
     for (i32 i = 0; i < nb * n_out; i++)
         acc[i] = 0.0;
     double *a0 = acc, *a1 = acc + n_out, *a2 = acc + 2 * n_out;
@@ -249,7 +255,7 @@ static void dot_columns(const float *wt, const float *x, i32 nb, i32 n_out, i32 
 
 /* Dense (mercury._step "dense") of nb inputs: y[b] = FP32(sum FP64(w) * FP64(x[b]) +
  * FP64(bias)), then relu6. wt: the FP32 weight transposed (n_in x n_out); x: nb x n_in;
- * acc: nb x n_out doubles of scratch; y: nb x n_out. 1 <= nb <= 3. */
+ * acc: nb x n_out doubles of scratch; y: nb x n_out. 1 <= nb <= 4. */
 EXPORT void fnpu_dense(const float *wt, const float *b, const float *x, i32 nb, i32 n_out,
                        i32 n_in, i32 act_relu6, double *acc, float *y) {
     dot_columns(wt, x, nb, n_out, n_in, acc);

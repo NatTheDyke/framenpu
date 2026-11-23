@@ -179,7 +179,7 @@ class KernelTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             nr.prepare([dict(feed, lastKeypoints=np.full((1, 42), np.nan, np.float32))])
         with self.assertRaises(ValueError):
-            nr.prepare([feed] * 4)
+            nr.prepare([feed] * 5)
 
     @unittest.skipUnless(DET_MODEL, "FNPU_MERCURY_DETECTOR required")
     def test_detector_host_side_matches_the_numpy_path(self):
@@ -293,7 +293,7 @@ class KernelTests(unittest.TestCase):
         from framenpu._mercury_host import NativeRequest
 
         model = mercury.load_keypoint(MODEL, require_pin=False)
-        plan = L.build_plan(model, prefix=True, batch=3, replay=True, pw_group=8, heads=True)
+        plan = L.build_plan(model, prefix=True, batch=4, replay=True, pw_group=8, heads=True, max_crops=4)
         nr = NativeRequest(self.host, model, plan, True)
         rng = np.random.default_rng(3)
         feeds = [
@@ -302,19 +302,19 @@ class KernelTests(unittest.TestCase):
                 "lastKeypoints": rng.uniform(-1, 1, (1, 42)).astype(np.float32),
                 "useLastKeypoints": np.array([k % 2], np.float32),
             }
-            for k in range(3)
+            for k in range(4)
         ]
         maps = [
             {
                 L.OUTPUT: rng.uniform(0, 6, (160, 8, 8)).astype(np.float16).astype(np.float32),
                 L.HEATMAP: rng.uniform(0, 1, (22, 22, 22)).astype(np.float32),
             }
-            for _ in range(3)
+            for _ in range(4)
         ]
         def staged(w, k):
             return w.stem[k].copy(), w.hint_grid[k].copy()
 
-        for n in (2, 3):
+        for n in (2, 3, 4):  # four: the dense layers run as three, then one
             w = nr.prepare(feeds[:n])
             got = [staged(w, k) for k in range(n)]
             nr.load_maps(w, maps[:n])

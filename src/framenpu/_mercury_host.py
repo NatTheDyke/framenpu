@@ -5,7 +5,7 @@ columns, grid staging, readback checks, pooled vector heads). The constructor re
 any graph or plan this module does not cover, so a session falls back to NumPy instead
 of computing something else.
 
-Each batch size (1..3 crops) has one preallocated workspace whose buffers, pointers
+Each batch size (1..4 crops) has one preallocated workspace whose buffers, pointers
 and kernel calls are bound once, so a request makes no per-call pointer or size
 checks. A request is prepare -> stage -> read (per crop) -> finish on one workspace;
 callers serialize requests (MercurySession holds its lock throughout).
@@ -142,8 +142,8 @@ class NativeRequest:
     def _work(self, nb, lane=0):
         """The workspace of nb-crop requests; lanes 0..2 let up to three requests of the same
         size be in flight at once (MercurySession.infer_many)."""
-        if not 1 <= nb <= 3 or lane not in (0, 1, 2):
-            raise ValueError("Mercury requests carry one to three crops")
+        if not 1 <= nb <= 4 or lane not in (0, 1, 2):
+            raise ValueError("Mercury requests carry one to four crops")
         w = self._works.get((nb, lane))
         if w is None:
             w = self._works[(nb, lane)] = _Work(self, nb)
@@ -151,7 +151,7 @@ class NativeRequest:
 
     # ------------------------------------------------------------------ inputs
     def prepare(self, feeds, lane=0):
-        """Check and convert the 1..3 crops of a request into their workspace's staged
+        """Check and convert the 1..4 crops of a request into their workspace's staged
         FP16 grid words. The hint layer reads its weights once for all crops."""
         import numpy as np
 

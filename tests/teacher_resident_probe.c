@@ -114,8 +114,14 @@ static inline __attribute__((always_inline)) void rs_hmx_store(fnpu_u16 *out, co
  * k * stride added to the window address of its load and store descriptors
  * (kinds 3, 4) before validation; compute ops and parameter images are shared.
  * VTCM carries over from crop to crop, so a plan must leave nothing in it that
- * the next crop reads before writing. */
+ * the next crop reads before writing. RS_MAX_CROPS=4u (build --max-crops 4, a
+ * --stream build) lets a request carry four. */
+#ifndef RS_MAX_CROPS
 #define RS_MAX_CROPS 3u
+#endif
+#if RS_MAX_CROPS != 3u && RS_MAX_CROPS != 4u
+#error "RS_MAX_CROPS is 3 or 4"
+#endif
 #endif
 #ifndef RS_DW_BLOCKS
 #define RS_DW_BLOCKS 2

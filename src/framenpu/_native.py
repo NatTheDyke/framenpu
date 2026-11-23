@@ -113,12 +113,12 @@ class Host:
     @staticmethod
     def _batch(x, n_in):
         nb = x.size // n_in if n_in else 0
-        if not 1 <= nb <= 3 or x.size != nb * n_in:
-            raise ValueError("native layers take one to three inputs of n_in values")
+        if not 1 <= nb <= 4 or x.size != nb * n_in:
+            raise ValueError("native layers take one to four inputs of n_in values")
         return nb
 
     def dense(self, wt32, b, x, relu6, acc, out):
-        """wt32: the FP32 weight transposed (n_in x n_out); x: nb x n_in (1..3 inputs);
+        """wt32: the FP32 weight transposed (n_in x n_out); x: nb x n_in (1..4 inputs);
         acc: nb x n_out FP64 scratch; out: nb x n_out."""
         n_in, n_out = wt32.shape
         nb = self._batch(x, n_in)
@@ -147,7 +147,7 @@ class Host:
         )
 
     def hint(self, wt32, b, kp, flags, relu6, acc, tmp, out):
-        """FP16 bits of FP32(relu6 dense(kp[b])) * flags[b] for nb = 1..3 crops (kp: nb x
+        """FP16 bits of FP32(relu6 dense(kp[b])) * flags[b] for nb = 1..4 crops (kp: nb x
         n_in); returns the non-finite count."""
         n_in, n_out = wt32.shape
         nb = self._batch(kp, n_in)

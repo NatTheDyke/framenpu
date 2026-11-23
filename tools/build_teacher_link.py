@@ -123,6 +123,7 @@ def build(
     s2_rev=False,
     multi=False,
     stream=False,
+    max_crops=3,
     loader_stamp=False,
     pw_ablate=0,
     clock_probe=False,
@@ -168,6 +169,8 @@ def build(
         raise ValueError("--multi is an option of the pooled --res-slots replay build")
     if stream and not multi:
         raise ValueError("--stream is an option of the --multi build")
+    if max_crops not in (3, 4) or (max_crops == 4 and not (stream and win_wide)):
+        raise ValueError("--max-crops 4 is an option of the wide-window --stream build")
     if resident and not (replay and mheads):
         raise ValueError("resident parameters are an option of the replay + mheads image")
     if mheads and (not stride2 or heads or stem):
@@ -305,6 +308,7 @@ def build(
             *(["-DRS_S2_REV"] if s2_rev else []),
             *(["-DRS_MULTI"] if multi else []),
             *(["-DRS_STREAM"] if stream else []),
+            *([f"-DRS_MAX_CROPS={max_crops}u"] if max_crops != 3 else []),
             *([f"-DRS_PW_ABLATE={pw_ablate}"] if pw_ablate else []),
             *(["-DRS_CLOCK_PROBE"] if clock_probe else []),
             *(["-DRS_PW_PIPE"] if pw_pipe else []),
@@ -363,6 +367,7 @@ def build(
         **({"s2_rev": True} if s2_rev else {}),
         **({"multi": 2} if multi else {}),
         **({"stream": True} if stream else {}),
+        **({"max_crops": max_crops} if max_crops != 3 else {}),
         **({"pw_ablate": pw_ablate} if pw_ablate else {}),
         **({"clock_probe": True} if clock_probe else {}),
         **({"pw_pipe": True} if pw_pipe else {}),
@@ -466,6 +471,8 @@ def main():
                    help="(--res-slots --pool) requests of one or two segments (two models' tables)")
     p.add_argument("--stream", action="store_true",
                    help="(--multi) segment 1 starts when the host has staged it; segments publish completion")
+    p.add_argument("--max-crops", type=int, choices=(3, 4), default=3,
+                   help="(--stream --win-wide) crops a request may carry")
     p.add_argument("--s2-rev", action="store_true",
                    help="(--post-batch) stride-2 column blocks last to first (rows wider than 32)")
     p.add_argument("--hmx-inline", action="store_true",
@@ -497,6 +504,7 @@ def main():
         s2_rev=args.s2_rev,
         multi=args.multi,
         stream=args.stream,
+        max_crops=args.max_crops,
         loader_stamp=args.loader_stamp,
         pw_ablate=args.pw_ablate,
         clock_probe=args.clock_probe,

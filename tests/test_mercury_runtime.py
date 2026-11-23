@@ -259,7 +259,7 @@ class _Device:
                     # column blocks last to first; the older images row by row
                     sha = getattr(self.owner, "image_sha256", "")
                     post = (M.RESIDENT_IMAGE_SHA256, M.SLOTS_IMAGE_SHA256, M.DET_IMAGE_SHA256)
-                    kw.update(s2_order="pairs_rev" if sha in (M.DET_IMAGE_SHA256, M.MULTI_IMAGE_SHA256, M.STREAM_IMAGE_SHA256) else "pairs" if sha in post else "rows")
+                    kw.update(s2_order="pairs_rev" if sha in (M.DET_IMAGE_SHA256, M.MULTI_IMAGE_SHA256, M.STREAM_IMAGE_SHA256, M.CROPS4_IMAGE_SHA256) else "pairs" if sha in post else "rows")
                     if getattr(self.owner, "cbias", False):
                         kw.update(cbias=True, win_hi=hi)
                     if self.owner.resident_image:

@@ -24,6 +24,7 @@ RS_MAGIC, RS_OPCODE = 0x31535254, 111
 KIND = {"pw": 1, "dw": 2, "load": 3, "store": 4, "s2": 5}
 VTCM_FIRST = 4
 MAX_CROPS = 3
+MAX_CROPS_WIDE = 4  # RS_MAX_CROPS=4u (--max-crops 4 image)
 
 
 def pack(matrix):

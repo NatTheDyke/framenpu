@@ -441,6 +441,30 @@ class MercuryLayoutTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             ML.build_plan(self.model, prefix=True, batch=4, replay=True)
 
+    def test_four_crop_plan_needs_the_four_crop_image(self):
+        """RS_MAX_CROPS=4u (--max-crops 4): the installed-image plan (resident, tiles, deep8,
+        packed biases, wide window) of four crops, with the detector after it, fits the
+        window; every crop's replayed rows pass the native checks and the request words
+        carry four crops. Without max_crops=4 a fourth crop is refused."""
+        from framenpu import _mercury_common as C, _mercury_layout as L
+
+        kw = dict(replay=True, pw_group=8, resident=True, tiles=True, deep8=True, cbias=True,
+                  win_hi=C.WIN_HI_WIDE)
+        with self.assertRaises(ValueError):
+            L.build_plan(self.model, prefix=True, batch=4, heads=True, **kw)
+        with self.assertRaises(ValueError):
+            L.build_plan(self.model, prefix=True, batch=5, heads=True, max_crops=5, **kw)
+        p = L.build_plan(self.model, prefix=True, batch=4, heads=True, max_crops=4, **kw)
+        self.assertEqual(p.plan.max_crops, 4)
+        self.assertLessEqual(p.win_end, C.WIN_HI_WIDE)
+        for k in range(4):
+            for b, at in p.crops[k].items():
+                self.assertEqual(at, p.crop(0).where[b] + k * p.plan.crop_stride)
+        w = np.frombuffer(C.payload(p.plan, 4), "<u4")
+        self.assertEqual(list(w[3:5]), [4, p.plan.crop_stride])
+        with self.assertRaises(ValueError):
+            C.payload(p.plan, 5)
+
     def test_batch_harness_flow_on_simulator(self):
         import hardware_mercury as HM
         import mercury_layout as ML

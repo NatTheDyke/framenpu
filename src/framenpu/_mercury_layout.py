@@ -454,6 +454,7 @@ def build_plan(
     win_base=None,
     cbias=False,
     win_hi=None,
+    max_crops=None,
 ):
     """batch > 1 (merged only): one request runs the merged sequence once per crop,
     each crop with its own input and final-tensor slots; parameter images are
@@ -461,7 +462,7 @@ def build_plan(
     RS_PW_GROUP (it sizes the 1x1 scratch the kernel checks).
 
     replay (an RS_REPLAY build): batch is the most crops a request may carry
-    (at most RL.MAX_CROPS) and a window slot set is reserved for each, but the table
+    (at most max_crops: RL.MAX_CROPS, or 4 on a --max-crops 4 image) and a window slot set is reserved for each, but the table
     holds crop 0's descriptors only; the kernel runs them once per crop with
     replay_row addressing. The planner emits every crop and refuses the plan unless
     each equals crop 0 under that rule (same VTCM layout, slots a fixed stride apart).
@@ -502,8 +503,11 @@ def build_plan(
         raise ValueError(mode)
     if batch < 1 or (batch > 1 and mode != "merged"):
         raise ValueError("batch > 1 needs a merged plan")
-    if replay and (mode != "merged" or batch > RL.MAX_CROPS):
-        raise ValueError(f"replay is a merged plan of at most {RL.MAX_CROPS} crops")
+    most = RL.MAX_CROPS if max_crops is None else max_crops
+    if most not in (RL.MAX_CROPS, RL.MAX_CROPS_WIDE):
+        raise ValueError(f"max_crops {most}")
+    if replay and (mode != "merged" or batch > most):
+        raise ValueError(f"replay is a merged plan of at most {most} crops")
     if heads and (mode != "merged" or start is not None):
         raise ValueError("heads are a whole-network merged plan")
     if resident and not (replay and (heads or model.detector)):

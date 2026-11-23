@@ -55,6 +55,9 @@ MULTI_SEGMENTS = 2
 # nonce after its outputs. infer_frame then prepares and stages segment 1 and reads and finishes
 # segment 0 while the DSP runs; only segment 0's prepare and segment 1's finish stay serial.
 STREAM_IMAGE_SHA256 = "cd656b5d4641ac37b1820549dacef93859412f42fb60fe093641907f4630e5de"
+# The --stream build with --max-crops 4: a keypoint request may carry four crops (both hands in
+# both views of one capture); everything else as STREAM_IMAGE_SHA256.
+CROPS4_IMAGE_SHA256 = "1bcbbdd8c13540e5ff11d25355c7aac9f800008020e48a0ab19075d70a58c162"
 STREAM_LATE = 0x7D  # the kernel's error when segment 1 was not staged within 5 ms
 # Straight-line VTCM backup/restore (the uncached slot refetched each loop packet: 385 -> 42 us).
 # The pool loader (workers 1 and 2 enter the image too) for the 20 KiB reservation.
@@ -105,7 +108,10 @@ def load_jobs(folder):
     if multi not in (None, MULTI_SEGMENTS) or (multi and not wide) or stream not in (None, True) or (
             stream and not multi):
         raise InvalidModel("Mercury multi-segment build differs")
-    want = (STREAM_IMAGE_SHA256 if stream else MULTI_IMAGE_SHA256 if multi else DET_IMAGE_SHA256 if wide else SLOTS_IMAGE_SHA256 if slots else RESIDENT_IMAGE_SHA256) if resident else \
+    crops4 = record.get("max_crops")
+    if crops4 not in (None, C.MAX_CROPS_WIDE) or (crops4 and not stream):
+        raise InvalidModel("Mercury crop-count build differs")
+    want = (CROPS4_IMAGE_SHA256 if crops4 else STREAM_IMAGE_SHA256 if stream else MULTI_IMAGE_SHA256 if multi else DET_IMAGE_SHA256 if wide else SLOTS_IMAGE_SHA256 if slots else RESIDENT_IMAGE_SHA256) if resident else \
         HEADS_IMAGE_SHA256 if heads else IMAGE_SHA256
     if (
         hashlib.sha256(image).hexdigest() != want
@@ -318,12 +324,14 @@ class MercurySession:
         self.loader, self.image, self.heads = load_jobs(jobs)
         self.image_sha256 = hashlib.sha256(self.image).hexdigest()
         self.res_slots = self.image_sha256 in (SLOTS_IMAGE_SHA256, DET_IMAGE_SHA256, MULTI_IMAGE_SHA256,
-                                               STREAM_IMAGE_SHA256)
-        self.stream = self.image_sha256 == STREAM_IMAGE_SHA256
+                                               STREAM_IMAGE_SHA256, CROPS4_IMAGE_SHA256)
+        self.max_crops = C.MAX_CROPS_WIDE if self.image_sha256 == CROPS4_IMAGE_SHA256 else C.MAX_CROPS
+        self.stream = self.image_sha256 in (STREAM_IMAGE_SHA256, CROPS4_IMAGE_SHA256)
         self.multi = self.stream or self.image_sha256 == MULTI_IMAGE_SHA256
         self.resident_image = self.res_slots or self.image_sha256 == RESIDENT_IMAGE_SHA256
         # RS_CBIAS + RS_WIN_WIDE (load_jobs checked the record against the hash)
-        self.cbias = self.image_sha256 in (DET_IMAGE_SHA256, MULTI_IMAGE_SHA256, STREAM_IMAGE_SHA256)
+        self.cbias = self.image_sha256 in (DET_IMAGE_SHA256, MULTI_IMAGE_SHA256, STREAM_IMAGE_SHA256,
+                                           CROPS4_IMAGE_SHA256)
         self.win_hi = C.WIN_HI_WIDE if self.cbias else C.WIN_HI
         if extra_models and not self.res_slots:
             raise InvalidModel("several models need the --res-slots image")
@@ -347,17 +355,17 @@ class MercurySession:
             raise InvalidModel("Mercury image overlaps its seal vector")
         self.models = []
         res_base = win_base = None
-        for slot, (m, batch) in enumerate([(model, 3)] + [
+        for slot, (m, batch) in enumerate([(model, self.max_crops)] + [
             (mercury.load_model(path, require_pin=False), batch) for path, batch in extra_models
         ]):
-            if not 1 <= batch <= 3:
-                raise InvalidModel("a model's requests carry one to three crops")
+            if not 1 <= batch <= (self.max_crops if slot == 0 else 3):
+                raise InvalidModel(f"model {slot}'s requests carry one to {self.max_crops if slot == 0 else 3} crops")
             try:
                 plan = L.build_plan(
                     m, prefix=not m.detector, batch=batch, replay=True, pw_group=8,
                     heads=self.heads and not m.detector, resident=self.resident, tiles=self.tiles,
                     deep8=self.deep8, res_base=res_base, win_base=win_base, cbias=self.cbias,
-                    win_hi=self.win_hi,
+                    win_hi=self.win_hi, max_crops=self.max_crops,
                 )
             except ValueError as exc:
                 raise InvalidModel(f"model {slot}: {exc}") from exc
