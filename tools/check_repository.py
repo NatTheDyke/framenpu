@@ -31,6 +31,8 @@ BINARY_FILES = {
     "src/framenpu_cdsp/data/dispatch_patch.bin",
     "src/framenpu/data/host_aarch64.so",
     "src/framenpu_cdsp/data/layout_aarch64.so",
+    "src/framenpu_cdsp/data/mercury/teacher_link.bin",
+    "src/framenpu_cdsp/data/mercury/teacher_link_loader.fjob",
     "examples/vector_add.fjob",
     "examples/xor.fnpu",
 }
@@ -53,6 +55,18 @@ def verify_host_native(package, name="host"):
             )
     if list(record.get("source_sha256", {})) != [HOST_SOURCES[name], "host/fnpu_common.h"]:
         raise ValueError(f"{name} library manifest lists unexpected sources")
+
+
+def verify_bundled_image(package):
+    """The bundled Mercury image matches its link record (the record pins the loader kernel)."""
+    folder = package / "data/mercury"
+    record = json.loads((folder / "link.json").read_text())
+    image = (folder / "teacher_link.bin").read_bytes()
+    linked = record.get("linked", {})
+    if linked.get("sha256") != hashlib.sha256(image).hexdigest() or linked.get(
+        "bytes", len(image)
+    ) != len(image):
+        raise ValueError("bundled Mercury image does not match data/mercury/link.json")
 
 
 def public_files(root=ROOT):
@@ -133,6 +147,7 @@ def check(root=ROOT):
     verify_kernel(root / "src/framenpu_cdsp")
     verify_host_native(root / "src/framenpu")
     verify_host_native(root / "src/framenpu_cdsp", "layout")
+    verify_bundled_image(root / "src/framenpu_cdsp")
     Job.load(root / "examples/vector_add.fjob")
     Model.load(root / "examples/xor.fnpu").plan(4)
     print(

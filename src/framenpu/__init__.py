@@ -14,7 +14,7 @@ from .errors import (
 from .job import Job, JobResult
 from .model import Clip, Dense, Model, ReLU
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 
 def open(manifests, backend="auto", **options):  # noqa: A001  (framenpu.open is the session API)

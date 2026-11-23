@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "framenpu"
-version = "0.1.0"
+version = "0.2.0"
 description = "Experimental Steam Frame Hexagon custom jobs and HMX inference"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -39,7 +39,7 @@ namespaces = false
 [tool.setuptools.package-data]
 framenpu = ["data/*.json", "data/*.so", "host/*.c", "host/*.h", "manifests/*.json"]
 framenpu_cdsp = [
-    "data/*.bin", "data/*.json", "data/*.so", "host/*.c", "host/*.h",
+    "data/*.bin", "data/*.json", "data/*.so", "data/mercury/*", "host/*.c", "host/*.h",
     "sdk/*.S", "sdk/*.c", "sdk/*.ld", "sdk/include/*.h",
 ]
 

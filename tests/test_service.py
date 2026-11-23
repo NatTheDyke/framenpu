@@ -2,6 +2,7 @@
 stand-in session (no DSP needed)."""
 
 from pathlib import Path
+import json
 import os
 import socket
 import struct
@@ -130,6 +131,16 @@ class ServiceTests(unittest.TestCase):
             if FakeSession.closed >= n:
                 return
             time.sleep(0.01)
+
+    def test_ping_reports_each_models_manifest(self):
+        c = ns.Client(self.path)
+        want = {0: {"name": None, "weights_sha256": None, "max_crops": self.srv.crops}}
+        if self.det:
+            want[2] = {"name": None, "weights_sha256": None, "max_crops": 2}
+        if self.s3d:
+            want[1] = {"name": None, "weights_sha256": None, "max_crops": 2}
+        self.assertEqual(c.manifests, want)
+        c.close()
 
     def test_a_three_crop_image_refuses_four_and_says_so(self):
         c = ns.Client(self.path)
@@ -387,6 +398,46 @@ class InferManyTests(Stereo3DServiceTests):
         c = ns.Client(self.path)
         self.assertEqual(len(c.infer_many([(1, [pair(1)])])[0]), 1)
         c.close()
+
+
+class BundledTests(unittest.TestCase):
+    def test_the_bundled_image_is_the_qualified_four_crop_build(self):
+        import hashlib
+
+        from framenpu_cdsp import mercury_device as D
+
+        d = D.BUNDLED_JOBS
+        self.assertEqual(
+            hashlib.sha256((d / "teacher_link.bin").read_bytes()).hexdigest(), D.CROPS4_IMAGE_SHA256
+        )
+        rec = json.loads((d / "link.json").read_text())
+        self.assertEqual(rec["linked"]["sha256"], D.CROPS4_IMAGE_SHA256)
+        self.assertEqual(rec["loader"]["sha256"], D.LOADER_SHA256)
+        self.assertEqual(ns._image_crops(str(d)), 4)
+        srv = ns.Server("model", None, "unused", os.getuid(), session_factory=lambda: None)
+        self.assertEqual((srv.jobs, srv.crops), (str(d), 4))
+
+    def test_manifest_info_names_weights_by_hash(self):
+        import hashlib
+        from unittest.mock import patch
+
+        from framenpu import session
+        from framenpu.contracts import load_manifest
+
+        with tempfile.TemporaryDirectory() as tmp:
+            w = Path(tmp) / "w.onnx"
+            w.write_bytes(b"weights")
+            digest = hashlib.sha256(b"weights").hexdigest()
+            self.assertEqual(
+                ns._manifest_info(str(w), 3),
+                {"name": None, "weights_sha256": digest, "max_crops": 3},
+            )
+            m = load_manifest(Path(session.BUNDLED) / "mercury-ft7.json")
+            import dataclasses
+
+            fake = {"mercury-ft7": dataclasses.replace(m, weights_sha256=digest)}
+            with patch.object(session, "bundled_manifests", return_value=fake):
+                self.assertEqual(ns._manifest_info(str(w), 4)["name"], "mercury-ft7")
 
 
 class EntryPointTests(unittest.TestCase):

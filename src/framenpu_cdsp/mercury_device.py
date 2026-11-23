@@ -26,6 +26,10 @@ from .job import Job
 from .profile import PROFILE
 from .resident import CONTROL, RECORD, SSR, arena_lease
 
+# the qualified Mercury image shipped with this package (link.json, image, loader): 1bcbbdd8, the
+# 4-crop streamed build (tools/build_teacher_link.py ... --max-crops 4 rebuilds it byte for byte)
+BUNDLED_JOBS = Path(__file__).with_name("data") / "mercury"
+
 IMAGE_SHA256 = "d7a78a81469c10acaf193b0d99cc0415f92d1de845a7a9aa292a7a1ebe691819"
 # The same build with --mheads: the heatmap head (step 2c) runs on the DSP too.
 HEADS_IMAGE_SHA256 = "582d79ce821304ab90b48d18c5e9d7c5e4396614b9c6eb70bf2e7b6febf114d3"

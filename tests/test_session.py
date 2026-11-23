@@ -165,7 +165,6 @@ class CPUTests(SessionTestBase):
             (([self.dirs[KP]],), {"backend": "gpu"}),
             (([],), {}),
             (([self.dirs[KP], self.dirs[KP]],), {"backend": "cpu"}),
-            (([self.dirs[KP]],), {"backend": "device"}),
         ):
             with self.subTest(kw=kw), self.assertRaises(ValueError):
                 framenpu.open(*args, **kw)

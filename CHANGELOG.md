@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.0
+
+- `framenpu_cdsp` ships the qualified Mercury image (1bcbbdd8: streamed, 4 crops per request) in
+  `data/mercury`; `framenpu serve` and `framenpu.open(..., "device")` use it when no image folder
+  is given (`--jobs` is now optional). The repository check verifies it against its link record.
+- `ping` reports each served model's manifest: the bundled manifest name matching the weights'
+  SHA-256, the hash and the crops per request (`Client.manifests`). Wire protocol still version 4.
+
 ## Unreleased
 
 - `framenpu.open(manifests, backend=...)` opens models by manifest name on the CPU

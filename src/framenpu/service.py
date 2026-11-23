@@ -9,7 +9,8 @@ tracking user (and root) may use. The tracker's `--merc-inference service` backe
 (framenpu.backends ServiceBackend) is the only client; any failure there falls back to CPU.
 
 Server (root, normally via systemd: the tracker's headset/install_npu_service.sh):
-    framenpu serve --model M.onnx --jobs DIR --user steamos [--socket PATH]
+    framenpu serve --model M.onnx [--jobs DIR] --user steamos [--socket PATH]
+    (without --jobs: the Mercury image shipped with framenpu_cdsp)
                             [--s3d-model S3D.onnx]   (a --res-slots image: the 3D stereo student too)
                             [--det-model DET.onnx]   (the packed-bias image: Mercury's hand detector too)
 
@@ -42,12 +43,15 @@ Wire format (little endian), both directions:  u32 header length, JSON header, p
            scalar_extras, curls), for model 1 k x (joints3d [1,63], scalar_extras), for model 2
            k x (hand_exists, cx, cy, size, each [1,2]: left, right); infer_many / infer_frame:
            each request's outputs back to back, "timing": {"requests": [...]};
-           {"ok": false, "error": "..."} on failure.  ping lists the served "models".
+           {"ok": false, "error": "..."} on failure.  ping lists the served "models" and, per model
+           number, its "manifests" entry: the bundled manifest name matching the weights' SHA-256
+           (null for weights with no bundled manifest), the hash and the crops per request.
 The served models run in one FrameNPU session, each with its own resident parameters (no reload
 when the tracker alternates between them). The 3D student and the detector do not fit together.
 """
 
 import argparse
+import hashlib
 import json
 import logging
 import os
@@ -217,6 +221,11 @@ class Client:
         """served model numbers: 0 the keypoint model, 1 the 3D stereo student, 2 the detector"""
         return tuple(self.info.get("models", (0,)))
 
+    @property
+    def manifests(self):
+        """model number -> {"name", "weights_sha256", "max_crops"} (empty: the service predates it)"""
+        return {int(k): v for k, v in self.info.get("manifests", {}).items()}
+
     def _call(self, header, payload=b"", out_count=0, out_spec=OUTPUTS):
         send_msg(self.sock, header, payload)
         resp, data = recv_msg(
@@ -310,6 +319,27 @@ class Client:
 
 
 # ---------------------------------------------------------------- server
+def _bundled_jobs():
+    from framenpu_cdsp.mercury_device import BUNDLED_JOBS
+
+    return str(BUNDLED_JOBS)
+
+
+def _manifest_info(path, crops):
+    """what ping reports for one served model file: its bundled manifest name (by weights hash)"""
+    info = {"name": None, "weights_sha256": None, "max_crops": crops}
+    try:
+        with open(path, "rb") as f:
+            digest = hashlib.sha256(f.read()).hexdigest()
+    except OSError:
+        return info
+    from framenpu.session import bundled_manifests
+
+    found = [m.name for m in bundled_manifests().values() if m.weights_sha256 == digest]
+    info.update(name=found[0] if found else None, weights_sha256=digest)
+    return info
+
+
 def _image_crops(jobs):
     """keypoint crops per request of the FrameNPU image in jobs (link.json max_crops, else 3)"""
     try:
@@ -332,6 +362,7 @@ class Server:
         det_model=None,
         crops=None,
     ):
+        jobs = jobs if jobs is not None else _bundled_jobs()
         self.model, self.jobs, self.path, self.uid = model, jobs, path, uid
         # keypoint crops per request: what the FrameNPU image's record says it runs (its
         # MercurySession checks the image itself); tests pass crops
@@ -344,6 +375,10 @@ class Server:
         self.models = (0,) + tuple(m for m, _ in extra)
         # service model number -> the session's model index (extra models follow the keypoint model)
         self.index = {0: 0} | {m: k + 1 for k, (m, _) in enumerate(extra)}
+        self.manifests = {
+            str(m): _manifest_info(p, self.crops if m == 0 else SPECS[m][2])
+            for m, p in ((0, model), *extra)
+        }
         if session_factory is None:
 
             def session_factory():
@@ -415,6 +450,7 @@ class Server:
                 "infer_many": MAX_SEQ,
                 "infer_frame": MAX_FRAME,
                 "crops": self.crops,
+                "manifests": self.manifests,
             }, b""
         if op == "idle":
             if self.session is not None:
@@ -542,7 +578,9 @@ class Server:
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="framenpu serve", description=__doc__.split("\n")[0])
     ap.add_argument("--model", required=True)
-    ap.add_argument("--jobs", required=True)
+    ap.add_argument(
+        "--jobs", default=None, help="the FrameNPU image folder (default: the bundled one)"
+    )
     ap.add_argument("--user", required=True, help="the only non-root user allowed to connect")
     ap.add_argument("--socket", default=SOCKET)
     ap.add_argument(
