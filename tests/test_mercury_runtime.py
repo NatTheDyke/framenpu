@@ -234,6 +234,7 @@ class _Device:
 
         self.claim(1)
         hook, hook_error = kwargs.get("_while_waiting"), None
+        saved = None  # the job arena span, put back after the job as Device._submit does
         try:
             _prepare(self._transport)
             words, workers = ReplayCompletionTests.result()
@@ -254,9 +255,9 @@ class _Device:
                 from framenpu.profile import PROFILE
 
                 arena, late = PROFILE.arena, False
-                self._transport.memory[arena : arena + len(data) + output_size] = data + bytes(
-                    output_size
-                )
+                span = len(data) + output_size
+                saved = (arena, bytes(self._transport.memory[arena : arena + span]))
+                self._transport.memory[arena : arena + span] = data + bytes(output_size)
                 outs = []
                 for g in range(nseg):
                     # a --stream request: segment 1 waits for the host's release (word 12 = nonce,
@@ -370,6 +371,9 @@ class _Device:
             raise
         finally:
             if not self._transport.poisoned:
+                if saved is not None:
+                    at, before = saved
+                    self._transport.memory[at : at + len(before)] = before
                 self.release()
 
 
@@ -393,8 +397,28 @@ class PackagedPlannerTests(unittest.TestCase):
             self.assertEqual(new.plan.crop_stride, old.plan.crop_stride)
 
 
+class _RestoredChecks:
+    @staticmethod
+    def flag(dev):
+        return struct.unpack_from("<I", dev._transport.memory, C.BLOB_FLAG)[0]
+
+    def assert_restored(self, dev, session):
+        """Everything the session wrote is restored; the blob flag stays cleared
+        only when resident images were copied (FeatureNN then reloads its blob)."""
+        self.assertEqual(self.flag(dev), 0 if any(dev.copied) else 1)
+        mem = bytearray(dev._transport.memory)
+        mem[C.BLOB_FLAG : C.BLOB_FLAG + 4] = bytes(4)
+        self.assertFalse(any(mem))
+
+
+def _image_features(jobs):
+    from framenpu_cdsp.plugin import CDSPPlugin
+
+    return CDSPPlugin(jobs).capabilities().features
+
+
 @unittest.skipUnless(MODEL and JOBS, "FNPU_MERCURY_MODEL and FNPU_MERCURY_JOBS required")
-class MercurySessionTests(unittest.TestCase):
+class MercurySessionTests(_RestoredChecks, unittest.TestCase):
     def session(self):
 
         lease = _Lease()
@@ -460,18 +484,6 @@ class MercurySessionTests(unittest.TestCase):
         self.assertEqual(dev.released, 2)
         self.assert_restored(dev, session)
 
-    @staticmethod
-    def flag(dev):
-        return struct.unpack_from("<I", dev._transport.memory, C.BLOB_FLAG)[0]
-
-    def assert_restored(self, dev, session):
-        """Everything the session wrote is restored; the blob flag stays cleared
-        only when resident images were copied (FeatureNN then reloads its blob)."""
-        self.assertEqual(self.flag(dev), 0 if any(dev.copied) else 1)
-        mem = bytearray(dev._transport.memory)
-        mem[C.BLOB_FLAG : C.BLOB_FLAG + 4] = bytes(4)
-        self.assertFalse(any(mem))
-
     def test_resident_parameters_load_once_and_after_eviction(self):
         import numpy as np
 
@@ -512,8 +524,13 @@ class MercurySessionTests(unittest.TestCase):
 
     def test_resident_image_runs_the_legacy_plan(self):
         import numpy as np
+        from framenpu_cdsp.errors import InvalidModel
 
         lease = _Lease()
+        if "cbias" in _image_features(JOBS):  # packed biases exist only in the resident layout
+            with self.assertRaisesRegex(InvalidModel, "resident requests only"):
+                M.MercurySession(MODEL, JOBS, resident=False, _device_factory=_Device)
+            return
         session = M.MercurySession(
             MODEL, JOBS, resident=False, _device_factory=_Device, _lease_factory=lambda: lease
         )
@@ -554,7 +571,7 @@ class MercurySessionTests(unittest.TestCase):
 @unittest.skipUnless(
     MODEL and HEADS_JOBS, "FNPU_MERCURY_MODEL and FNPU_MERCURY_HEADS_JOBS required"
 )
-class HeadsSessionTests(unittest.TestCase):
+class HeadsSessionTests(_RestoredChecks, unittest.TestCase):
     """The --mheads image: the heatmap head runs in the (simulated) kernel, and
     every output still equals the FP16 contract (the simulator is exact)."""
 
@@ -591,6 +608,18 @@ class HeadsSessionTests(unittest.TestCase):
         rows = [list(r) for r in struct.iter_unpack("<32I", session.plan.plan.table)]
         rg = next(r for r in rows if r[0] == L.KIND_RG and r[2] == 4)
         p3 = next(r for r in rows if r[0] == L.KIND_P3)
+        # the bounds of the image the plan was made for, as the plugin's compile() applies them
+        pl = session.plugin
+        f = pl.features
+        kw = dict(
+            s2_direct=0,
+            pw_group=8,
+            resident=f.resident,
+            tiles=pl.tiles,
+            deep8=pl.deep8,
+            cbias=f.cbias,
+            win_hi=f.win_hi,
+        )
         self.assertTrue(C.regrid_ok(rg))
         for word, value in ((2, 10), (3, 40), (12, 4), (13, 1), (8, rg[7])):
             bad = list(rg)
@@ -599,9 +628,9 @@ class HeadsSessionTests(unittest.TestCase):
         bad = list(rg)
         bad[15] += 32 * rg[6]  # phase 0 destination past its tensor
         self.assertFalse(C.regrid_ok(bad))
-        self.assertTrue(C.native_ok(p3, s2_direct=0, pw_group=8, mheads=True))
-        self.assertFalse(C.native_ok(p3, s2_direct=0, pw_group=8))  # not an RS_MHEADS build
+        self.assertTrue(C.native_ok(p3, mheads=True, **kw))
+        self.assertFalse(C.native_ok(p3, **kw))  # not an RS_MHEADS build
         for word, value in ((3, p3[3] + 1), (6, 0), (7, p3[7] + 8)):
             bad = list(p3)
             bad[word] = value
-            self.assertFalse(C.native_ok(bad, s2_direct=0, pw_group=8, mheads=True), word)
+            self.assertFalse(C.native_ok(bad, mheads=True, **kw), word)

@@ -406,7 +406,10 @@ class DetectorSessionTests(unittest.TestCase):
     @unittest.skipUnless(SLOTS_JOBS, "FNPU_MERCURY_JOBS (the --res-slots build) required")
     def test_detector_does_not_fit_the_slots_image(self):
         from framenpu.errors import InvalidModel
+        from framenpu_cdsp.plugin import CDSPPlugin
 
+        if CDSPPlugin(SLOTS_JOBS).features.cbias:
+            self.skipTest("FNPU_MERCURY_JOBS is a packed-bias image, which fits the detector")
         with self.assertRaises(InvalidModel):
             self.session(SLOTS_JOBS, [(MODEL, 1)])
 
