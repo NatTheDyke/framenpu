@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "src"), str(ROOT / "tests")]
 from framenpu import mercury
 from framenpu import mercury_runtime as M
+from framenpu_cdsp import mercury_device as D
 from framenpu import _mercury_common as C
 from framenpu import _mercury_layout as L
 from framenpu.errors import RecoveryRequired
@@ -26,7 +27,7 @@ class ReplayCompletionTests(unittest.TestCase):
     @staticmethod
     def result(count=3, n=55):
         words = [0] * 256
-        words[:3] = [C.RS_MAGIC, M.IMAGE_CACHED + 4, n * count]
+        words[:3] = [C.RS_MAGIC, D.IMAGE_CACHED + 4, n * count]
         if count > 1:
             words[48 : 48 + count] = [10 * n * (k + 1) for k in range(count)]
         words[96 : 96 + n] = [(count - 1) * 10 * n + 10 * (k + 1) for k in range(n)]
@@ -48,7 +49,7 @@ class ReplayCompletionTests(unittest.TestCase):
             words, workers = self.result(count)
 
             def parse(w, ws=workers):
-                return M.replay_metadata(
+                return D.replay_metadata(
                     SimpleNamespace(
                         output=struct.pack("<256I", *w), workers=ws, kernel_reference_ticks=2000
                     ),
@@ -79,7 +80,7 @@ class ReplayCompletionTests(unittest.TestCase):
 
         def parse(a, b, ticks=4000, segs=((2, 55), (1, 55))):
             out = struct.pack("<256I", *a) + struct.pack("<256I", *b)
-            return M.frame_metadata(SimpleNamespace(output=out, workers=workers, kernel_reference_ticks=ticks),
+            return D.frame_metadata(SimpleNamespace(output=out, workers=workers, kernel_reference_ticks=ticks),
                                     list(segs), 6960, True)
 
         t = parse(w0, w1)
@@ -107,7 +108,7 @@ class ReplayCompletionTests(unittest.TestCase):
         def parse(status, resident):
             w = list(words)
             w[12] = status
-            return M.replay_metadata(
+            return D.replay_metadata(
                 SimpleNamespace(output=struct.pack("<256I", *w), workers=workers, kernel_reference_ticks=2000),
                 1, 55, 6960, resident=resident,
             )
@@ -127,14 +128,14 @@ class ReplayCompletionTests(unittest.TestCase):
             output=struct.pack("<256I", *words), workers=workers, kernel_reference_ticks=None
         )
         with self.assertRaises(RecoveryRequired):
-            M.replay_metadata(result, 3, 55, 6960)
+            D.replay_metadata(result, 3, 55, 6960)
         for error in (ValueError("invalid readback"), KeyboardInterrupt()):
 
             def fail(result):
                 raise error
 
             with self.assertRaises(RecoveryRequired):
-                M._completion_guard(fail)(result)
+                D._completion_guard(fail)(result)
 
 
 class _Power:
@@ -214,12 +215,12 @@ class _Device:
         try:
             _prepare(self._transport)
             words, workers = ReplayCompletionTests.result()
-            if opcode == M.ADMIN_OPCODE:
+            if opcode == D.ADMIN_OPCODE:
                 after = struct.unpack_from("<I", data, 4)[0] == 7
                 code, size = struct.unpack_from("<2I", data, 8)  # the reservation (16 or 20 KiB)
-                struct.pack_into("<I", self._transport.memory, code + size - 128, M.SEAL if after else 0)
+                struct.pack_into("<I", self._transport.memory, code + size - 128, D.SEAL if after else 0)
                 out = struct.pack(
-                    "<3I", M.ADMIN_MAGIC, M.SLOT_UNCACHED + 4, M.SEAL if after else 0
+                    "<3I", D.ADMIN_MAGIC, D.SLOT_UNCACHED + 4, D.SEAL if after else 0
                 ).ljust(256, b"\0")
             else:
                 # a --multi image runs each 128-byte segment in turn, metadata block g each
@@ -258,8 +259,8 @@ class _Device:
                     # store rows in pairs, the packed-bias wide-window one (--s2-rev) with the
                     # column blocks last to first; the older images row by row
                     sha = getattr(self.owner, "image_sha256", "")
-                    post = (M.RESIDENT_IMAGE_SHA256, M.SLOTS_IMAGE_SHA256, M.DET_IMAGE_SHA256)
-                    kw.update(s2_order="pairs_rev" if sha in (M.DET_IMAGE_SHA256, M.MULTI_IMAGE_SHA256, M.STREAM_IMAGE_SHA256, M.CROPS4_IMAGE_SHA256) else "pairs" if sha in post else "rows")
+                    post = (D.RESIDENT_IMAGE_SHA256, D.SLOTS_IMAGE_SHA256, D.DET_IMAGE_SHA256)
+                    kw.update(s2_order="pairs_rev" if sha in (D.DET_IMAGE_SHA256, D.MULTI_IMAGE_SHA256, D.STREAM_IMAGE_SHA256, D.CROPS4_IMAGE_SHA256) else "pairs" if sha in post else "rows")
                     if getattr(self.owner, "cbias", False):
                         kw.update(cbias=True, win_hi=hi)
                     if self.owner.resident_image:
@@ -304,7 +305,7 @@ class _Device:
                 if self.fail or late:
                     workers[0] = tuple(list(workers[0][:2]) + [1] + list(workers[0][3:]))
             # the wrapper's time spans every segment of the job
-            ticks = 2000 * (len(out) // C.META_BYTES if opcode != M.ADMIN_OPCODE else 1)
+            ticks = 2000 * (len(out) // C.META_BYTES if opcode != D.ADMIN_OPCODE else 1)
             result = SimpleNamespace(output=out, workers=workers, kernel_reference_ticks=ticks)
             _completion_validator(result)
             if hook_error is not None:
@@ -341,13 +342,11 @@ class PackagedPlannerTests(unittest.TestCase):
 @unittest.skipUnless(MODEL and JOBS, "FNPU_MERCURY_MODEL and FNPU_MERCURY_JOBS required")
 class MercurySessionTests(unittest.TestCase):
     def session(self):
-        from unittest.mock import patch
 
         lease = _Lease()
-        with patch.object(M, "_lease", return_value=lease):
-            session = M.MercurySession(
-                MODEL, JOBS, _device_factory=_Device, _lease_factory=lambda: lease
-            )
+        session = M.MercurySession(
+            MODEL, JOBS, _device_factory=_Device, _lease_factory=lambda: lease
+        )
         return session, lease
 
     def test_retrained_weights_need_the_explicit_opt_in(self):
@@ -359,8 +358,7 @@ class MercurySessionTests(unittest.TestCase):
         # same graph, other weights: only the file hash differs from the pinned Mercury model
         retrained = dataclasses.replace(onnx_graph.load(MODEL), sha256="0" * 64)
         lease = _Lease()
-        with patch.object(mercury.onnx_graph, "load", return_value=retrained), \
-                patch.object(M, "_lease", return_value=lease):
+        with patch.object(mercury.onnx_graph, "load", return_value=retrained):
             with self.assertRaises(InvalidModel):
                 M.MercurySession(
                     MODEL, JOBS, _device_factory=_Device, _lease_factory=lambda: lease
@@ -462,13 +460,11 @@ class MercurySessionTests(unittest.TestCase):
 
     def test_resident_image_runs_the_legacy_plan(self):
         import numpy as np
-        from unittest.mock import patch
 
         lease = _Lease()
-        with patch.object(M, "_lease", return_value=lease):
-            session = M.MercurySession(
-                MODEL, JOBS, resident=False, _device_factory=_Device, _lease_factory=lambda: lease
-            )
+        session = M.MercurySession(
+            MODEL, JOBS, resident=False, _device_factory=_Device, _lease_factory=lambda: lease
+        )
         if not session.resident_image:
             self.skipTest("FNPU_MERCURY_JOBS is not the resident image")
         self.assertFalse(session.resident or session.plan.resident)
@@ -510,13 +506,11 @@ class HeadsSessionTests(unittest.TestCase):
 
     def test_heatmap_head_on_the_dsp_matches_the_contract(self):
         import numpy as np
-        from unittest.mock import patch
 
         lease = _Lease()
-        with patch.object(M, "_lease", return_value=lease):
-            session = M.MercurySession(
-                MODEL, HEADS_JOBS, _device_factory=_Device, _lease_factory=lambda: lease
-            )
+        session = M.MercurySession(
+            MODEL, HEADS_JOBS, _device_factory=_Device, _lease_factory=lambda: lease
+        )
         self.assertTrue(session.heads)
         rows = list(struct.iter_unpack("<32I", session.plan.plan.table))
         self.assertEqual(sum(r[0] == L.KIND_RG for r in rows), 2)
@@ -536,12 +530,10 @@ class HeadsSessionTests(unittest.TestCase):
 
     def test_regrid_and_tap_checks_refuse_out_of_bounds_rows(self):
         lease = _Lease()
-        from unittest.mock import patch
 
-        with patch.object(M, "_lease", return_value=lease):
-            session = M.MercurySession(
-                MODEL, HEADS_JOBS, _device_factory=_Device, _lease_factory=lambda: lease
-            )
+        session = M.MercurySession(
+            MODEL, HEADS_JOBS, _device_factory=_Device, _lease_factory=lambda: lease
+        )
         rows = [list(r) for r in struct.iter_unpack("<32I", session.plan.plan.table)]
         rg = next(r for r in rows if r[0] == L.KIND_RG and r[2] == 4)
         p3 = next(r for r in rows if r[0] == L.KIND_P3)

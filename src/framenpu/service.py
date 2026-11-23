@@ -10,7 +10,7 @@ tracking user (and root) may use. The tracker's `--merc-inference service` backe
 
 Server (root, normally via systemd: the tracker's headset/install_npu_service.sh):
     framenpu serve --model M.onnx [--jobs DIR] --user steamos [--socket PATH]
-    (without --jobs: the Mercury image shipped with framenpu_cdsp)
+    (without --jobs: the image shipped with the device backend)
                             [--s3d-model S3D.onnx]   (a --res-slots image: the 3D stereo student too)
                             [--det-model DET.onnx]   (the packed-bias image: Mercury's hand detector too)
 
@@ -319,12 +319,6 @@ class Client:
 
 
 # ---------------------------------------------------------------- server
-def _bundled_jobs():
-    from framenpu_cdsp.mercury_device import BUNDLED_JOBS
-
-    return str(BUNDLED_JOBS)
-
-
 def _manifest_info(path, crops):
     """what ping reports for one served model file: its bundled manifest name (by weights hash)"""
     info = {"name": None, "weights_sha256": None, "max_crops": crops}
@@ -341,10 +335,13 @@ def _manifest_info(path, crops):
 
 
 def _image_crops(jobs):
-    """keypoint crops per request of the FrameNPU image in jobs (link.json max_crops, else 3)"""
+    """keypoint crops per request of the device image in jobs (None: the backend's bundled one),
+    from the plugin's capabilities; 3 when the image cannot be opened (the session refuses it)"""
+    from . import devices
+
     try:
-        n = json.load(open(os.path.join(jobs, "link.json"))).get("max_crops", KP_CROPS)
-    except (OSError, ValueError, AttributeError, TypeError):
+        n = devices.load("cdsp", jobs=jobs).capabilities().max_crops
+    except Exception:
         return KP_CROPS
     return n if n in (KP_CROPS, SPECS[0][2]) else KP_CROPS
 
@@ -362,7 +359,6 @@ class Server:
         det_model=None,
         crops=None,
     ):
-        jobs = jobs if jobs is not None else _bundled_jobs()
         self.model, self.jobs, self.path, self.uid = model, jobs, path, uid
         # keypoint crops per request: what the FrameNPU image's record says it runs (its
         # MercurySession checks the image itself); tests pass crops
@@ -579,7 +575,9 @@ def main(argv=None):
     ap = argparse.ArgumentParser(prog="framenpu serve", description=__doc__.split("\n")[0])
     ap.add_argument("--model", required=True)
     ap.add_argument(
-        "--jobs", default=None, help="the FrameNPU image folder (default: the bundled one)"
+        "--jobs",
+        default=None,
+        help="the device image folder (default: the one the device backend ships)",
     )
     ap.add_argument("--user", required=True, help="the only non-root user allowed to connect")
     ap.add_argument("--socket", default=SOCKET)

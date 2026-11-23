@@ -5,65 +5,34 @@ DSP; the hint and heads use the qualified host contract. No crop queue,
 background batching, retry, firmware recovery or service restart is used.
 """
 
-import secrets
-import struct
 import threading
 import time
 
 from . import mercury
-from . import _mercury_common as C
-from . import _mercury_layout as L
 from . import _native
 from ._mercury_host import NativeDetector, NativeRequest
-from .device import Device
-from .errors import InvalidModel, RecoveryRequired
-from framenpu_cdsp import _layout_native
-from framenpu_cdsp.resident import arena_lease as _lease
-from framenpu_cdsp.mercury_device import (  # noqa: F401  (re-exported: the device half's names)
-    ADMIN_MAGIC,
-    ADMIN_OPCODE,
-    CODE,
-    CODE_BYTES,
-    CROPS4_IMAGE_SHA256,
-    DET_IMAGE_SHA256,
-    HEADS_IMAGE_SHA256,
-    IMAGE_CACHED,
-    IMAGE_SHA256,
-    LOADER_SHA256,
-    MULTI_IMAGE_SHA256,
-    MULTI_SEGMENTS,
-    RES_SLOTS,
-    RESIDENT_IMAGE_SHA256,
-    SEAL,
-    SEAL_AT,
-    SLOT_UNCACHED,
-    SLOTS_IMAGE_SHA256,
-    STREAM_IMAGE_SHA256,
-    STREAM_LATE,
-    MercuryLease,
-    _completion,
-    _completion_guard,
-    _segment_metadata,
-    frame_metadata,
-    image_features,
-    image_kind,
-    load_jobs,
-    open_image,
-    replay_metadata,
-    reservation,
-)
+from .contracts import Refusal
+from .errors import InvalidModel
 
 
 class _Model:
-    """One model a session serves: its lowered graph, plan, residency tag and tag slot."""
+    """One model a session serves: its lowered graph and the device plugin's compiled plan (its
+    split between host and device, residency slot and tag, measured crop time)."""
 
-    def __init__(self, model, plan, slot, outputs):
-        self.model, self.plan, self.slot, self.outputs = model, plan, slot, outputs
+    def __init__(self, model, compiled, outputs):
+        self.model, self.compiled, self.outputs = model, compiled, outputs
+        self.split = compiled.split
         self.native = None
-        self.crop_ms = 0.0  # last measured DSP body per crop: the next request sleeps most of it
-        self.tag = (0, 0, 0, 0)  # the kernel copies the images unless the slot holds it
-        while not self.tag[0]:
-            self.tag = struct.unpack("<4I", secrets.token_bytes(16))
+        self.numpy = compiled.numpy_staging()  # the layout half of the NumPy host path
+
+    # what the lease reads of a request's model: the compiled plan's
+    plan = property(lambda self: self.compiled.plan)
+    slot = property(lambda self: self.compiled.slot)
+    tag = property(lambda self: self.compiled.tag)
+    crop_ms = property(
+        lambda self: self.compiled.crop_ms,
+        lambda self, v: setattr(self.compiled, "crop_ms", v),
+    )
 
 
 class _Pending:
@@ -71,7 +40,7 @@ class _Pending:
 
     def __init__(self, sl, count, timed):
         self.sl, self.count = sl, count
-        self.prepared, self.extra, self.maps, self.timing = [], [], [], None
+        self.prepared, self.extra, self.staged, self.timing = [], [], None, None
         self.marks = {} if timed else None
         self.restart()
 
@@ -125,137 +94,91 @@ class MercurySession:
     def __init__(
         self,
         model_path,
-        jobs,
+        jobs=None,
         *,
+        plugin=None,
         require_pin=True,
         native=None,
         resident=None,
         extra_models=(),
-        _device_factory=Device,
-        _lease_factory=_lease,
+        _device_factory=None,
+        _lease_factory=None,
     ):
         """native: None uses the bundled host kernels when this platform and image allow
         (else NumPy), False always uses NumPy, True requires the kernels, and a
         (_native.Host, _layout_native.LayoutHost) pair uses those libraries (tests; a lone
         Host takes the bundled layout library). resident: None keeps the
         parameter images in the FeatureNN blob region when the image supports it, True
-        requires that, False copies them for every crop (legacy plan, same image)."""
+        requires that, False copies them for every crop (legacy plan, same image).
+        plugin: the device plugin (framenpu.devices); None loads "cdsp" on jobs (None: the image
+        the backend ships)."""
         # require_pin=False accepts retrained weights for the same graph: lower() still validates
         # the structure, shapes and operators, and every plan row is bounds-checked below.
         model = mercury.load_keypoint(model_path, require_pin=require_pin)
-        # the image's features come from its link record, which load_jobs checked against the
-        # pinned hash (framenpu_cdsp.mercury_device)
-        self.loader, self.image, f = open_image(jobs)
-        self.features = f
-        self.heads, self.image_sha256 = f.heads, f.sha256
-        self.res_slots, self.max_crops = f.res_slots, f.max_crops
-        self.stream, self.multi = f.stream, f.multi
-        self.resident_image = f.resident
-        self.cbias, self.win_hi = f.cbias, f.win_hi  # RS_CBIAS + RS_WIN_WIDE
-        if extra_models and not self.res_slots:
+        # the plugin opened and validated the image against its pinned hashes; the features come
+        # from the image's link record
+        if plugin is None:
+            from . import devices
+
+            options = {"jobs": jobs, "resident": resident}
+            if _device_factory is not None:
+                options["_device_factory"] = _device_factory
+            if _lease_factory is not None:
+                options["_lease_factory"] = _lease_factory
+            plugin = devices.load("cdsp", **options)
+        self.plugin = plugin
+        self.loader, self.image, self.features = plugin.loader, plugin.image, plugin.features
+        self.resident, self.tiles, self.deep8 = plugin.resident, plugin.tiles, plugin.deep8
+        self.win_hi = plugin.features.win_hi
+        self.code_bytes, self.seal_at = plugin.features.code_bytes, plugin.features.seal_at
+        caps = plugin.capabilities()
+        # what the image's record says it supports (the plugin checked it against its pins)
+        self.image_sha256, self.max_crops = caps.image_sha256, caps.max_crops
+        self.heads = "heads" in caps.features
+        self.res_slots = "res_slots" in caps.features
+        self.stream, self.multi, self.segments = caps.stream, caps.segments > 1, caps.segments
+        self.resident_image = "resident" in caps.features
+        self.cbias = "cbias" in caps.features
+        if extra_models and caps.resident_slots < 2:
             raise InvalidModel("several models need the --res-slots image")
-        if len(extra_models) >= RES_SLOTS:
-            raise InvalidModel(f"at most {RES_SLOTS} models")
-        if resident and not self.resident_image:
-            raise InvalidModel("this Mercury image has no resident parameter support")
-        self.resident = self.resident_image if resident is None else bool(resident)
-        if self.cbias and not self.resident:
-            raise InvalidModel("the packed-bias image runs resident requests only")
-        # an RS_TILES build keeps 1x1-only tensors in B-tile layout (no gather). A record
-        # that misstates it is harmless: a build without RS_TILES ignores the layout word
-        # (every tensor stays planar), and one with it runs flag-free rows planar too.
-        self.tiles = self.resident and f.tiles
-        # 8-block 1x1 groups (--pw-deep --pw-lg 3): flagged ops get a larger scratch. A build
-        # without them refuses flag 8; one with them runs unflagged ops 4-block.
-        self.deep8 = self.tiles and f.deep8
-        self.code_bytes, self.seal_at = f.code_bytes, f.seal_at
+        if extra_models and 1 + len(extra_models) > caps.resident_slots:
+            raise InvalidModel(f"at most {caps.resident_slots} models")
         self.models = []
-        res_base = win_base = None
         for slot, (m, batch) in enumerate(
             [(model, self.max_crops)]
             + [(mercury.load_model(path, require_pin=False), batch) for path, batch in extra_models]
         ):
-            if not 1 <= batch <= (self.max_crops if slot == 0 else 3):
-                raise InvalidModel(
-                    f"model {slot}'s requests carry one to {self.max_crops if slot == 0 else 3} crops"
-                )
-            try:
-                plan = L.build_plan(
-                    m,
-                    prefix=not m.detector,
-                    batch=batch,
-                    replay=True,
-                    pw_group=8,
-                    heads=self.heads and not m.detector,
-                    resident=self.resident,
-                    tiles=self.tiles,
-                    deep8=self.deep8,
-                    res_base=res_base,
-                    win_base=win_base,
-                    cbias=self.cbias,
-                    win_hi=self.win_hi,
-                    max_crops=self.max_crops,
-                )
-            except ValueError as exc:
-                raise InvalidModel(f"model {slot}: {exc}") from exc
-            if extra_models and not self.resident:
-                raise InvalidModel("several models need resident parameters")
-            res_base, win_base = plan.res_end, -(-plan.win_end // 4096) * 4096
-            for k in range(batch):
-                for row in struct.iter_unpack("<32I", plan.plan.table):
-                    if row[0] == L.KIND_RG and self.heads:
-                        ok = C.regrid_ok(row)
-                    else:
-                        ok = C.native_ok(
-                            C.replay_row(row, k, plan.plan.crop_stride, self.win_hi),
-                            s2_direct=0,
-                            pw_group=8,
-                            mheads=self.heads,
-                            resident=self.resident_image,
-                            tiles=self.tiles,
-                            deep8=self.deep8,
-                            cbias=self.cbias,
-                            win_hi=self.win_hi,
-                        )
-                    if not ok:
-                        raise InvalidModel("Mercury plan exceeds native bounds")
-            self.models.append(_Model(m, plan, slot, _outputs(m)))
+            compiled = plugin.compile(m, batch)
+            if isinstance(compiled, Refusal):
+                raise InvalidModel(compiled.reason)
+            self.models.append(_Model(m, compiled, _outputs(m)))
         if native is not False:
             # the model kernels (framenpu) and the layout kernels (the device backend's)
             if isinstance(native, tuple):
                 host, layout = native
             else:
                 host = native if isinstance(native, _native.Host) else _native.bundled()
-                layout = _layout_native.bundled()
+                layout = plugin.layout()
             if host is None or layout is None:
                 if native is True:
                     raise InvalidModel("the native host kernels are not available here")
             else:
                 for sl in self.models:
                     try:
-                        sl.native = (
-                            NativeDetector(host, layout, sl.model, sl.plan, sl.outputs)
-                            if sl.model.detector
-                            else NativeRequest(
-                                host, layout, sl.model, sl.plan, self.heads, sl.outputs
-                            )
+                        kind = NativeDetector if sl.model.detector else NativeRequest
+                        sl.native = kind(
+                            host,
+                            sl.compiled.native_staging(layout),
+                            sl.model,
+                            sl.split,
+                            sl.outputs,
                         )
                     except ValueError as exc:
                         # an explicit request covers the primary model; extra models (other
                         # graphs) fall back to NumPy where the kernels do not cover them
                         if native is not None and sl.slot == 0:
                             raise InvalidModel(f"native host path: {exc}") from exc
-        self._dev = MercuryLease(
-            self.loader,
-            self.image,
-            f,
-            self.models,
-            self._stage,
-            self._read_outputs,
-            self.resident,
-            device_factory=_device_factory,
-            lease_factory=_lease_factory,
-        )
+        self._dev = plugin.open()
         self.lock = threading.RLock()
         self.last_timing = None
         self.phase_times = False  # True: last_timing["phases_ms"] times each host step (profiling)
@@ -388,7 +311,7 @@ class MercurySession:
         """Run one frame's requests [(model, feeds), ...] (distinct models, each 1..its crops
         per request), in order, as ONE DSP job on a --multi image: each request is a segment of
         the same submission (one gate hold, one wake and completion, one 20 ms budget), so a
-        frame that runs the detector and ft7 pays one round trip. Up to MULTI_SEGMENTS requests.
+        frame that runs the detector and ft7 pays one round trip. Up to the image's segments (capabilities) requests.
         Without the --multi image the requests run as infer_many. Returns each request's
         outputs; last_timing holds the per-request timings under "requests". Any failure fails
         the whole frame (no retries)."""
@@ -397,8 +320,8 @@ class MercurySession:
             raise ValueError("infer_frame needs at least one request")
         if not self.multi:
             return self.infer_many(requests)
-        if len(reqs) > MULTI_SEGMENTS:
-            raise ValueError(f"a frame carries at most {MULTI_SEGMENTS} requests")
+        if len(reqs) > self.segments:
+            raise ValueError(f"a frame carries at most {self.segments} requests")
         if len({sl.slot for sl, _ in reqs}) != len(reqs):
             raise ValueError("a frame's requests are of distinct models")  # one workspace each
         with self.lock:
@@ -426,8 +349,9 @@ class MercurySession:
 
     def _model_for(self, model, feeds):
         sl = self.models[model]
-        if not 1 <= len(feeds) <= sl.plan.batch:
-            raise ValueError(f"requests of this model carry one to {sl.plan.batch} crops")
+        most = sl.compiled.max_crops
+        if not 1 <= len(feeds) <= most:
+            raise ValueError(f"requests of this model carry one to {most} crops")
         return sl
 
     def _host_prepare(self, sl, feeds, lane=0):
@@ -437,6 +361,7 @@ class MercurySession:
         p = _Pending(sl, len(feeds), self.phase_times)
         if sl.native is not None:
             p.prepared = sl.native.prepare(feeds, lane)
+            p.staged = p.prepared.sw
             p.mark("host_prepare_ms")
             return p
         for feed in feeds:
@@ -450,15 +375,18 @@ class MercurySession:
                 raise ValueError("image exceeds FP16 storage")
             if sl.model.detector:
                 p.extra.append({})
-                p.prepared.append({L.STEM_COLS: L.stem_columns(ts["inputImg"], mercury.DET_SIZE)})
+                p.prepared.append({"inputImg": ts["inputImg"]})
                 continue
             p.extra.append({k: ts[k] for k in ts.keys() - mercury.INPUTS.keys()})
-            for name in L.HOST_HINT_OPS[:3]:
+            for name in sl.split.prefix:
                 op = sl.model.op(name)
                 ts[op.output] = mercury._step(op, ts, "fp16", "fp16")
-            if not np.isfinite(ts[L.HINT]).all():
+            hint = sl.split.staged[1]
+            if not np.isfinite(ts[hint]).all():
                 raise ValueError("hint exceeds FP16 storage")
-            p.prepared.append({L.STEM_COLS: L.stem_columns(ts["inputImg"]), L.HINT: ts[L.HINT]})
+            p.prepared.append({"inputImg": ts["inputImg"], hint: ts[hint]})
+        # the layout half converts to the kernel's layout now, outside the gate
+        p.staged = sl.numpy.request(p.prepared)
         p.mark("host_prepare_ms")
         return p
 
@@ -466,45 +394,6 @@ class MercurySession:
         """Stage, run and read back one prepared request (caller holds the lock). during:
         host-only work to run while the DSP computes (Device._submit's wait hook)."""
         self._device_run_frame([p], during)
-
-    def _stage(self, mem, q):
-        """Write one prepared request's inputs into its window part."""
-        if q.sl.native is not None:
-            q.sl.native.stage(mem, q.prepared)
-            return
-        for k, ts in enumerate(q.prepared):
-            L.stage_inputs(
-                q.sl.plan.crop(k),
-                lambda at, data: mem.__setitem__(slice(at, at + len(data)), data),
-                ts,
-            )
-
-    def _read_outputs(self, p, get):
-        """Read and check one request's outputs from the window (into its workspace or p.maps);
-        get(at, n) reads the window."""
-        import numpy as np
-
-        sl, count, prepared = p.sl, p.count, p.prepared
-        p.maps = []
-        for k in range(count):
-            if sl.native is not None:
-                if not sl.native.read(prepared, get, k):
-                    raise RecoveryRequired("Mercury output has invalid padding or values")
-                continue
-            maps = {}
-            names = (
-                (sl.plan.final,)
-                if sl.model.detector
-                else (L.OUTPUT, L.HEATMAP)
-                if self.heads
-                else (L.OUTPUT,)
-            )
-            for name in names:
-                out, stray = L.read_tensor(sl.plan.crop(k), get, name)
-                if stray or not np.isfinite(out).all():
-                    raise RecoveryRequired("Mercury output has invalid padding or values")
-                maps[name] = out.astype(np.float32)
-            p.maps.append(maps)
 
     def _host_finish(self, p):
         """The request's outputs from its read-back maps (no device access)."""
@@ -515,26 +404,20 @@ class MercurySession:
         elif sl.model.detector:
             # the device ran the convolutions; the dense tail is 8 outputs per crop
             outs = [
-                mercury.run_tail(sl.model, m, sl.plan.ops[-1].name, outputs=sl.outputs)
-                for m in p.maps
+                mercury.run_tail(sl.model, m, sl.split.last, outputs=sl.outputs)
+                for m in p.staged.maps
             ]
-        elif not self.heads:
+        elif not sl.split.skip:
             outs = [
-                mercury.run_tail(sl.model, m | x, L.LAST, outputs=sl.outputs)
-                for m, x in zip(p.maps, p.extra)
+                mercury.run_tail(sl.model, m | x, sl.split.last, outputs=sl.outputs)
+                for m, x in zip(p.staged.maps, p.extra)
             ]
         else:
             # the heatmap head ran on the DSP: only the pooled vector heads remain
             names = sl.outputs if sl.model.views == 1 else sl.outputs + ("heatmap_xy",)
             outs = [
-                mercury.run_tail(
-                    sl.model,
-                    {L.OUTPUT: m[L.OUTPUT], "heatmap_xy": m[L.HEATMAP][:21]} | x,
-                    L.LAST,
-                    skip=L.HEAD_OPS,
-                    outputs=names,
-                )
-                for m, x in zip(p.maps, p.extra)
+                mercury.run_tail(sl.model, m | x, sl.split.last, skip=sl.split.skip, outputs=names)
+                for m, x in zip(p.staged.maps, p.extra)
             ]
         p.mark("host_finish_ms")
         if (

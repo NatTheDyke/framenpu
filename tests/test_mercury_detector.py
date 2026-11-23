@@ -233,14 +233,12 @@ class DetectorSessionTests(unittest.TestCase):
     models that image's last-to-first stride-2 store order)."""
 
     def session(self, jobs, extra):
-        from unittest.mock import patch
         import test_mercury_runtime as TR
         from framenpu import mercury_runtime as M
 
         lease = TR._Lease()
-        with patch.object(M, "_lease", return_value=lease):
-            s = M.MercurySession(KEYPOINT, jobs, require_pin=False, extra_models=extra,
-                                 _device_factory=TR._Device, _lease_factory=lambda: lease)
+        s = M.MercurySession(KEYPOINT, jobs, require_pin=False, extra_models=extra,
+                             _device_factory=TR._Device, _lease_factory=lambda: lease)
         s.__enter__()
         s.device.owner = s
         return s

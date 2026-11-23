@@ -230,7 +230,7 @@ class ResidentPlanTests(unittest.TestCase):
 
 class ReservationRecordTests(unittest.TestCase):
     def test_reservation(self):
-        from framenpu import mercury_runtime as R
+        from framenpu_cdsp import mercury_device as R
 
         rec = lambda b, s: {"reservation": {"code": "0x1ff0000", "bytes": b, "seal_vector": s}}  # noqa: E731
         self.assertEqual(R.reservation(rec(0x4000, "0x1ff3f80")), (0x4000, 0x1FF3F80))

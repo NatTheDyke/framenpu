@@ -162,15 +162,20 @@ class ServiceTests(unittest.TestCase):
                 self.assertTrue(np.all(o[name] == (i + 1) * 128 * 128 + 1))
         c.close()
 
-    def test_image_crops_come_from_the_record(self):
-        import json
+    def test_image_crops_come_from_the_plugins_capabilities(self):
+        from types import SimpleNamespace
+        from unittest.mock import patch
+
+        from framenpu import devices
 
         with tempfile.TemporaryDirectory() as d:
-            self.assertEqual(ns._image_crops(d), 3)  # no record
-            for rec, want in (({"max_crops": 4}, 4), ({}, 3), ({"max_crops": 9}, 3)):
-                with open(os.path.join(d, "link.json"), "w") as f:
-                    json.dump(rec, f)
-                self.assertEqual(ns._image_crops(d), want)
+            self.assertEqual(ns._image_crops(d), 3)  # no image there: the session refuses it
+        for n, want in ((4, 4), (3, 3), (9, 3)):
+            caps = SimpleNamespace(max_crops=n)
+            fake = SimpleNamespace(capabilities=lambda caps=caps: caps)
+            with patch.object(devices, "load", return_value=fake) as load:
+                self.assertEqual(ns._image_crops("J"), want)
+            load.assert_called_once_with("cdsp", jobs="J")
 
     def test_round_trip_one_to_three_crops_in_order(self):
         c = ns.Client(self.path)
@@ -415,7 +420,7 @@ class BundledTests(unittest.TestCase):
         self.assertEqual(rec["loader"]["sha256"], D.LOADER_SHA256)
         self.assertEqual(ns._image_crops(str(d)), 4)
         srv = ns.Server("model", None, "unused", os.getuid(), session_factory=lambda: None)
-        self.assertEqual((srv.jobs, srv.crops), (str(d), 4))
+        self.assertEqual((srv.jobs, srv.crops), (None, 4))  # the plugin's bundled image
 
     def test_manifest_info_names_weights_by_hash(self):
         import hashlib

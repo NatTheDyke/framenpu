@@ -11,7 +11,6 @@ import os
 from pathlib import Path
 import platform
 import shutil
-import subprocess
 import sys
 import tempfile
 import unittest
@@ -31,6 +30,23 @@ DET_JOBS = os.environ.get("FNPU_MERCURY_DET_JOBS")  # the --cbias --win-wide --s
 S3D_MODEL = os.environ.get("FNPU_S3D_MODEL")  # a 2-view stereo student (distill/make_stereo3d.py)
 TOOLS = all(shutil.which(t) for t in ("clang", "ld.lld", "llvm-nm"))
 ARCH = platform.machine()
+
+
+def _request(host, layout, model, plan, heads, outputs=None):
+    """the model half on the plan's native staging, as a compiled plan pairs them"""
+    from framenpu._mercury_host import NativeRequest
+    from framenpu_cdsp import staging as S
+
+    staging = S.native_staging(layout, model, plan, heads)
+    return NativeRequest(host, staging, model, S.split_of(model, plan, heads), outputs)
+
+
+def _detector(host, layout, model, plan, outputs=None):
+    from framenpu._mercury_host import NativeDetector
+    from framenpu_cdsp import staging as S
+
+    staging = S.native_staging(layout, model, plan, False)
+    return NativeDetector(host, staging, model, S.split_of(model, plan, False), outputs)
 
 
 class BundledLibraryTests(unittest.TestCase):
@@ -168,13 +184,12 @@ class KernelTests(unittest.TestCase):
     def test_request_host_side_matches_the_numpy_path(self):
         import numpy as np
         from framenpu import mercury, _mercury_layout as L
-        from framenpu._mercury_host import NativeRequest
 
         model = mercury.load_keypoint(MODEL, require_pin=False)
         plan = L.build_plan(model, prefix=True, batch=3, replay=True, pw_group=8, heads=True)
-        nr = NativeRequest(self.host, self.layout, model, plan, True)
+        nr = _request(self.host, self.layout, model, plan, True)
         with self.assertRaises(ValueError):  # the NumPy-tail image is not covered
-            NativeRequest(
+            _request(
                 self.host,
                 self.layout,
                 model,
@@ -196,7 +211,7 @@ class KernelTests(unittest.TestCase):
                 op = model.op(n)
                 ts[op.output] = mercury._step(op, ts, "fp16", "fp16")
             w = nr.prepare([feed])
-            got = {L.STEM_COLS: w.stem[0].copy(), L.HINT: w.hint_grid[0].copy()}
+            got = {L.STEM_COLS: w.sw.stem[0].copy(), L.HINT: w.sw.hint_grid[0].copy()}
             for name, ref in ((L.STEM_COLS, L.stem_columns(ts["inputImg"])), (L.HINT, ts[L.HINT])):
                 self.assertEqual(got[name].tobytes(), L.tensor_bytes(plan.crop(0), name, ref), name)
 
@@ -215,8 +230,8 @@ class KernelTests(unittest.TestCase):
             self.assertTrue(
                 nr.read(w, lambda at, n: raw[next(k for k in raw if where[k] == at)], 1)
             )
-            w.maps[L.OUTPUT][0] = w.maps[L.OUTPUT][1]
-            w.maps[L.HEATMAP][0] = w.maps[L.HEATMAP][1]
+            w.sw.maps[L.OUTPUT][0] = w.sw.maps[L.OUTPUT][1]
+            w.sw.maps[L.HEATMAP][0] = w.sw.maps[L.HEATMAP][1]
             out = nr.finish(w)[1]
             for name in ("heatmap_xy", "scalar_extras", "curls"):
                 np.testing.assert_array_equal(out[name], want[name], name)
@@ -242,7 +257,6 @@ class KernelTests(unittest.TestCase):
     def test_detector_host_side_matches_the_numpy_path(self):
         import numpy as np
         from framenpu import mercury, _mercury_common as C, _mercury_layout as L
-        from framenpu._mercury_host import NativeDetector, NativeRequest
 
         model = mercury.load_detector(DET_MODEL, require_pin=False)
         plan = L.build_plan(
@@ -256,11 +270,11 @@ class KernelTests(unittest.TestCase):
             cbias=True,
             win_hi=C.WIN_HI_WIDE,
         )
-        nd = NativeDetector(self.host, self.layout, model, plan)
+        nd = _detector(self.host, self.layout, model, plan)
         with self.assertRaises(ValueError):  # the keypoint request class refuses the detector
-            NativeRequest(self.host, self.layout, model, plan, False)
+            _request(self.host, self.layout, model, plan, False)
         with self.assertRaises(ValueError):  # a split device part is not covered
-            NativeDetector(
+            _detector(
                 self.host,
                 self.layout,
                 model,
@@ -286,7 +300,7 @@ class KernelTests(unittest.TestCase):
                 L.stage_inputs(
                     plan.crop(k), want.__setitem__, {L.STEM_COLS: L.stem_columns(x[0, 0], 160)}
                 )
-                self.assertEqual(bytes(w.staged[k]), want[plan.crop(k).where[L.STEM_COLS]])
+                self.assertEqual(bytes(w.sw.staged[k]), want[plan.crop(k).where[L.STEM_COLS]])
             # read back the FP16 contract's final maps and finish both ways
             fins = [
                 mercury.run(model, {"inputImg": x}, "fp16", keep=True)[1][L.DET_OUTPUT] for x in xs
@@ -326,14 +340,13 @@ class KernelTests(unittest.TestCase):
     def test_stereo_student_host_side_matches_the_numpy_path(self):
         import numpy as np
         from framenpu import mercury, _mercury_layout as L
-        from framenpu._mercury_host import NativeRequest
 
         model = mercury.load_keypoint(S3D_MODEL, require_pin=False)
         plan = L.build_plan(
             model, prefix=True, batch=2, replay=True, pw_group=8, heads=True, resident=True
         )
         outs = ("joints3d", "scalar_extras")
-        nr = NativeRequest(self.host, self.layout, model, plan, True, outs)
+        nr = _request(self.host, self.layout, model, plan, True, outs)
         rng = np.random.default_rng(11)
         feeds, wants, maps = [], [], []
         for seed in range(3):
@@ -352,11 +365,11 @@ class KernelTests(unittest.TestCase):
                 ts[op.output] = mercury._step(op, ts, "fp16", "fp16")
             w = nr.prepare([feed])
             self.assertEqual(
-                w.stem[0].tobytes(),
+                w.sw.stem[0].tobytes(),
                 L.tensor_bytes(plan.crop(0), L.STEM_COLS, L.stem_columns(ts["inputImg"])),
             )
             self.assertEqual(
-                w.hint_grid[0].tobytes(), L.tensor_bytes(plan.crop(0), L.HINT, ts[L.HINT])
+                w.sw.hint_grid[0].tobytes(), L.tensor_bytes(plan.crop(0), L.HINT, ts[L.HINT])
             )
             full = mercury.run(model, feed, "fp16", keep=True)[1]
             o = full[L.OUTPUT].astype(np.float32)
@@ -366,7 +379,7 @@ class KernelTests(unittest.TestCase):
             for k in outs:  # the emulator's own end to end run agrees
                 np.testing.assert_array_equal(want[k], full[k].reshape(want[k].shape))
             feeds.append(feed), wants.append(want), maps.append(o)
-            w.maps[L.OUTPUT][0] = o
+            w.sw.maps[L.OUTPUT][0] = o
             got = nr.finish(w)[0]
             self.assertEqual(sorted(got), sorted(outs))
             # FP64 sums in a fixed order vs NumPy's BLAS order: at most an FP32 ulp or so
@@ -376,10 +389,10 @@ class KernelTests(unittest.TestCase):
         singles = []
         for f, o in zip(feeds[:2], maps[:2]):
             w = nr.prepare([f])
-            w.maps[L.OUTPUT][0] = o
+            w.sw.maps[L.OUTPUT][0] = o
             singles.append(nr.finish(w)[0])
         w = nr.prepare(feeds[:2])
-        w.maps[L.OUTPUT][:] = maps[:2]
+        w.sw.maps[L.OUTPUT][:] = maps[:2]
         for got, one in zip(nr.finish(w), singles):
             for k in outs:
                 np.testing.assert_array_equal(got[k], one[k])
@@ -390,13 +403,12 @@ class KernelTests(unittest.TestCase):
     def test_a_batch_equals_its_crops_one_at_a_time(self):
         import numpy as np
         from framenpu import mercury, _mercury_layout as L
-        from framenpu._mercury_host import NativeRequest
 
         model = mercury.load_keypoint(MODEL, require_pin=False)
         plan = L.build_plan(
             model, prefix=True, batch=4, replay=True, pw_group=8, heads=True, max_crops=4
         )
-        nr = NativeRequest(self.host, self.layout, model, plan, True)
+        nr = _request(self.host, self.layout, model, plan, True)
         rng = np.random.default_rng(3)
         feeds = [
             {
@@ -415,7 +427,7 @@ class KernelTests(unittest.TestCase):
         ]
 
         def staged(w, k):
-            return w.stem[k].copy(), w.hint_grid[k].copy()
+            return w.sw.stem[k].copy(), w.sw.hint_grid[k].copy()
 
         for n in (2, 3, 4):  # four: the dense layers run as three, then one
             w = nr.prepare(feeds[:n])
@@ -443,19 +455,17 @@ class KernelTests(unittest.TestCase):
     )
     def test_session_on_native_host_matches_the_contract(self):
         import numpy as np
-        from unittest.mock import patch
         from framenpu import mercury, mercury_runtime as M
         import test_mercury_runtime as T
 
         lease = T._Lease()
-        with patch.object(M, "_lease", return_value=lease):
-            session = M.MercurySession(
-                MODEL,
-                HEADS_JOBS,
-                native=(self.host, self.layout),
-                _device_factory=T._Device,
-                _lease_factory=lambda: lease,
-            )
+        session = M.MercurySession(
+            MODEL,
+            HEADS_JOBS,
+            native=(self.host, self.layout),
+            _device_factory=T._Device,
+            _lease_factory=lambda: lease,
+        )
         self.assertIsNotNone(session.native)
         session.__enter__()
         session.device.owner = session
@@ -470,14 +480,13 @@ class KernelTests(unittest.TestCase):
                         out["heatmap_depth"], want["heatmap_depth"], rtol=0, atol=1e-5
                     )
         self.assertFalse(any(session.device._transport.memory))
-        with patch.object(M, "_lease", return_value=lease):
-            plain = M.MercurySession(
-                MODEL,
-                HEADS_JOBS,
-                native=False,
-                _device_factory=T._Device,
-                _lease_factory=lambda: lease,
-            )
+        plain = M.MercurySession(
+            MODEL,
+            HEADS_JOBS,
+            native=False,
+            _device_factory=T._Device,
+            _lease_factory=lambda: lease,
+        )
         self.assertIsNone(plain.native)
 
     @unittest.skipUnless(
@@ -489,7 +498,6 @@ class KernelTests(unittest.TestCase):
         on the native host path, through the lane-simulator device: the same outputs as the
         NumPy host path."""
         import numpy as np
-        from unittest.mock import patch
         from framenpu import mercury_runtime as M
         from framenpu._mercury_host import NativeDetector, NativeRequest
         import test_mercury_runtime as T
@@ -502,16 +510,15 @@ class KernelTests(unittest.TestCase):
         results = {}
         for native in ((self.host, self.layout), False):
             lease = T._Lease()
-            with patch.object(M, "_lease", return_value=lease):
-                s = M.MercurySession(
-                    MODEL,
-                    DET_JOBS,
-                    require_pin=False,
-                    native=native,
-                    extra_models=[(DET_MODEL, 2)],
-                    _device_factory=T._Device,
-                    _lease_factory=lambda: lease,
-                )
+            s = M.MercurySession(
+                MODEL,
+                DET_JOBS,
+                require_pin=False,
+                native=native,
+                extra_models=[(DET_MODEL, 2)],
+                _device_factory=T._Device,
+                _lease_factory=lambda: lease,
+            )
             if native is not False:
                 self.assertIsInstance(s.models[0].native, NativeRequest)
                 self.assertIsInstance(s.models[1].native, NativeDetector)

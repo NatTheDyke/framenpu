@@ -235,7 +235,7 @@ class ServiceSession(_Base):
 
 class DeviceSession(_Base):
     name = "framenpu"
-    FRAME = 2  # requests per frame submission (framenpu_cdsp MULTI_SEGMENTS)
+    FRAME = 2  # requests per frame submission (the cdsp plugin's Capabilities.segments)
     EXTRA_CROPS = {"stereo3d": 2, "detector": 2}
 
     def __init__(self, entries, jobs):
@@ -404,7 +404,7 @@ class FallbackSession(_Base):
 def open(manifests, backend="auto", *, jobs=None, socket=None, threads=1, _cpu=CPUSession):
     """Open models on one backend; see the module docstring. Each model is a manifest, its
     folder, a weights file, or (weights file, bundled manifest name) for a retrained model of
-    that graph with no manifest of its own. jobs: the image folder for "device" (default: the bundled Mercury image); socket: the service's socket for "service"
+    that graph with no manifest of its own. jobs: the image folder for "device" (default: the device backend's bundled image); socket: the service's socket for "service"
     and "auto"; threads: onnxruntime threads per CPU model."""
     if backend not in BACKENDS:
         raise ValueError(f"backend: one of {BACKENDS}")
@@ -420,8 +420,4 @@ def open(manifests, backend="auto", *, jobs=None, socket=None, threads=1, _cpu=C
         return cpu
     if backend == "service":
         return FallbackSession(cpu, lambda: ServiceSession(entries, socket))
-    if jobs is None:  # the Mercury image shipped with framenpu_cdsp
-        from framenpu_cdsp.mercury_device import BUNDLED_JOBS
-
-        jobs = str(BUNDLED_JOBS)
     return FallbackSession(cpu, lambda: DeviceSession(entries, jobs))

@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "src"), str(ROOT / "tests")]
 from framenpu import Device, mercury
 from framenpu import mercury_runtime as M
+from framenpu_cdsp import mercury_device as D
 from framenpu import _mercury_layout as L
 from framenpu.resident_landmark import ARENA_START, ARENA_END
 from hardware_hmx import PowerSnapshot, audited_device
@@ -76,7 +77,7 @@ def main():
     report = {
         "format": "framenpu-mercury-runtime-run",
         "model_sha256": mercury.KEYPOINT_SHA256,
-        "image_sha256": M.IMAGE_SHA256,
+        "image_sha256": D.IMAGE_SHA256,
         "source_sha256": {
             n: hashlib.sha256((ROOT / n).read_bytes()).hexdigest()
             for n in (

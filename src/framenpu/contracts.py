@@ -13,8 +13,8 @@ Three of the four contracts live here:
 The fourth, the service wire protocol, stays with its server and client; its version is
 ``PROTOCOL_VERSION`` here so both ends and the docs name one number.
 
-Phase 1 of the library split writes these down; nothing implements them yet under these names.
-MercurySession and the tracker's backends are what the Session API is distilled from.
+framenpu.session implements the Session API; framenpu_cdsp.plugin.CDSPPlugin is the device
+plugin, found through framenpu.devices.
 """
 
 from __future__ import annotations

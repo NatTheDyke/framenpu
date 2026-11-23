@@ -102,6 +102,22 @@ runs with the CPU backend alone.
 | `compile(graph, batch)` | A `Plan`, or a `Refusal(reason)`; framenpu runs a refused part on the host (as the hint prefix and pooled heads run today) |
 | `open()` | A lease with `run(requests, during=)`, `idle()`, `close()` |
 
+`framenpu_cdsp` implements ABI 1 as `framenpu_cdsp.plugin:CDSPPlugin`, registered as `cdsp`;
+`framenpu.devices.load("cdsp", jobs=...)` constructs it (`FRAMENPU_DEVICES=cdsp=module:attr`
+names the factory in a source tree without installed metadata). A plugin is one opened image:
+`compile` places each model after the ones compiled before it. Its plan carries what the host
+needs and nothing of the kernel's layout:
+
+| Plan member | Meaning |
+| --- | --- |
+| `model`, `max_crops` | Name and crops per request |
+| `split` | `prefix` (ops the host runs first), `staged` (graph tensors the host stages: `inputImg`, then the hint), `last` (the device part's last op), `skip` (later ops the device also runs: the heatmap head), `returned` (graph tensors that come back, the heatmap as `heatmap_xy`) |
+| `numpy_staging()`, `native_staging(layout)` | The layout half of a request: the host fills FP16 tensors (or hands FP32 ones over), the staging converts them to the kernel's grid words, writes them to the window and reads the returned maps |
+
+Each request the lease runs carries its model (`sl`), crop `count` and `staged` (its staging),
+so the lease stages and reads without calling back into framenpu. framenpu never imports the
+backend; the boundary test (`tests/test_boundaries.py`) holds that.
+
 The backend keeps a pinned table of image hashes it accepts, as now, but code branches on
 capability fields, not on which hash matched. That retires the `*_IMAGE_SHA256` membership
 tests in `mercury_runtime.py`. The backend owns its error types, including `RecoveryRequired`;

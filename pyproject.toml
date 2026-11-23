@@ -28,6 +28,10 @@ cpu = ["onnxruntime"]  # framenpu.backends.CPUBackend
 [project.scripts]
 framenpu = "framenpu.cli:main"
 
+# device backends framenpu.devices.load() finds (docs/CONTRACTS.md, plugin ABI)
+[project.entry-points."framenpu.devices"]
+cdsp = "framenpu_cdsp.plugin:CDSPPlugin"
+
 [tool.setuptools]
 include-package-data = false
 

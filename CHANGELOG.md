@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+- The device backend is now a plugin: `framenpu_cdsp` registers `CDSPPlugin` under the
+  `framenpu.devices` entry point and framenpu finds it with `framenpu.devices.load()`
+  (`FRAMENPU_DEVICES=name=module:attr` for source trees). Its `capabilities()` come from the
+  image record; `compile()` plans each model (a `Refusal` when the image cannot run it) and
+  `open()` returns the lease. MercurySession, `framenpu.open` and `framenpu serve` no longer
+  import the backend: the plan reports where the graph divides between host and device
+  (`split`), and the kernel's layout (stem columns, grid packing, staging, readback) moved to
+  `framenpu_cdsp.staging`. framenpu's native host path keeps only the model kernels (inputs,
+  FP16, hint, pooled heads) and binds to the staging workspace's buffers, so a request runs the
+  same kernel calls in the same order. Plans and outputs are bit-identical to 0.2.0's (lane
+  simulator, both host paths).
+
 ## 0.2.0
 
 - `framenpu_cdsp` ships the qualified Mercury image (1bcbbdd8: streamed, 4 crops per request) in

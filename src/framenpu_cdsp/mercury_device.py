@@ -327,9 +327,10 @@ def open_image(folder):
 class MercuryLease:
     """Exclusive use of the shared window and image reservation for a Mercury session.
 
-    models: the session's models (``plan`` for the parameter upload). stage(mem, q) writes a
-    prepared request's inputs; read(q, get) reads and checks its outputs (get(at, n) -> bytes).
-    resident: this session's request mode on a resident image (None: not a resident image).
+    models: the compiled plans (plugin.CDSPPlan: plan, slot, tag, crop_ms). Each request q
+    carries sl (its model: plan, slot, tag, crop_ms), count and staged, the plan's staging for
+    it: staged.stage(mem) writes its inputs, staged.read(get, k) reads and checks crop k's
+    outputs (get(at, n) -> bytes). resident: the request mode on a resident image.
     """
 
     def __init__(
@@ -338,8 +339,6 @@ class MercuryLease:
         image,
         features,
         models,
-        stage,
-        read,
         resident,
         device_factory=Device,
         lease_factory=arena_lease,
@@ -354,7 +353,7 @@ class MercuryLease:
         self.multi, self.stream = features.multi, features.stream
         self.resident_image = features.resident
         self.resident = bool(resident) if features.resident else False
-        self.models, self._stage, self._read = models, stage, read
+        self.models = models
         self._device_factory, self._lease_factory = device_factory, lease_factory
         self.device = self.arena = self.power = None
         self.closed = self.owned = self.sealed = False
@@ -363,7 +362,15 @@ class MercuryLease:
         self.lock = threading.RLock()
 
     def _read_outputs(self, q):
-        self._read(q, lambda at, n: bytes(self.device._transport.memory[at : at + n]))
+        mem = self.device._transport.memory
+        get = lambda at, n: bytes(mem[at : at + n])  # noqa: E731
+        for k in range(q.count):
+            if not q.staged.read(get, k):
+                raise RecoveryRequired("Mercury output has invalid padding or values")
+
+    @staticmethod
+    def _stage(mem, q):
+        q.staged.stage(mem)
 
     def _owner(self):
         if (
