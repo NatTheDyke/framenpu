@@ -106,7 +106,9 @@ def main(argv=None):
     ap.add_argument("--probe", required=True)
     ap.add_argument("--mode", type=int, choices=(0, 1), default=0)
     ap.add_argument("--cvt-rs", type=lambda s: int(s, 0), nargs="+", default=[2])
-    ap.add_argument("--operands", type=Path, help="mode 1: JSON {act, wei (hex), bias: [hex...], depth}")
+    ap.add_argument(
+        "--operands", type=Path, help="mode 1: JSON {act, wei (hex), bias: [hex...], depth}"
+    )
     ap.add_argument("--output", type=Path, required=True)
     args = ap.parse_args(argv)
     if not args.run_on_device:
@@ -170,8 +172,11 @@ def main(argv=None):
             report["after_failure"] = failure_snapshot(power)
             report["interpretation"] = "inconclusive; no recovery attempted"
     args.output.write_text(json.dumps(report, indent=2) + "\n")
-    print(json.dumps({"report": str(args.output), "error": report.get("error"),
-                      "runs": len(report["runs"])}))
+    print(
+        json.dumps(
+            {"report": str(args.output), "error": report.get("error"), "runs": len(report["runs"])}
+        )
+    )
     return int(failed)
 
 

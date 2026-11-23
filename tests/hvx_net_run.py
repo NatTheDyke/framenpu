@@ -23,7 +23,14 @@ from framenpu.errors import FrameNPUError
 from hardware_hmx import PowerSnapshot, health
 
 MAGIC = 0x4E455448
-NAMES = {1: "gather", 2: "post", 3: "gather+post", 4: "post ld/st", 5: "post +qf16", 6: "post +clip"}
+NAMES = {
+    1: "gather",
+    2: "post",
+    3: "gather+post",
+    4: "post ld/st",
+    5: "post +qf16",
+    6: "post +clip",
+}
 
 
 def point(probe, reps, phases, clip, res):
@@ -36,8 +43,13 @@ def point(probe, reps, phases, clip, res):
     o = struct.unpack_from("<10I", r.output)
     if o[:3] != (MAGIC, reps, phases):
         raise ValueError(f"probe did not complete: {o}")
-    return {"reps": reps, "ticks": o[3] | o[4] << 32, "cycles": o[5] | o[6] << 32,
-            "packets": o[7] | o[8] << 32, "sample": o[9]}
+    return {
+        "reps": reps,
+        "ticks": o[3] | o[4] << 32,
+        "cycles": o[5] | o[6] << 32,
+        "packets": o[7] | o[8] << 32,
+        "sample": o[9],
+    }
 
 
 def main(argv=None):
@@ -65,11 +77,19 @@ def main(argv=None):
                 print("FAILED:", case["error"], "(no recovery attempted)", flush=True)
                 return 1
             d = {k: (hi[k] - lo[k]) / 8 for k in ("ticks", "cycles", "packets")}
-            case.update(points=[lo, hi], us_per_op=d["ticks"] / 19.2, cycles_per_op=d["cycles"],
-                        packets_per_op=d["packets"], ipc=d["packets"] / d["cycles"],
-                        health=health(power, baseline))
-            print(f"{NAMES[phases]:12s} clip {clip} res {res}: {case['us_per_op']:6.1f} us/op  "
-                  f"{d['packets']:8.0f} packets  IPC {case['ipc']:.3f}", flush=True)
+            case.update(
+                points=[lo, hi],
+                us_per_op=d["ticks"] / 19.2,
+                cycles_per_op=d["cycles"],
+                packets_per_op=d["packets"],
+                ipc=d["packets"] / d["cycles"],
+                health=health(power, baseline),
+            )
+            print(
+                f"{NAMES[phases]:12s} clip {clip} res {res}: {case['us_per_op']:6.1f} us/op  "
+                f"{d['packets']:8.0f} packets  IPC {case['ipc']:.3f}",
+                flush=True,
+            )
     Path(args.output).write_text(json.dumps(report, indent=1))
     return 0
 

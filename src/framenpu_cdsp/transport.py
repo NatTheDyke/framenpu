@@ -114,7 +114,8 @@ class Transport:
                 if seen[0] or seen[1]:
                     self.release_unsubmitted()
                     raise DeviceBusy(
-                        "another callback or command is installed (callback %#x, command %d, state %d)" % seen
+                        "another callback or command is installed (callback %#x, command %d, state %d)"
+                        % seen
                     )
                 if seen[2] != 1:
                     # Nothing installed, but the master left idle between the two reads (it does

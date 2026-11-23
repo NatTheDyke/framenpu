@@ -22,8 +22,21 @@ from framenpu.errors import FrameNPUError
 from hardware_hmx import PowerSnapshot
 
 MAGIC = 0x53544B50
-KEYS = ("magic", "framelimit", "framekey", "entry_sp", "lowest_sp", "lowest_changed", "changed_words",
-        "changed_below_sp", "spun_lo", "spun_hi", "check", "framelimit_after", "sp_after")
+KEYS = (
+    "magic",
+    "framelimit",
+    "framekey",
+    "entry_sp",
+    "lowest_sp",
+    "lowest_changed",
+    "changed_words",
+    "changed_below_sp",
+    "spun_lo",
+    "spun_hi",
+    "check",
+    "framelimit_after",
+    "sp_after",
+)
 
 
 def point(probe, spin, depth):
@@ -37,8 +50,23 @@ def point(probe, spin, depth):
     if o["magic"] != MAGIC:
         raise ValueError(f"probe did not complete: {o}")
     o["spun_ms"] = (o.pop("spun_lo") | o.pop("spun_hi") << 32) / 19200
-    return {k: (f"{v:#010x}" if k in ("framelimit", "framekey", "entry_sp", "lowest_sp", "lowest_changed",
-                                      "framelimit_after", "sp_after") else v) for k, v in o.items()}
+    return {
+        k: (
+            f"{v:#010x}"
+            if k
+            in (
+                "framelimit",
+                "framekey",
+                "entry_sp",
+                "lowest_sp",
+                "lowest_changed",
+                "framelimit_after",
+                "sp_after",
+            )
+            else v
+        )
+        for k, v in o.items()
+    }
 
 
 def main(argv=None):

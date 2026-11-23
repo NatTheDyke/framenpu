@@ -87,8 +87,17 @@ class DetectorPlanTests(unittest.TestCase):
         for k, x in enumerate(images):
             L.stage_inputs(mp.crop(k), put, {L.STEM_COLS: L.stem_columns(x, 160)})
         vt = np.full((C.RES_SPAN, 32, 2), np.nan, np.float16) if vt is None else vt
-        RL.simulate(mp.plan, window, s2_phase=0, s2_direct=True, crops=len(images),
-                    resident=vt, load=load, tiles=True, deep8=True)
+        RL.simulate(
+            mp.plan,
+            window,
+            s2_phase=0,
+            s2_direct=True,
+            crops=len(images),
+            resident=vt,
+            load=load,
+            tiles=True,
+            deep8=True,
+        )
         return [L.read_tensor(mp.crop(k), get, mp.final) for k in range(len(images))]
 
     def expected(self, x, final):
@@ -163,7 +172,11 @@ class PackedBiasPlanTests(unittest.TestCase):
         for k in range(2):
             for r in struct.iter_unpack("<32I", mp.plan.table):
                 row = C.replay_row(r, k, mp.plan.crop_stride, C.WIN_HI_WIDE)
-                ok = C.regrid_ok(row) if row[0] == 7 else C.native_ok(row, **FLAGS, cbias=True, win_hi=C.WIN_HI_WIDE)
+                ok = (
+                    C.regrid_ok(row)
+                    if row[0] == 7
+                    else C.native_ok(row, **FLAGS, cbias=True, win_hi=C.WIN_HI_WIDE)
+                )
                 self.assertTrue(ok, row[:16])
         window = bytearray(C.WIN_HI_WIDE - C.WIN_LO)
 
@@ -176,15 +189,26 @@ class PackedBiasPlanTests(unittest.TestCase):
         for k, x in enumerate(xs):
             L.stage_inputs(mp.crop(k), put, {L.STEM_COLS: L.stem_columns(x, 160)})
         vt = np.full((C.RES_SPAN, 32, 2), np.nan, np.float16)
-        RL.simulate(mp.plan, window, s2_phase=0, s2_direct=True, crops=2, resident=vt, load=True,
-                    tiles=True, deep8=True, cbias=True, win_hi=C.WIN_HI_WIDE, s2_order="pairs_rev")
+        RL.simulate(
+            mp.plan,
+            window,
+            s2_phase=0,
+            s2_direct=True,
+            crops=2,
+            resident=vt,
+            load=True,
+            tiles=True,
+            deep8=True,
+            cbias=True,
+            win_hi=C.WIN_HI_WIDE,
+            s2_order="pairs_rev",
+        )
         get = lambda off, n: bytes(window[off - C.WIN_LO : off - C.WIN_LO + n])  # noqa: E731
         for k, x in enumerate(xs):
             got, stray = L.read_tensor(mp.crop(k), get, mp.final)
             self.assertEqual(stray, 0)
             _, t = mercury.run(model, {"inputImg": x}, "fp16", keep=True)
             np.testing.assert_array_equal(got, t[mp.final].astype(np.float64))
-
 
     def test_post_batch_store_order(self):
         """The post-batch stride-2 kernel stores two rows per column block. Ascending blocks
@@ -196,7 +220,9 @@ class PackedBiasPlanTests(unittest.TestCase):
         import teacher_resident_layout as RL
 
         model = mercury.load_detector(MODEL, require_pin=False)
-        mp = L.build_plan(model, batch=1, **PLAN, cbias=True, win_hi=C.WIN_HI_WIDE, stop_after="Conv_4")
+        mp = L.build_plan(
+            model, batch=1, **PLAN, cbias=True, win_hi=C.WIN_HI_WIDE, stop_after="Conv_4"
+        )
         x = crops(1, 12)[0]
         _, t = mercury.run(model, {"inputImg": x}, "fp16", keep=True)
         want = t[mp.final].astype(np.float64).reshape(32, 40, 40)
@@ -211,8 +237,18 @@ class PackedBiasPlanTests(unittest.TestCase):
                 put(off, data)
             L.stage_inputs(mp.crop(0), put, {L.STEM_COLS: L.stem_columns(x, 160)})
             vt = np.full((C.RES_SPAN, 32, 2), np.nan, np.float16)
-            RL.simulate(mp.plan, window, s2_phase=0, s2_direct=True, resident=vt, tiles=True, deep8=True,
-                        cbias=True, win_hi=C.WIN_HI_WIDE, s2_order=order)
+            RL.simulate(
+                mp.plan,
+                window,
+                s2_phase=0,
+                s2_direct=True,
+                resident=vt,
+                tiles=True,
+                deep8=True,
+                cbias=True,
+                win_hi=C.WIN_HI_WIDE,
+                s2_order=order,
+            )
             get = lambda off, n: bytes(window[off - C.WIN_LO : off - C.WIN_LO + n])  # noqa: E731
             out, stray = L.read_tensor(mp.crop(0), get, mp.final)
             self.assertEqual(stray, 0)
@@ -225,8 +261,10 @@ class PackedBiasPlanTests(unittest.TestCase):
         self.assertTrue((want[:, bad] != 0).any())
 
 
-@unittest.skipUnless(np is not None and MODEL and KEYPOINT and DET_JOBS,
-                     "FNPU_MERCURY_DETECTOR, FNPU_MERCURY_MODEL and FNPU_MERCURY_DET_JOBS required")
+@unittest.skipUnless(
+    np is not None and MODEL and KEYPOINT and DET_JOBS,
+    "FNPU_MERCURY_DETECTOR, FNPU_MERCURY_MODEL and FNPU_MERCURY_DET_JOBS required",
+)
 class DetectorSessionTests(unittest.TestCase):
     """ft7-style keypoint model (3 crops) + the detector (2 crops) in one session on the
     packed-bias wide-window image, through the runtime tests' lane-simulator device (which
@@ -237,8 +275,14 @@ class DetectorSessionTests(unittest.TestCase):
         from framenpu import mercury_runtime as M
 
         lease = TR._Lease()
-        s = M.MercurySession(KEYPOINT, jobs, require_pin=False, extra_models=extra,
-                             _device_factory=TR._Device, _lease_factory=lambda: lease)
+        s = M.MercurySession(
+            KEYPOINT,
+            jobs,
+            require_pin=False,
+            extra_models=extra,
+            _device_factory=TR._Device,
+            _lease_factory=lambda: lease,
+        )
         s.__enter__()
         s.device.owner = s
         return s
@@ -246,9 +290,11 @@ class DetectorSessionTests(unittest.TestCase):
     @staticmethod
     def kp_feed(seed):
         rng = np.random.default_rng(seed)
-        return {"inputImg": rng.uniform(-1, 1, (1, 1, 128, 128)).astype(np.float32),
-                "lastKeypoints": rng.uniform(-1, 1, (1, 42)).astype(np.float32),
-                "useLastKeypoints": np.array([seed % 2], np.float32)}
+        return {
+            "inputImg": rng.uniform(-1, 1, (1, 1, 128, 128)).astype(np.float32),
+            "lastKeypoints": rng.uniform(-1, 1, (1, 42)).astype(np.float32),
+            "useLastKeypoints": np.array([seed % 2], np.float32),
+        }
 
     def test_keypoint_and_detector_share_the_session(self):
         from framenpu import mercury
@@ -303,7 +349,9 @@ class DetectorSessionTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 s.infer_frame([])
 
-    @unittest.skipUnless(STREAM_JOBS, "FNPU_MERCURY_STREAM_JOBS (the --multi --stream build) required")
+    @unittest.skipUnless(
+        STREAM_JOBS, "FNPU_MERCURY_STREAM_JOBS (the --multi --stream build) required"
+    )
     def test_streamed_frame(self):
         """--stream: segment 1 prepared and staged, segment 0 read and finished while the DSP
         runs; outputs equal the separate requests' bit for bit."""

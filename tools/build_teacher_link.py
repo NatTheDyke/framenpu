@@ -157,7 +157,9 @@ def build(
     if tiles and not (resident and pw_pipe and dw_fast):
         raise ValueError("--tiles is an option of the pipelined resident image")
     if pw_ablate and not (0 < pw_ablate < 32 and pw_group > 1 and not pw_profile):
-        raise ValueError("--pw-ablate is a timing diagnostic of the unprofiled grouped build (1..15)")
+        raise ValueError(
+            "--pw-ablate is a timing diagnostic of the unprofiled grouped build (1..15)"
+        )
     if res_slots and not resident:
         raise ValueError("--res-slots is an option of --resident")
     if cbias and not res_slots:
@@ -265,13 +267,23 @@ def build(
     folder = output / "loader"
     folder.mkdir(parents=True, exist_ok=True)
     objects = [
-        compile_(folder, 0, KERNELS / "resident_graph_entry.S", "-DRG_LINK_ENTRY", "-DTL_LINK_ENTRY",
-                 *(("-DRG_STAMP_RESTORED",) if loader_stamp else ()),
-                 *(("-DRG_POOL",) if pool or pool_diag == "loader" else ()),
-                 *((f"-DTL_SEAL_VA={UNCACHED + seal_at:#x}",) if code_kib != 16 else ())),
+        compile_(
+            folder,
+            0,
+            KERNELS / "resident_graph_entry.S",
+            "-DRG_LINK_ENTRY",
+            "-DTL_LINK_ENTRY",
+            *(("-DRG_STAMP_RESTORED",) if loader_stamp else ()),
+            *(("-DRG_POOL",) if pool or pool_diag == "loader" else ()),
+            *((f"-DTL_SEAL_VA={UNCACHED + seal_at:#x}",) if code_kib != 16 else ()),
+        ),
         compile_(folder, 1, SDK / "hmx.S"),
-        compile_(folder, 2, KERNELS / "teacher_link_admin.c",
-                 *((f"-DTL_CODE_BYTES={code_bytes:#x}u",) if code_kib != 16 else ())),
+        compile_(
+            folder,
+            2,
+            KERNELS / "teacher_link_admin.c",
+            *((f"-DTL_CODE_BYTES={code_bytes:#x}u",) if code_kib != 16 else ()),
+        ),
     ]
     code = link(folder, SDK / "link.ld", objects, lambda t, s: verify_loader(t, s, seal_at))
     if len(code) > 4096:
@@ -282,8 +294,13 @@ def build(
     folder = output / "linked"
     folder.mkdir(parents=True, exist_ok=True)
     objects = [
-        compile_(folder, 0, KERNELS / "teacher_link.c", *(("-DRS_POOL",) if pool or pool_diag == "loader" else ()),
-                 *((f"-DTL_DIAG_CODE_PAD={code_pad}",) if code_pad else ())),
+        compile_(
+            folder,
+            0,
+            KERNELS / "teacher_link.c",
+            *(("-DRS_POOL",) if pool or pool_diag == "loader" else ()),
+            *((f"-DTL_DIAG_CODE_PAD={code_pad}",) if code_pad else ()),
+        ),
         compile_(
             folder,
             1,
@@ -324,7 +341,13 @@ def build(
             *(["-DRS_PW_DEEP"] if pw_deep else []),
             *([f"-DRS_PW_LG={pw_lg}u"] if pw_lg else []),
             *(["-DRS_POST_BATCH"] if post_batch else []),
-            *({"wrap": ["-DRS_DIAG_WRAP"], "loader": ["-DRS_DIAG_LOADER"], "tail": ["-DRS_DIAG_TAIL"]}.get(pool_diag, [])),
+            *(
+                {
+                    "wrap": ["-DRS_DIAG_WRAP"],
+                    "loader": ["-DRS_DIAG_LOADER"],
+                    "tail": ["-DRS_DIAG_TAIL"],
+                }.get(pool_diag, [])
+            ),
             *([f"-DRS_DIAG_PAD={diag_pad}"] if diag_pad else []),
         ),
         compile_(folder, 2, KERNELS / "teacher_dw_probe.c", "-Dframe_job=tl_dw"),
@@ -425,63 +448,147 @@ def main():
         "--mheads", action="store_true", help="Mercury heatmap head: regrid and 3x3 HMX kinds"
     )
     p.add_argument(
-        "--resident", action="store_true",
+        "--resident",
+        action="store_true",
         help="parameter images resident in the FeatureNN blob region (replay + mheads)",
     )
     p.add_argument(
-        "--loader-stamp", action="store_true",
+        "--loader-stamp",
+        action="store_true",
         help="timing instrument: worker 0 stamps c31:30 around the VTCM backup and restore (status words 14-15)",
     )
-    p.add_argument("--pw-ablate", type=int, default=0,
-                   help="DIAGNOSTIC (wrong outputs): skip 1x1 phases, 1 HMX loads, 2 all HMX, 4 gather, 8 post, 16 group barrier")
-    p.add_argument("--clock-probe", action="store_true",
-                   help="DIAGNOSTIC: core cycles, packets and timer ticks per request in meta[3..8]")
-    p.add_argument("--omit-fp", action="store_true",
-                   help="no frame pointers in the linked image (the loader is unchanged): leaf calls stop storing frames to the DDR stack, which "
-                        "every following barrier waits ~1.9 us for")
-    p.add_argument("--pool", action="store_true",
-                   help="workers 1 and 2 share the depthwise ops (loader and image; resident replay build)")
-    p.add_argument("--pool-diag", choices=("wrap", "loader", "tail"),
-                   help="DIAGNOSTIC (same outputs): one pool ingredient alone (the frame_job wrapper frame, "
-                        "or the pool loader with workers returning at once)")
-    p.add_argument("--tiles", action="store_true",
-                   help="1x1 inputs, outputs and residuals in B-tile layout where the plan marks them (no gather)")
-    p.add_argument("--code-kib", type=int, choices=(16, 20), default=16,
-                   help="image reservation size: 20 takes the next page, 0x1ff4000 (needs the matching loader)")
-    p.add_argument("--pw-lg", type=int, choices=(1, 2, 3), default=0,
-                   help="with --pw-deep: log2 of the column blocks per group of the deep ops (default 2)")
-    p.add_argument("--pw-deep", action="store_true",
-                   help="with --pool --tiles: tile-input 1x1 ops use their whole scratch for up to 4 output slots per worker")
-    p.add_argument("--post-batch", action="store_true",
-                   help="1x1 post: load each 4 vectors' operands before storing any (same outputs)")
-    p.add_argument("--pool-prof", action="store_true",
-                   help="DIAGNOSTIC: pooled 1x1 wait/work tick totals in meta[3..8] (recorded as a clock probe)")
-    p.add_argument("--pool-sp-pad", type=int, default=None,
-                   help="with --pool: bytes added to rs_job's frame (default 8: the plain build's stack depth)")
-    p.add_argument("--code-pad", type=int, default=0,
-                   help="DIAGNOSTIC: bytes of padding after the image entry (moves all other code)")
-    p.add_argument("--diag-pad", type=int, default=0,
-                   help="DIAGNOSTIC: bytes the frame_job wrapper moves the stack down (needs a wrapper build)")
-    p.add_argument("--pool-solo", action="store_true",
-                   help="DIAGNOSTIC (same outputs): with --pool, worker 0 runs every share; workers leave at once")
-    p.add_argument("--res-slots", action="store_true",
-                   help="(--resident) four residency tag slots: models resident side by side")
-    p.add_argument("--cbias", action="store_true",
-                   help="(--res-slots) packed biases, expanded per op at the top of the blob region")
-    p.add_argument("--win-wide", action="store_true",
-                   help="(--res-slots) window up to the image reservation at 0x1ff0000 (5.69 MiB)")
-    p.add_argument("--multi", action="store_true",
-                   help="(--res-slots --pool) requests of one or two segments (two models' tables)")
-    p.add_argument("--stream", action="store_true",
-                   help="(--multi) segment 1 starts when the host has staged it; segments publish completion")
-    p.add_argument("--max-crops", type=int, choices=(3, 4), default=3,
-                   help="(--stream --win-wide) crops a request may carry")
-    p.add_argument("--s2-rev", action="store_true",
-                   help="(--post-batch) stride-2 column blocks last to first (rows wider than 32)")
-    p.add_argument("--hmx-inline", action="store_true",
-                   help="HMX sequences inline in the resident operators (same instructions, no calls)")
-    p.add_argument("--pw-pipe", action="store_true",
-                   help="overlapped 1x1 gather/post loops (same operations; grouped resident heads build)")
+    p.add_argument(
+        "--pw-ablate",
+        type=int,
+        default=0,
+        help="DIAGNOSTIC (wrong outputs): skip 1x1 phases, 1 HMX loads, 2 all HMX, 4 gather, 8 post, 16 group barrier",
+    )
+    p.add_argument(
+        "--clock-probe",
+        action="store_true",
+        help="DIAGNOSTIC: core cycles, packets and timer ticks per request in meta[3..8]",
+    )
+    p.add_argument(
+        "--omit-fp",
+        action="store_true",
+        help="no frame pointers in the linked image (the loader is unchanged): leaf calls stop storing frames to the DDR stack, which "
+        "every following barrier waits ~1.9 us for",
+    )
+    p.add_argument(
+        "--pool",
+        action="store_true",
+        help="workers 1 and 2 share the depthwise ops (loader and image; resident replay build)",
+    )
+    p.add_argument(
+        "--pool-diag",
+        choices=("wrap", "loader", "tail"),
+        help="DIAGNOSTIC (same outputs): one pool ingredient alone (the frame_job wrapper frame, "
+        "or the pool loader with workers returning at once)",
+    )
+    p.add_argument(
+        "--tiles",
+        action="store_true",
+        help="1x1 inputs, outputs and residuals in B-tile layout where the plan marks them (no gather)",
+    )
+    p.add_argument(
+        "--code-kib",
+        type=int,
+        choices=(16, 20),
+        default=16,
+        help="image reservation size: 20 takes the next page, 0x1ff4000 (needs the matching loader)",
+    )
+    p.add_argument(
+        "--pw-lg",
+        type=int,
+        choices=(1, 2, 3),
+        default=0,
+        help="with --pw-deep: log2 of the column blocks per group of the deep ops (default 2)",
+    )
+    p.add_argument(
+        "--pw-deep",
+        action="store_true",
+        help="with --pool --tiles: tile-input 1x1 ops use their whole scratch for up to 4 output slots per worker",
+    )
+    p.add_argument(
+        "--post-batch",
+        action="store_true",
+        help="1x1 post: load each 4 vectors' operands before storing any (same outputs)",
+    )
+    p.add_argument(
+        "--pool-prof",
+        action="store_true",
+        help="DIAGNOSTIC: pooled 1x1 wait/work tick totals in meta[3..8] (recorded as a clock probe)",
+    )
+    p.add_argument(
+        "--pool-sp-pad",
+        type=int,
+        default=None,
+        help="with --pool: bytes added to rs_job's frame (default 8: the plain build's stack depth)",
+    )
+    p.add_argument(
+        "--code-pad",
+        type=int,
+        default=0,
+        help="DIAGNOSTIC: bytes of padding after the image entry (moves all other code)",
+    )
+    p.add_argument(
+        "--diag-pad",
+        type=int,
+        default=0,
+        help="DIAGNOSTIC: bytes the frame_job wrapper moves the stack down (needs a wrapper build)",
+    )
+    p.add_argument(
+        "--pool-solo",
+        action="store_true",
+        help="DIAGNOSTIC (same outputs): with --pool, worker 0 runs every share; workers leave at once",
+    )
+    p.add_argument(
+        "--res-slots",
+        action="store_true",
+        help="(--resident) four residency tag slots: models resident side by side",
+    )
+    p.add_argument(
+        "--cbias",
+        action="store_true",
+        help="(--res-slots) packed biases, expanded per op at the top of the blob region",
+    )
+    p.add_argument(
+        "--win-wide",
+        action="store_true",
+        help="(--res-slots) window up to the image reservation at 0x1ff0000 (5.69 MiB)",
+    )
+    p.add_argument(
+        "--multi",
+        action="store_true",
+        help="(--res-slots --pool) requests of one or two segments (two models' tables)",
+    )
+    p.add_argument(
+        "--stream",
+        action="store_true",
+        help="(--multi) segment 1 starts when the host has staged it; segments publish completion",
+    )
+    p.add_argument(
+        "--max-crops",
+        type=int,
+        choices=(3, 4),
+        default=3,
+        help="(--stream --win-wide) crops a request may carry",
+    )
+    p.add_argument(
+        "--s2-rev",
+        action="store_true",
+        help="(--post-batch) stride-2 column blocks last to first (rows wider than 32)",
+    )
+    p.add_argument(
+        "--hmx-inline",
+        action="store_true",
+        help="HMX sequences inline in the resident operators (same instructions, no calls)",
+    )
+    p.add_argument(
+        "--pw-pipe",
+        action="store_true",
+        help="overlapped 1x1 gather/post loops (same operations; grouped resident heads build)",
+    )
     args = p.parse_args()
     r = build(
         args.output,

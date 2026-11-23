@@ -448,8 +448,15 @@ class MercuryLayoutTest(unittest.TestCase):
         carry four crops. Without max_crops=4 a fourth crop is refused."""
         from framenpu import _mercury_common as C, _mercury_layout as L
 
-        kw = dict(replay=True, pw_group=8, resident=True, tiles=True, deep8=True, cbias=True,
-                  win_hi=C.WIN_HI_WIDE)
+        kw = dict(
+            replay=True,
+            pw_group=8,
+            resident=True,
+            tiles=True,
+            deep8=True,
+            cbias=True,
+            win_hi=C.WIN_HI_WIDE,
+        )
         with self.assertRaises(ValueError):
             L.build_plan(self.model, prefix=True, batch=4, heads=True, **kw)
         with self.assertRaises(ValueError):

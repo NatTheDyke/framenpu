@@ -11,7 +11,7 @@ from framenpu.axi import AXI_RATES, CFG, CMD, PLL_PAGE, PLL_RESET, RCG_PAGE, Axi
 from framenpu.device import Device  # noqa: E402
 from test_library import FakeTransport, Memory  # noqa: E402
 
-CRYSTAL_CFG = 0x00100000                      # observed on the Frame during our jobs
+CRYSTAL_CFG = 0x00100000  # observed on the Frame during our jobs
 
 
 class Simulated(AxiClock):
@@ -57,8 +57,11 @@ class Simulated(AxiClock):
 
     def regs(self):
         r = self._r
-        return (r(self.views[RCG_PAGE], CMD), r(self.views[RCG_PAGE], CFG),
-                {o: r(self.views[PLL_PAGE], o) for o in PLL_RESET})
+        return (
+            r(self.views[RCG_PAGE], CMD),
+            r(self.views[RCG_PAGE], CFG),
+            {o: r(self.views[PLL_PAGE], o) for o in PLL_RESET},
+        )
 
 
 class AxiClockTests(unittest.TestCase):
@@ -66,7 +69,7 @@ class AxiClockTests(unittest.TestCase):
         a = Simulated()
         a.raise_()
         cmd, cfg, pll = a.regs()
-        self.assertEqual(cfg, CRYSTAL_CFG | 0x503)           # source 5, divide by 2; bit 20 kept
+        self.assertEqual(cfg, CRYSTAL_CFG | 0x503)  # source 5, divide by 2; bit 20 kept
         self.assertEqual(pll[0x10], AXI_RATES[748.8][0])
         self.assertTrue(pll[0] & 0x80000000 and pll[0] & 1)
         a.restore()
@@ -74,8 +77,11 @@ class AxiClockTests(unittest.TestCase):
         self.assertFalse(a.raised)
 
     def test_refuses_without_writing_unless_on_the_crystal(self):
-        for kwargs in ({"cfg": CRYSTAL_CFG | 0x503}, {"cfg": 0x203},
-                       {"pll": {**PLL_RESET, 0: 0xe0000005, 0x10: 78}}):
+        for kwargs in (
+            {"cfg": CRYSTAL_CFG | 0x503},
+            {"cfg": 0x203},
+            {"pll": {**PLL_RESET, 0: 0xE0000005, 0x10: 78}},
+        ):
             a = Simulated(**kwargs)
             a._map()
             before = a.regs()
@@ -96,7 +102,7 @@ class AxiClockTests(unittest.TestCase):
         with self.assertRaises(RecoveryRequired):
             a.raise_()
         self.assertTrue(a.abandoned)
-        self.assertEqual(a.regs()[2][0x10], 78)              # never stop a PLL the mux may use
+        self.assertEqual(a.regs()[2][0x10], 78)  # never stop a PLL the mux may use
 
     def test_restore_refuses_to_stop_the_pll_if_the_mux_moved(self):
         a = Simulated()

@@ -184,13 +184,17 @@ def detector_ops(model, cut=DET_LAST):
         or model.op(DET_LAST).output != DET_OUTPUT
         or any(op.kind != "conv" for op in body)
         or any(op.kind not in ("conv", "reshape", "dense", "slice", "sigmoid") for op in tail)
-        or not {i for op in tail for i in op.inputs} <= {(body or [stem])[-1].output} | {op.output for op in tail}
+        or not {i for op in tail for i in op.inputs}
+        <= {(body or [stem])[-1].output} | {op.output for op in tail}
     ):
         raise ValueError("unexpected Mercury detector geometry")
     w = np.zeros((32, stem_planes(1), 1, 1), np.float32)
     w[:, :9, 0, 0] = stem.params["weight"].reshape(32, 9)
-    stem = replace(stem, inputs=(STEM_COLS,),
-                   params=stem.params | {"weight": w, "stride": (1, 1), "pads": (0, 0, 0, 0)})
+    stem = replace(
+        stem,
+        inputs=(STEM_COLS,),
+        params=stem.params | {"weight": w, "stride": (1, 1), "pads": (0, 0, 0, 0)},
+    )
     program, shape = [stem], {op.output: op.shape for op in model.ops}
     for op in body:
         c, h, wd = shape[op.inputs[0]]
@@ -199,9 +203,17 @@ def detector_ops(model, cut=DET_LAST):
             # (0, 0) of the next even grid (kind 7 zeroes its destination), so the added row and
             # column read as the convolution's own zero padding (even phase, outputs 2y, 2x)
             even = op.inputs[0] + ".even"
-            program.append(replace(op, name=op.name + ".even", kind="regrid", inputs=op.inputs,
-                                   output=even, params={"mode": "embed", "at": 0},
-                                   shape=(c, h + (h & 1), wd + (wd & 1))))
+            program.append(
+                replace(
+                    op,
+                    name=op.name + ".even",
+                    kind="regrid",
+                    inputs=op.inputs,
+                    output=even,
+                    params={"mode": "embed", "at": 0},
+                    shape=(c, h + (h & 1), wd + (wd & 1)),
+                )
+            )
             op = replace(op, inputs=(even,))
         program.append(op)
     return program
@@ -268,13 +280,34 @@ def head_ops(model):
     dparams = {"weight": m.reshape(168, 64, 1, 1), "bias": np.tile(bd, 4).astype(np.float32)}
     dparams.update(group=1, pads=(0, 0, 0, 0), stride=(1, 1), act=None)
     return [
-        replace(c159, name="heads.embed", kind="regrid", inputs=(OUTPUT,), output=E1,
-                params={"mode": "embed"}, shape=(c, h + 2, w + 2)),
+        replace(
+            c159,
+            name="heads.embed",
+            kind="regrid",
+            inputs=(OUTPUT,),
+            output=E1,
+            params={"mode": "embed"},
+            shape=(c, h + 2, w + 2),
+        ),
         tap3(c159, c, 64, E1, H1),
-        replace(dec, name=dec.name, kind="conv", inputs=(H1,), output=DEC, params=dparams,
-                shape=(168, h + 2, w + 2)),
-        replace(dec, name="heads.shuffle", kind="regrid", inputs=(DEC,), output=E2,
-                params={"mode": "shuffle"}, shape=(42, 2 * h + 6, 2 * w + 6)),
+        replace(
+            dec,
+            name=dec.name,
+            kind="conv",
+            inputs=(H1,),
+            output=DEC,
+            params=dparams,
+            shape=(168, h + 2, w + 2),
+        ),
+        replace(
+            dec,
+            name="heads.shuffle",
+            kind="regrid",
+            inputs=(DEC,),
+            output=E2,
+            params={"mode": "shuffle"},
+            shape=(42, 2 * h + 6, 2 * w + 6),
+        ),
         tap3(c164, 42, 22, E2, HEATMAP),
     ]
 
@@ -283,15 +316,46 @@ def regrid_words(op, gin, gout, vin, vout):
     """Kind-7 descriptor words of a head regrid op (see kernels/teacher_resident_probe.c)."""
     if op.params["mode"] == "embed":
         pairs, oh, ow, at = op.shape[0] // 2, gin.h, gin.w, op.params.get("at", 1)
-        return [KIND_RG, pairs, 1, oh, ow, gin.nbin, gout.nbin, vin, vout, gin.ws, gout.ws, 1,
-                0, 0, gin.word(0, 0), gout.word(at, at)]
+        return [
+            KIND_RG,
+            pairs,
+            1,
+            oh,
+            ow,
+            gin.nbin,
+            gout.nbin,
+            vin,
+            vout,
+            gin.ws,
+            gout.ws,
+            1,
+            0,
+            0,
+            gin.word(0, 0),
+            gout.word(at, at),
+        ]
     pairs, oh, ow = op.shape[0] // 2, gin.h, gin.w  # 21 pairs per phase, 10 x 10 sources
     phases = []
     for a in (0, 1):
         for b in (0, 1):
             phases += [gin.word(0, 0), gout.word(1 + a, 1 + b)]
-    return [KIND_RG, pairs, 4, oh, ow, gin.nbin, gout.nbin, vin, vout, gin.ws, 2 * gout.ws, 2,
-            1, 0, *phases]
+    return [
+        KIND_RG,
+        pairs,
+        4,
+        oh,
+        ow,
+        gin.nbin,
+        gout.nbin,
+        vin,
+        vout,
+        gin.ws,
+        2 * gout.ws,
+        2,
+        1,
+        0,
+        *phases,
+    ]
 
 
 def _check(op):
@@ -547,7 +611,9 @@ def build_plan(
     host_parts = [n for par in free for n, src in comps[par] if src == "host"]
     made = produced | set(free) | set(host_parts)
     external = [b for b in dict.fromkeys(i for op in ops for i in op.inputs) if b not in made]
-    tile = _tile_tensors(ops, shape, external, free, parent_of, host_parts, heads) if tiles else set()
+    tile = (
+        _tile_tensors(ops, shape, external, free, parent_of, host_parts, heads) if tiles else set()
+    )
 
     images = {}
     for op in ops:
@@ -555,7 +621,9 @@ def build_plan(
             continue
         gin = grid(shape[op.inputs[0]])
         images[op.name] = (
-            pw_image(op, gin, pw_group, cbias) if op.conv_class == "pointwise" else dw_image(op, gin, cbias)
+            pw_image(op, gin, pw_group, cbias)
+            if op.conv_class == "pointwise"
+            else dw_image(op, gin, cbias)
         )
     deep = set()
     if deep8:
@@ -583,7 +651,9 @@ def build_plan(
         par_at[op.name] = cursor
         fixed[cursor] = images[op.name][0]
         cursor = RL._al(cursor + len(images[op.name][0]))
-    stored = ([OUTPUT, final] if heads else [final]) if mode == "merged" else [op.output for op in ops]
+    stored = (
+        ([OUTPUT, final] if heads else [final]) if mode == "merged" else [op.output for op in ops]
+    )
     with_host = [par for par in free if any(src == "host" for _, src in comps[par])]
     crops = []
     for _ in range(batch):
@@ -665,8 +735,14 @@ def build_plan(
                 at[res] if res else 0,
                 vpar,
                 *(
-                    (int(src in tile) | int(dst in tile) << 1 | int(res in tile) << 2
-                     | int(op.name in deep) << 3,) + (0,) * 5 + tail
+                    (
+                        int(src in tile)
+                        | int(dst in tile) << 1
+                        | int(res in tile) << 2
+                        | int(op.name in deep) << 3,
+                    )
+                    + (0,) * 5
+                    + tail
                     if tail
                     else ()
                 ),
@@ -810,15 +886,29 @@ def _tile_tensors(ops, shape, external, free, parent_of, host_parts, heads):
         users = [u for u in ops if t in u.inputs]
         g = grid(shape[t])
         if users and all(
-            pw1(u) and t in u.inputs[:2] and _gkey(grid(shape[u.inputs[0]])) == _gkey(g) for u in users
+            pw1(u) and t in u.inputs[:2] and _gkey(grid(shape[u.inputs[0]])) == _gkey(g)
+            for u in users
         ):
             out.add(t)
     return out
 
 
 def _merged_crop(
-    ops, external, free, comps, parent_of, final, last_use, key, vec, vt, load, store, emit,
-    stores=None, tile=frozenset(),
+    ops,
+    external,
+    free,
+    comps,
+    parent_of,
+    final,
+    last_use,
+    key,
+    vec,
+    vt,
+    load,
+    store,
+    emit,
+    stores=None,
+    tile=frozenset(),
 ):
     """One crop of a merged request; every VTCM block it takes is given back.
     Tile-layout tensors are 16-vector aligned."""
@@ -837,7 +927,9 @@ def _merged_crop(
                     at[n] = at[par] + off
         else:
             later = [k for k in range(i + 1, len(ops)) if dst in ops[k].inputs]
-            at[dst] = vt.take(vec(dst), top=bool(later) and later[-1] > i + 1, align=16 if dst in tile else 1)
+            at[dst] = vt.take(
+                vec(dst), top=bool(later) and later[-1] > i + 1, align=16 if dst in tile else 1
+            )
         emit(op, at, vt)
         if par is not None:
             dev = [n for n, src in comps[par] if src == "device"]

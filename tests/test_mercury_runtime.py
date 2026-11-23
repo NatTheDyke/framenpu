@@ -80,8 +80,12 @@ class ReplayCompletionTests(unittest.TestCase):
 
         def parse(a, b, ticks=4000, segs=((2, 55), (1, 55))):
             out = struct.pack("<256I", *a) + struct.pack("<256I", *b)
-            return D.frame_metadata(SimpleNamespace(output=out, workers=workers, kernel_reference_ticks=ticks),
-                                    list(segs), 6960, True)
+            return D.frame_metadata(
+                SimpleNamespace(output=out, workers=workers, kernel_reference_ticks=ticks),
+                list(segs),
+                6960,
+                True,
+            )
 
         t = parse(w0, w1)
         self.assertEqual([x["crops"] for x in t], [2, 1])
@@ -109,15 +113,31 @@ class ReplayCompletionTests(unittest.TestCase):
             w = list(words)
             w[12] = status
             return D.replay_metadata(
-                SimpleNamespace(output=struct.pack("<256I", *w), workers=workers, kernel_reference_ticks=2000),
-                1, 55, 6960, resident=resident,
+                SimpleNamespace(
+                    output=struct.pack("<256I", *w), workers=workers, kernel_reference_ticks=2000
+                ),
+                1,
+                55,
+                6960,
+                resident=resident,
             )
 
         self.assertTrue(parse(7, True)["params_copied"])
         self.assertFalse(parse(1, True)["params_copied"])
         self.assertIsNone(parse(0, False)["params_copied"])
-        for status, resident in ((0, True), (3, True), (5, True), (6, True), (1, False), (7, False), (1, None)):
-            with self.subTest(status=status, resident=resident), self.assertRaises(RecoveryRequired):
+        for status, resident in (
+            (0, True),
+            (3, True),
+            (5, True),
+            (6, True),
+            (1, False),
+            (7, False),
+            (1, None),
+        ):
+            with (
+                self.subTest(status=status, resident=resident),
+                self.assertRaises(RecoveryRequired),
+            ):
                 parse(status, resident)
 
     def test_missing_clock_and_validator_errors_require_recovery(self):
@@ -220,7 +240,9 @@ class _Device:
             if opcode == D.ADMIN_OPCODE:
                 after = struct.unpack_from("<I", data, 4)[0] == 7
                 code, size = struct.unpack_from("<2I", data, 8)  # the reservation (16 or 20 KiB)
-                struct.pack_into("<I", self._transport.memory, code + size - 128, D.SEAL if after else 0)
+                struct.pack_into(
+                    "<I", self._transport.memory, code + size - 128, D.SEAL if after else 0
+                )
                 out = struct.pack(
                     "<3I", D.ADMIN_MAGIC, D.SLOT_UNCACHED + 4, D.SEAL if after else 0
                 ).ljust(256, b"\0")
@@ -232,7 +254,9 @@ class _Device:
                 from framenpu.profile import PROFILE
 
                 arena, late = PROFILE.arena, False
-                self._transport.memory[arena : arena + len(data) + output_size] = data + bytes(output_size)
+                self._transport.memory[arena : arena + len(data) + output_size] = data + bytes(
+                    output_size
+                )
                 outs = []
                 for g in range(nseg):
                     # a --stream request: segment 1 waits for the host's release (word 12 = nonce,
@@ -245,15 +269,21 @@ class _Device:
                                 hook()
                             except BaseException as exc:
                                 hook_error = exc
-                        if struct.unpack_from("<I", self._transport.memory, arena + 128 + 48)[0] != nonce:
+                        if (
+                            struct.unpack_from("<I", self._transport.memory, arena + 128 + 48)[0]
+                            != nonce
+                        ):
                             late = True  # the kernel returns RS_STREAM_LATE
                             break
                     count = struct.unpack_from("<I", data, 128 * g + 12)[0] or 1
                     self.submitted.append(count)
                     table_at = struct.unpack_from("<I", data, 128 * g + 4)[0]
                     models = getattr(self.owner, "models", None)
-                    p = next(m.plan.plan for m in models if m.plan.plan.table_at == table_at) if models \
+                    p = (
+                        next(m.plan.plan for m in models if m.plan.plan.table_at == table_at)
+                        if models
                         else self.owner.plan.plan
+                    )
                     hi = getattr(self.owner, "win_hi", C.WIN_HI)  # RS_WIN_WIDE image: 0x1ff0000
                     window = self._transport.memory[C.WIN_LO : hi]
                     status, kw = 0, {}
@@ -262,13 +292,28 @@ class _Device:
                     # column blocks last to first; the older images row by row
                     sha = getattr(self.owner, "image_sha256", "")
                     post = (D.RESIDENT_IMAGE_SHA256, D.SLOTS_IMAGE_SHA256, D.DET_IMAGE_SHA256)
-                    kw.update(s2_order="pairs_rev" if sha in (D.DET_IMAGE_SHA256, D.MULTI_IMAGE_SHA256, D.STREAM_IMAGE_SHA256, D.CROPS4_IMAGE_SHA256) else "pairs" if sha in post else "rows")
+                    kw.update(
+                        s2_order="pairs_rev"
+                        if sha
+                        in (
+                            D.DET_IMAGE_SHA256,
+                            D.MULTI_IMAGE_SHA256,
+                            D.STREAM_IMAGE_SHA256,
+                            D.CROPS4_IMAGE_SHA256,
+                        )
+                        else "pairs"
+                        if sha in post
+                        else "rows"
+                    )
                     if getattr(self.owner, "cbias", False):
                         kw.update(cbias=True, win_hi=hi)
                     if self.owner.resident_image:
                         import numpy as np
 
-                        tag, mode = struct.unpack_from("<4I", data, 128 * g + 20), struct.unpack_from("<I", data, 128 * g + 36)[0]
+                        tag, mode = (
+                            struct.unpack_from("<4I", data, 128 * g + 20),
+                            struct.unpack_from("<I", data, 128 * g + 36)[0],
+                        )
                         slots = getattr(self.owner, "res_slots", False)
                         slot, mode = (mode >> 1, mode & 1) if slots else (0, mode)
                         if mode:
@@ -285,7 +330,9 @@ class _Device:
                             kw.update(resident=self.vt, load=load)
                             status = 1 | 6 * load
                             self.copied.append(load)
-                    if hook is not None and g == 0 and not strm:  # the device's wait hook: host work while the DSP runs
+                    if (
+                        hook is not None and g == 0 and not strm
+                    ):  # the device's wait hook: host work while the DSP runs
                         self.hooked = getattr(self, "hooked", 0) + 1
                         try:
                             hook()
@@ -302,7 +349,12 @@ class _Device:
                     if strm:
                         words[13] = nonce  # published after the segment's outputs
                     outs.append(struct.pack("<256I", *words))
-                    struct.pack_into("<256I", self._transport.memory, arena + len(data) + C.META_BYTES * g, *words)
+                    struct.pack_into(
+                        "<256I",
+                        self._transport.memory,
+                        arena + len(data) + C.META_BYTES * g,
+                        *words,
+                    )
                 out = b"".join(outs).ljust(output_size, b"\0")
                 if self.fail or late:
                     workers[0] = tuple(list(workers[0][:2]) + [1] + list(workers[0][3:]))
@@ -362,9 +414,7 @@ class MercurySessionTests(unittest.TestCase):
         lease = _Lease()
         with patch.object(mercury.onnx_graph, "load", return_value=retrained):
             with self.assertRaises(InvalidModel):
-                M.MercurySession(
-                    MODEL, JOBS, _device_factory=_Device, _lease_factory=lambda: lease
-                )
+                M.MercurySession(MODEL, JOBS, _device_factory=_Device, _lease_factory=lambda: lease)
             session = M.MercurySession(
                 MODEL,
                 JOBS,
@@ -501,7 +551,9 @@ class MercurySessionTests(unittest.TestCase):
             session.infer([self.feeds(31)])
 
 
-@unittest.skipUnless(MODEL and HEADS_JOBS, "FNPU_MERCURY_MODEL and FNPU_MERCURY_HEADS_JOBS required")
+@unittest.skipUnless(
+    MODEL and HEADS_JOBS, "FNPU_MERCURY_MODEL and FNPU_MERCURY_HEADS_JOBS required"
+)
 class HeadsSessionTests(unittest.TestCase):
     """The --mheads image: the heatmap head runs in the (simulated) kernel, and
     every output still equals the FP16 contract (the simulator is exact)."""
@@ -553,4 +605,3 @@ class HeadsSessionTests(unittest.TestCase):
             bad = list(p3)
             bad[word] = value
             self.assertFalse(C.native_ok(bad, s2_direct=0, pw_group=8, mheads=True), word)
-

@@ -37,8 +37,13 @@ def flag_block(device):
 
 def job(device, probe, mode, seed, cache):
     result = device._submit(
-        probe, b"", output_size=256 + CHUNKS * 4 + 60, opcode=14, params=(mode, seed, 0, 0, cache),
-        use_direct=True, _completion_validator=lambda r: validate_cleanup(r, cache),
+        probe,
+        b"",
+        output_size=256 + CHUNKS * 4 + 60,
+        opcode=14,
+        params=(mode, seed, 0, 0, cache),
+        use_direct=True,
+        _completion_validator=lambda r: validate_cleanup(r, cache),
     )
     out = result.output
     meta = struct.unpack_from("<16I", out, 0)
@@ -51,7 +56,9 @@ def job(device, probe, mode, seed, cache):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     ap.add_argument("--run-on-device", action="store_true")
     ap.add_argument("--probe", required=True)
     ap.add_argument("--step", required=True, choices=("verify", "claim", "check"))
@@ -86,10 +93,19 @@ def main(argv=None):
             report["after_failure"] = failure_snapshot(power)
     args.output.write_text(json.dumps(report, indent=2) + "\n")
     r = report.get("result", {})
-    print(json.dumps({"step": args.step, "error": report.get("error"), "flags_before": [hex(x) for x in report.get("flags_before", [])],
-                      "flags_after": [hex(x) for x in report.get("flags_after", [])], "ms": r.get("ms"),
-                      "differing_chunks": r.get("differing_chunks"),
-                      "first_differing": [i for i, n in enumerate(r.get("chunk_words", [])) if n][:8]}))
+    print(
+        json.dumps(
+            {
+                "step": args.step,
+                "error": report.get("error"),
+                "flags_before": [hex(x) for x in report.get("flags_before", [])],
+                "flags_after": [hex(x) for x in report.get("flags_after", [])],
+                "ms": r.get("ms"),
+                "differing_chunks": r.get("differing_chunks"),
+                "first_differing": [i for i, n in enumerate(r.get("chunk_words", [])) if n][:8],
+            }
+        )
+    )
     return int(failed)
 
 

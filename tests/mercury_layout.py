@@ -202,13 +202,34 @@ def head_ops(model):
     dparams = {"weight": m.reshape(168, 64, 1, 1), "bias": np.tile(bd, 4).astype(np.float32)}
     dparams.update(group=1, pads=(0, 0, 0, 0), stride=(1, 1), act=None)
     return [
-        replace(c159, name="heads.embed", kind="regrid", inputs=(OUTPUT,), output=E1,
-                params={"mode": "embed"}, shape=(c, h + 2, w + 2)),
+        replace(
+            c159,
+            name="heads.embed",
+            kind="regrid",
+            inputs=(OUTPUT,),
+            output=E1,
+            params={"mode": "embed"},
+            shape=(c, h + 2, w + 2),
+        ),
         tap3(c159, c, 64, E1, H1),
-        replace(dec, name=dec.name, kind="conv", inputs=(H1,), output=DEC, params=dparams,
-                shape=(168, h + 2, w + 2)),
-        replace(dec, name="heads.shuffle", kind="regrid", inputs=(DEC,), output=E2,
-                params={"mode": "shuffle"}, shape=(42, 2 * h + 6, 2 * w + 6)),
+        replace(
+            dec,
+            name=dec.name,
+            kind="conv",
+            inputs=(H1,),
+            output=DEC,
+            params=dparams,
+            shape=(168, h + 2, w + 2),
+        ),
+        replace(
+            dec,
+            name="heads.shuffle",
+            kind="regrid",
+            inputs=(DEC,),
+            output=E2,
+            params={"mode": "shuffle"},
+            shape=(42, 2 * h + 6, 2 * w + 6),
+        ),
         tap3(c164, 42, 22, E2, HEATMAP),
     ]
 
@@ -217,15 +238,46 @@ def regrid_words(op, gin, gout, vin, vout):
     """Kind-7 descriptor words of a head regrid op (see kernels/teacher_resident_probe.c)."""
     if op.params["mode"] == "embed":
         pairs, oh, ow = op.shape[0] // 2, gin.h, gin.w
-        return [KIND_RG, pairs, 1, oh, ow, gin.nbin, gout.nbin, vin, vout, gin.ws, gout.ws, 1,
-                0, 0, gin.word(0, 0), gout.word(1, 1)]
+        return [
+            KIND_RG,
+            pairs,
+            1,
+            oh,
+            ow,
+            gin.nbin,
+            gout.nbin,
+            vin,
+            vout,
+            gin.ws,
+            gout.ws,
+            1,
+            0,
+            0,
+            gin.word(0, 0),
+            gout.word(1, 1),
+        ]
     pairs, oh, ow = op.shape[0] // 2, gin.h, gin.w  # 21 pairs per phase, 10 x 10 sources
     phases = []
     for a in (0, 1):
         for b in (0, 1):
             phases += [gin.word(0, 0), gout.word(1 + a, 1 + b)]
-    return [KIND_RG, pairs, 4, oh, ow, gin.nbin, gout.nbin, vin, vout, gin.ws, 2 * gout.ws, 2,
-            1, 0, *phases]
+    return [
+        KIND_RG,
+        pairs,
+        4,
+        oh,
+        ow,
+        gin.nbin,
+        gout.nbin,
+        vin,
+        vout,
+        gin.ws,
+        2 * gout.ws,
+        2,
+        1,
+        0,
+        *phases,
+    ]
 
 
 def _check(op):
@@ -432,7 +484,9 @@ def build_plan(
         par_at[op.name] = cursor
         fixed[cursor] = images[op.name][0]
         cursor = RL._al(cursor + len(images[op.name][0]))
-    stored = ([OUTPUT, final] if heads else [final]) if mode == "merged" else [op.output for op in ops]
+    stored = (
+        ([OUTPUT, final] if heads else [final]) if mode == "merged" else [op.output for op in ops]
+    )
     with_host = [par for par in free if any(src == "host" for _, src in comps[par])]
     crops = []
     for _ in range(batch):
@@ -608,7 +662,19 @@ def build_plan(
 
 
 def _merged_crop(
-    ops, external, free, comps, parent_of, final, last_use, key, vec, vt, load, store, emit,
+    ops,
+    external,
+    free,
+    comps,
+    parent_of,
+    final,
+    last_use,
+    key,
+    vec,
+    vt,
+    load,
+    store,
+    emit,
     stores=None,
 ):
     """One crop of a merged request; every VTCM block it takes is given back."""

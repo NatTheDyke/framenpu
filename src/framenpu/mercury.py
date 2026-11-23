@@ -50,7 +50,12 @@ OUTPUTS = {
 # Two-view 3D stereo student (distill make_stereo.py + make_stereo3d.py): Mercury's trunk on both
 # cameras' crops as channels, both views' hints, the two crops' pair geometry, view-1 copies of the
 # heatmap heads and a joints3d head on the trunk features. Unpinned (a retrained model) only.
-S3D_INPUTS = {"inputImg": (1, 2, 128, 128), "lastKeypoints": (1, 84), "useLastKeypoints": (1,), "geom": (1, 16)}
+S3D_INPUTS = {
+    "inputImg": (1, 2, 128, 128),
+    "lastKeypoints": (1, 84),
+    "useLastKeypoints": (1,),
+    "geom": (1, 16),
+}
 S3D_OUTPUTS = OUTPUTS | {
     "heatmap_xy_1": (1, 21, 22, 22),
     "heatmap_depth_1": (1, 21, 22),
@@ -363,15 +368,25 @@ def lower(graph, *, require_pin=True, detector=False):
             # the detector's split of its last Gemm: constant [start, end) on axis 1, step 1
             _attrs(node, set())
             if len(node.inputs) != 5:
-                raise UnsupportedOperator(f"{node.name}: Slice needs constant starts/ends/axes/steps")
+                raise UnsupportedOperator(
+                    f"{node.name}: Slice needs constant starts/ends/axes/steps"
+                )
             start, end, axis, step = (
                 [int(v) for v in graph.tensor(x).array().ravel()] for x in node.inputs[1:]
             )
             shp = shapes[src(node.inputs[0])]
             if axis != [1] or step != [1] or len(shp) != 1 or not 0 <= start[0] < end[0] <= shp[0]:
                 raise UnsupportedOperator(f"{node.name}: only a step-1 Slice of a vector")
-            emit(Op(node.name, "slice", (src(node.inputs[0]),), node.outputs[0],
-                    {"start": start[0], "end": end[0]}, (end[0] - start[0],)))
+            emit(
+                Op(
+                    node.name,
+                    "slice",
+                    (src(node.inputs[0]),),
+                    node.outputs[0],
+                    {"start": start[0], "end": end[0]},
+                    (end[0] - start[0],),
+                )
+            )
         elif t == "Sigmoid" and detector:
             _attrs(node, set())
             shp = shapes[src(node.inputs[0])]
@@ -526,7 +541,10 @@ def run(model, feeds, numerics="fp32", keep=False, host_prefix=None):
 
     if numerics not in ("fp32", "fp16"):
         raise ValueError("numerics must be fp32 or fp16")
-    ins = {k: np.asarray(feeds[k], np.float32).reshape(v[1:] if len(v) > 1 else v) for k, v in model.inputs.items()}
+    ins = {
+        k: np.asarray(feeds[k], np.float32).reshape(v[1:] if len(v) > 1 else v)
+        for k, v in model.inputs.items()
+    }
     if not all(np.isfinite(v).all() for v in ins.values()):
         raise ValueError("non-finite input")
     img = ins.pop("inputImg")

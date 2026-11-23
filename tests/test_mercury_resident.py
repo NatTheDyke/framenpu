@@ -70,18 +70,32 @@ class ResidentPlanTests(unittest.TestCase):
                 if row[0] == 7:
                     self.assertTrue(C.regrid_ok(row))
                     continue
-                self.assertTrue(C.native_ok(row, s2_direct=0, pw_group=8, mheads=True, resident=True))
+                self.assertTrue(
+                    C.native_ok(row, s2_direct=0, pw_group=8, mheads=True, resident=True)
+                )
                 if row[0] not in (3, 4):  # a resident op is refused by a legacy check
                     self.assertFalse(C.native_ok(row, s2_direct=0, pw_group=8, mheads=True))
             for r in self.rows(self.legacy):  # the resident image still accepts legacy rows
                 row = C.replay_row(r, k, self.legacy.plan.crop_stride)
                 if row[0] != 7:
-                    self.assertTrue(C.native_ok(row, s2_direct=0, pw_group=8, mheads=True, resident=True))
+                    self.assertTrue(
+                        C.native_ok(row, s2_direct=0, pw_group=8, mheads=True, resident=True)
+                    )
         bad = self.rows(self.resident)[1].copy()
         bad[14] = C.SPAN  # the tag vector
         self.assertFalse(C.native_ok(bad, s2_direct=0, pw_group=8, mheads=True, resident=True))
 
-    def run_plan(self, mp, case_seeds, *, resident=None, load=True, wipe_images=False, tiles=False, deep8=False):
+    def run_plan(
+        self,
+        mp,
+        case_seeds,
+        *,
+        resident=None,
+        load=True,
+        wipe_images=False,
+        tiles=False,
+        deep8=False,
+    ):
         from framenpu import _mercury_common as C
         from framenpu import _mercury_layout as L
         import teacher_resident_layout as RL
@@ -105,8 +119,17 @@ class ResidentPlanTests(unittest.TestCase):
             L.stage_inputs(
                 mp.crop(k), put, {L.STEM_COLS: L.stem_columns(case["image"]), L.HINT: case["hint"]}
             )
-        RL.simulate(mp.plan, window, s2_phase=0, s2_direct=True, crops=len(case_seeds),
-                    resident=resident, load=load, tiles=tiles, deep8=deep8)
+        RL.simulate(
+            mp.plan,
+            window,
+            s2_phase=0,
+            s2_direct=True,
+            crops=len(case_seeds),
+            resident=resident,
+            load=load,
+            tiles=tiles,
+            deep8=deep8,
+        )
         return [
             {b: L.read_tensor(mp.crop(k), get, b) for b in mp.plan.jobs[0].stores}
             for k in range(len(case_seeds))
@@ -130,7 +153,9 @@ class ResidentPlanTests(unittest.TestCase):
         # second request: images not copied, and absent from the window
         again = self.run_plan(self.resident, [11, 12], resident=vt, load=False, wipe_images=True)
         self.assert_same(again, legacy)
-        three = self.run_plan(self.resident, [13, 11, 12], resident=vt, load=False, wipe_images=True)
+        three = self.run_plan(
+            self.resident, [13, 11, 12], resident=vt, load=False, wipe_images=True
+        )
         self.assert_same(three[1:], legacy)
 
     def test_unloaded_region_is_not_used(self):
@@ -162,17 +187,24 @@ class ResidentPlanTests(unittest.TestCase):
             for k in range(3):
                 row = C.replay_row(r, k, self.tiles.plan.crop_stride)
                 if row[0] != 7:
-                    self.assertTrue(C.native_ok(row, s2_direct=0, pw_group=8, mheads=True, resident=True,
-                                                tiles=True))
+                    self.assertTrue(
+                        C.native_ok(
+                            row, s2_direct=0, pw_group=8, mheads=True, resident=True, tiles=True
+                        )
+                    )
         self.assertGreater(flagged, 40)
         # 1x1 inputs read in place: every one but those made by s2, the host, or a 3x3 HMX op
         self.assertEqual(sum(1 for r in rows if r[0] == 1 and r[15] & 1), 25)
         bad = next(r for r in rows if r[0] == 1 and r[15] & 1).copy()
         bad[11] += 1  # an unaligned tile input
-        self.assertFalse(C.native_ok(bad, s2_direct=0, pw_group=8, mheads=True, resident=True, tiles=True))
+        self.assertFalse(
+            C.native_ok(bad, s2_direct=0, pw_group=8, mheads=True, resident=True, tiles=True)
+        )
         bad = next(r for r in rows if r[0] == 2 and r[15]).copy()
         bad[15] = 1  # depthwise has no tile input
-        self.assertFalse(C.native_ok(bad, s2_direct=0, pw_group=8, mheads=True, resident=True, tiles=True))
+        self.assertFalse(
+            C.native_ok(bad, s2_direct=0, pw_group=8, mheads=True, resident=True, tiles=True)
+        )
 
     def test_tiles_match_legacy(self):
         from framenpu import _mercury_common as C
@@ -192,7 +224,9 @@ class ResidentPlanTests(unittest.TestCase):
         mp.plan.table = rows.tobytes()
         vt = np.full((C.RES_SPAN, 32, 2), np.nan, np.float16)
         with self.assertRaises(AssertionError):
-            self.assert_same(self.run_plan(mp, [11], resident=vt, load=True, tiles=True), legacy[:1])
+            self.assert_same(
+                self.run_plan(mp, [11], resident=vt, load=True, tiles=True), legacy[:1]
+            )
 
     def test_deep8_scratch_and_flags(self):
         from framenpu import _mercury_common as C
@@ -225,7 +259,10 @@ class ResidentPlanTests(unittest.TestCase):
 
         legacy = self.run_plan(self.legacy, [11, 12])
         vt = np.full((C.RES_SPAN, 32, 2), np.nan, np.float16)
-        self.assert_same(self.run_plan(self.deep8, [11, 12], resident=vt, load=True, tiles=True, deep8=True), legacy)
+        self.assert_same(
+            self.run_plan(self.deep8, [11, 12], resident=vt, load=True, tiles=True, deep8=True),
+            legacy,
+        )
 
 
 class ReservationRecordTests(unittest.TestCase):

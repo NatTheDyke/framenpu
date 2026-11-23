@@ -318,7 +318,9 @@ class Device:
                         self._axi.restore()
                     except BaseException as cleanup:
                         t.poisoned = True
-                        raise RecoveryRequired("AXI restore failed; operation gate retained") from cleanup
+                        raise RecoveryRequired(
+                            "AXI restore failed; operation gate retained"
+                        ) from cleanup
                 if power is not None:
                     try:
                         power.close()

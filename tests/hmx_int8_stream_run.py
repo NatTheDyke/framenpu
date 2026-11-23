@@ -45,8 +45,12 @@ def one(probe, kind, nk, loads, cache, flags=0):
     tiles = loads // nk
     with Device(dispatch="direct") as device:
         result = device._submit(
-            probe, BLOCKS[kind], output_size=256 + 4096, opcode=12,
-            params=(KINDS[kind], tiles, nk, flags, cache), use_direct=True,
+            probe,
+            BLOCKS[kind],
+            output_size=256 + 4096,
+            opcode=12,
+            params=(KINDS[kind], tiles, nk, flags, cache),
+            use_direct=True,
             _completion_validator=lambda r: validate_cleanup(r, cache),
         )
     out = result.output
@@ -72,7 +76,9 @@ def main(argv=None):
     ap.add_argument("--nk", type=int, nargs="+", default=[1, 2, 4, 8])
     ap.add_argument("--loads", type=int, nargs="+", default=[64, 512])
     ap.add_argument("--cache", type=int, choices=(0, 1), default=1)
-    ap.add_argument("--flags", type=int, nargs="+", default=[0], help="probe flag sets to compare (0..31)")
+    ap.add_argument(
+        "--flags", type=int, nargs="+", default=[0], help="probe flag sets to compare (0..31)"
+    )
     ap.add_argument("--output", type=Path, required=True)
     args = ap.parse_args(argv)
     if not args.run_on_device:
@@ -87,8 +93,12 @@ def main(argv=None):
     if any(not 0 <= f <= 31 for f in args.flags):
         ap.error("flags are 0..31")
     points = [(k, n, L, f) for k in KINDS for n in args.nk for L in args.loads for f in args.flags]
-    report = {"code_sha256": hashlib.sha256(probe.code).hexdigest(), "ref_hz": REF_HZ,
-              "cache": args.cache, "samples": []}
+    report = {
+        "code_sha256": hashlib.sha256(probe.code).hexdigest(),
+        "ref_hz": REF_HZ,
+        "cache": args.cache,
+        "samples": [],
+    }
     rng, failed = random.Random(0x53545245), False
     with PowerSnapshot() as power:
         baseline = power.read()
@@ -101,24 +111,46 @@ def main(argv=None):
                     t, done = one(probe, kind, nk, loads, args.cache, flags)
                     if health(power, baseline) != report["initial_health"]:
                         raise ValueError("session restoration differs from initial health")
-                    report["samples"].append({"round": rnd, "kind": kind, "nk": nk, "loads": loads, "flags": flags, "ticks": t, "done_ticks": done})
+                    report["samples"].append(
+                        {
+                            "round": rnd,
+                            "kind": kind,
+                            "nk": nk,
+                            "loads": loads,
+                            "flags": flags,
+                            "ticks": t,
+                            "done_ticks": done,
+                        }
+                    )
                 print(f"stream: round {rnd + 1}/{args.rounds}", file=sys.stderr, flush=True)
             report["final_health"] = health(power, baseline)
             lo, hi = min(args.loads), max(args.loads)
             summary = {}
             for kind in KINDS:
-              for flags in args.flags:
-                for nk in args.nk:
-                    row = {}
-                    for key in ("ticks", "done_ticks"):
-                        med = {}
-                        for L in (lo, hi):
-                            v = sorted(s[key] for s in report["samples"] if (s["kind"], s["nk"], s["loads"], s["flags"]) == (kind, nk, L, flags))
-                            med[L] = v[len(v) // 2]
-                        us_load = (med[hi] - med[lo]) / (hi - lo) / REF_HZ * 1e6 if hi > lo else float("nan")
-                        row[key] = {"median_ticks": med, "ns_per_load": us_load * 1e3,
-                                    "ns_per_32rows_depth32": us_load * 1e3 * 32 / ROWS[kind]}
-                    summary[f"{kind}_nk{nk}_f{flags}"] = row
+                for flags in args.flags:
+                    for nk in args.nk:
+                        row = {}
+                        for key in ("ticks", "done_ticks"):
+                            med = {}
+                            for L in (lo, hi):
+                                v = sorted(
+                                    s[key]
+                                    for s in report["samples"]
+                                    if (s["kind"], s["nk"], s["loads"], s["flags"])
+                                    == (kind, nk, L, flags)
+                                )
+                                med[L] = v[len(v) // 2]
+                            us_load = (
+                                (med[hi] - med[lo]) / (hi - lo) / REF_HZ * 1e6
+                                if hi > lo
+                                else float("nan")
+                            )
+                            row[key] = {
+                                "median_ticks": med,
+                                "ns_per_load": us_load * 1e3,
+                                "ns_per_32rows_depth32": us_load * 1e3 * 32 / ROWS[kind],
+                            }
+                        summary[f"{kind}_nk{nk}_f{flags}"] = row
             report["summary"] = summary
         except (FrameNPUError, ValueError, OSError) as exc:
             failed = True

@@ -23,8 +23,8 @@ from .errors import DeviceBusy, RecoveryRequired
 
 RCG_PAGE, PLL_PAGE = 0x32008000, 0x32002000
 CMD, CFG = 0x254, 0x258
-SRC_MASK = 0x71F                       # CFG source select [10:8] and divider [4:0]
-PLL_WORDS = (0, 4, 0x10, 0x14, 0x18)   # mode/lock, opmode, L, alpha, user control
+SRC_MASK = 0x71F  # CFG source select [10:8] and divider [4:0]
+PLL_WORDS = (0, 4, 0x10, 0x14, 0x18)  # mode/lock, opmode, L, alpha, user control
 PLL_RESET = {0: 0x100, 4: 0, 0x10: 0, 0x14: 0, 0x18: 1}
 # MHz -> (PLL L at 19.2 MHz with alpha 0, CFG source/divider bits)
 AXI_RATES = {748.8: (78, 0x503)}
@@ -69,7 +69,13 @@ class AxiClock:
             return
         self.fd = os.open("/dev/mem", os.O_RDWR | os.O_SYNC)
         self.rcg, self.pll = (
-            mmap.mmap(self.fd, 4096, flags=mmap.MAP_SHARED, prot=mmap.PROT_READ | mmap.PROT_WRITE, offset=a)
+            mmap.mmap(
+                self.fd,
+                4096,
+                flags=mmap.MAP_SHARED,
+                prot=mmap.PROT_READ | mmap.PROT_WRITE,
+                offset=a,
+            )
             for a in (RCG_PAGE, PLL_PAGE)
         )
 
@@ -136,7 +142,7 @@ class AxiClock:
                 raise RecoveryRequired("core2 PLL did not lock and did not return to reset")
             raise RuntimeError("core2 PLL did not lock; restored")
         self._w(p, 0, self._r(p, 0) | 1)
-        self.raised = True                      # from here on the mux may select the PLL
+        self.raised = True  # from here on the mux may select the PLL
         self._w(self.rcg, CFG, (cfg & ~SRC_MASK) | self.src)
         if not self._update() or self._r(self.rcg, CFG) & SRC_MASK != self.src:
             self.abandoned = True

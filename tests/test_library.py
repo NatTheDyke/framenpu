@@ -368,6 +368,7 @@ class PowerTests(unittest.TestCase):
 
     def test_environment_selects_the_rate(self):
         import os
+
         old = os.environ.get("FNPU_HMX_MHZ")
         try:
             os.environ["FNPU_HMX_MHZ"] = "499.2"

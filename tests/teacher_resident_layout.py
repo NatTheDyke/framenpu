@@ -118,7 +118,9 @@ def replay_row(row, k, stride, win_hi=None):
     """A descriptor as the RS_REPLAY kernel runs it for crop k: load and store
     window addresses (word 9) moved by k * stride, everything else unchanged."""
     row = list(row)
-    if row[0] in (KIND["load"], KIND["store"]) and row[9] <= (T.WIN_HI if win_hi is None else win_hi):
+    if row[0] in (KIND["load"], KIND["store"]) and row[9] <= (
+        T.WIN_HI if win_hi is None else win_hi
+    ):
         row[9] += k * stride
     return row
 
@@ -535,8 +537,21 @@ def _s2_direct(row, vt, phase, bias_at=None, order="rows"):
             words[q : q + 32] = vals[y, x0]
 
 
-def simulate(plan, window, *, s2_phase=1, s2_direct=False, crops=1, resident=None, load=True, tiles=False,
-             deep8=False, cbias=False, win_hi=None, s2_order="rows"):
+def simulate(
+    plan,
+    window,
+    *,
+    s2_phase=1,
+    s2_direct=False,
+    crops=1,
+    resident=None,
+    load=True,
+    tiles=False,
+    deep8=False,
+    cbias=False,
+    win_hi=None,
+    s2_order="rows",
+):
     """Run a plan against `window` (bytearray covering WIN_LO..WIN_HI) with the
     kernel's addressing; VTCM starts each resident job filled with NaN. The
     caller performs setup_writes(plan) first, exactly as the harness does; the
@@ -631,8 +646,14 @@ def simulate(plan, window, *, s2_phase=1, s2_direct=False, crops=1, resident=Non
                             ]
                 continue
             if not native_ok(
-                row, s2_direct=s2_phase if s2_direct else None, mheads=True, resident=resident is not None,
-                tiles=tiles, deep8=deep8, cbias=cbias, win_hi=win_hi,
+                row,
+                s2_direct=s2_phase if s2_direct else None,
+                mheads=True,
+                resident=resident is not None,
+                tiles=tiles,
+                deep8=deep8,
+                cbias=cbias,
+                win_hi=win_hi,
             ):
                 raise ValueError("invalid resident descriptor")
             kind, cpi, cpo, k, clip, nb, blk0, nj, ws, dpar, npar, vin, vout, vres, vpar = (
@@ -690,7 +711,9 @@ def simulate(plan, window, *, s2_phase=1, s2_direct=False, crops=1, resident=Non
                         blk = vt[vin + j * cpi : vin + (j + 1) * cpi]
                     else:
                         blk = vt[vin + blk0 + j : vin + blk0 + j + cpi * nb : nb]  # [cpi, 32, 2]
-                    B[: 2 * len(blk)] = blk.astype(np.float64).transpose(0, 2, 1).reshape(2 * len(blk), 32)
+                    B[: 2 * len(blk)] = (
+                        blk.astype(np.float64).transpose(0, 2, 1).reshape(2 * len(blk), 32)
+                    )
                     acc = f16(A @ B)[: 2 * cpo].reshape(cpo, 2, 32).transpose(0, 2, 1)
                     v = f16(acc.astype(np.float64) + vt[bias : bias + cpo].astype(np.float64))
                     if clip:
@@ -746,8 +769,19 @@ def simulate(plan, window, *, s2_phase=1, s2_direct=False, crops=1, resident=Non
 # ---------------------------------------------------------------- native check mirror
 
 
-def native_ok(row, *, dw_blocks=2, s2_direct=None, pw_group=1, mheads=False, resident=False, tiles=False, deep8=False,
-              cbias=False, win_hi=None):
+def native_ok(
+    row,
+    *,
+    dw_blocks=2,
+    s2_direct=None,
+    pw_group=1,
+    mheads=False,
+    resident=False,
+    tiles=False,
+    deep8=False,
+    cbias=False,
+    win_hi=None,
+):
     """Mirror of rs_get in kernels/teacher_resident_probe.c (True = accepted).
     s2_direct: the decimation phase (0 even, 1 odd) of an RS_S2_DIRECT build, which
     adds bounds on the direct kernel's reads and zero-lane store spill. pw_group: an
@@ -777,8 +811,18 @@ def native_ok(row, *, dw_blocks=2, s2_direct=None, pw_group=1, mheads=False, res
         raise ValueError("cbias is an option of the resident build")
     hi = T.WIN_HI if win_hi is None else win_hi
     top = RES_SPAN - XB_N if cbias else RES_SPAN
-    bad = (big > 0x3FFF) or ((kind - 1) & m > 4 and not p3) or vpar + npar > (top if res else SPAN) or (dpar | align) & 127
-    bad = bad or (resident and vpar >= RES_SPAN) or (res and vpar < RES_LO) or (res and kind in (3, 4))
+    bad = (
+        (big > 0x3FFF)
+        or ((kind - 1) & m > 4 and not p3)
+        or vpar + npar > (top if res else SPAN)
+        or (dpar | align) & 127
+    )
+    bad = (
+        bad
+        or (resident and vpar >= RES_SPAN)
+        or (res and vpar < RES_LO)
+        or (res and kind in (3, 4))
+    )
     bad = bad or (res and (kind == 1 or p3) and rscr & 15)
     bad = bad or ((dpar - T.WIN_LO) & m) + 128 * npar > hi - T.WIN_LO or vpar == 0
     bad = bad or dpar < T.WIN_LO or dpar > hi or npar > (hi - dpar) // 128
@@ -827,7 +871,12 @@ def native_ok(row, *, dw_blocks=2, s2_direct=None, pw_group=1, mheads=False, res
         or scr + ((pw_group * (k + no) if pw_group > 1 else k) * 16 if pw else cpi * kk) > SPAN
     )
     if p3:
-        bad = bad or k != (9 * cpi + 15) >> 4 or 32 * blk0 < ws + 1 or 32 * (blk0 + nj) + ws + 1 > 32 * nb
+        bad = (
+            bad
+            or k != (9 * cpi + 15) >> 4
+            or 32 * blk0 < ws + 1
+            or 32 * (blk0 + nj) + ws + 1 > 32 * nb
+        )
     elif pw:
         bad = bad or k != (cpi + 15) >> 4
     else:
@@ -861,8 +910,20 @@ def regrid_ok(row):
         big |= x
     np_, nph, oh, ow, snb, dnb, vin, vout, sws, drow, dcol, fl = w[1:13]
     if (
-        w[0] != 7 or big > 0x3FFF or np_ == 0 or nph == 0 or nph > 9 or oh == 0 or ow == 0
-        or snb == 0 or dnb == 0 or vin == 0 or vout == 0 or fl > 3 or w[13] != 0 or dcol == 0
+        w[0] != 7
+        or big > 0x3FFF
+        or np_ == 0
+        or nph == 0
+        or nph > 9
+        or oh == 0
+        or ow == 0
+        or snb == 0
+        or dnb == 0
+        or vin == 0
+        or vout == 0
+        or fl > 3
+        or w[13] != 0
+        or dcol == 0
     ):
         return False
     sp = nph * np_ if fl & 1 else np_

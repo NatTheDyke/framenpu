@@ -48,8 +48,12 @@ def one(probe, kind, depth, cache):
     data = operands(kind) + SCALE_BLOCK * configs
     with Device(dispatch="direct") as device:
         result = device._submit(
-            probe, data, output_size=256 + configs * 4096, opcode=11,
-            params=(mode, configs, depth, 0, cache), use_direct=True,
+            probe,
+            data,
+            output_size=256 + configs * 4096,
+            opcode=11,
+            params=(mode, configs, depth, 0, cache),
+            use_direct=True,
             _completion_validator=lambda r: validate_cleanup(r, cache),
         )
     out = result.output
@@ -82,7 +86,11 @@ def main(argv=None):
         ap.error("require 1..50 rounds and depths 1..512")
     probe = Job.load(args.probe)
     points = [(k, d, c) for k in KINDS for d in args.depths for c in args.caches]
-    report = {"code_sha256": hashlib.sha256(probe.code).hexdigest(), "ref_hz": REF_HZ, "samples": []}
+    report = {
+        "code_sha256": hashlib.sha256(probe.code).hexdigest(),
+        "ref_hz": REF_HZ,
+        "samples": [],
+    }
     rng, failed = random.Random(0x49385350), False
     with PowerSnapshot() as power:
         baseline = power.read()
@@ -96,7 +104,8 @@ def main(argv=None):
                     if health(power, baseline) != report["initial_health"]:
                         raise ValueError("session restoration differs from initial health")
                     report["samples"].append(
-                        {"round": rnd, "kind": kind, "depth": depth, "cache": cache, "ticks": ticks})
+                        {"round": rnd, "kind": kind, "depth": depth, "cache": cache, "ticks": ticks}
+                    )
                 print(f"int8 speed: round {rnd + 1}/{args.rounds}", file=sys.stderr, flush=True)
             report["final_health"] = health(power, baseline)
             summary = {}
@@ -104,13 +113,21 @@ def main(argv=None):
                 for cache in args.caches:
                     med = {}
                     for d in args.depths:
-                        v = sorted(t for s in report["samples"] if (s["kind"], s["depth"], s["cache"]) == (kind, d, cache) for t in s["ticks"])
+                        v = sorted(
+                            t
+                            for s in report["samples"]
+                            if (s["kind"], s["depth"], s["cache"]) == (kind, d, cache)
+                            for t in s["ticks"]
+                        )
                         med[d] = v[len(v) // 2]
                     lo, hi = min(args.depths), max(args.depths)
                     us = (med[hi] - med[lo]) / (hi - lo) / REF_HZ * 1e6 if hi > lo else float("nan")
                     macs = 65536 if kind == "int8" else 32768
                     summary[f"{kind}_{'cached' if cache else 'uncached'}"] = {
-                        "median_ticks": med, "us_per_pair": us, "gmac_per_s": macs / us / 1e3}
+                        "median_ticks": med,
+                        "us_per_pair": us,
+                        "gmac_per_s": macs / us / 1e3,
+                    }
             report["summary"] = summary
         except (FrameNPUError, ValueError, OSError) as exc:
             failed = True
