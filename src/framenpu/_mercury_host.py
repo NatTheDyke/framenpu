@@ -1,4 +1,5 @@
-"""The host side of a Mercury request on the native kernels (_native.Host).
+"""The host side of a Mercury request on the native kernels: the model library
+(_native.Host) and the device backend's layout library (framenpu_cdsp._layout_native).
 
 Same contract as the NumPy path in mercury_runtime (input checks, hint prefix, stem
 columns, grid staging, readback checks, pooled vector heads). The constructor refuses
@@ -22,10 +23,12 @@ from . import _mercury_layout as L
 
 
 class NativeRequest:
-    def __init__(self, host, model, mplan, heads, outputs=None):
+    def __init__(self, host, layout, model, mplan, heads, outputs=None):
         import numpy as np
 
-        self.host, self.heads = host, heads
+        if layout is None:
+            raise ValueError("the layout kernels are not available")
+        self.host, self.layout, self.heads = host, layout, heads
         self.views = getattr(model, "views", 1)
         self.inputs = dict(getattr(model, "inputs", mercury.INPUTS))
         self.out_shapes = dict(getattr(model, "outputs", mercury.OUTPUTS))
@@ -116,7 +119,9 @@ class NativeRequest:
                 and tuple(p["pads"]) == (0, 0, 0, 0)
                 and p["act"] in (None, "relu6")
             ):
-                w = np.ascontiguousarray(p["weight"].reshape(p["weight"].shape[0], -1).T, np.float32)
+                w = np.ascontiguousarray(
+                    p["weight"].reshape(p["weight"].shape[0], -1).T, np.float32
+                )
                 b = np.ascontiguousarray(p["bias"], np.float32)
                 self.tail.append(("conv1x1", op, (w, b, p["act"] == "relu6")))
             elif (
@@ -130,7 +135,9 @@ class NativeRequest:
                 and p["act"] in (None, "relu6")
             ):
                 # the HMX contract: FP16 weights and bias (mercury._conv)
-                w = np.ascontiguousarray(mercury._f16(p["weight"].reshape(p["weight"].shape[0], -1)), np.float32)
+                w = np.ascontiguousarray(
+                    mercury._f16(p["weight"].reshape(p["weight"].shape[0], -1)), np.float32
+                )
                 b = np.ascontiguousarray(mercury._f16(p["bias"]), np.float32)
                 self.tail.append(("conv1x1_f16", op, (w, b, p["act"] == "relu6")))
             elif op.kind == "concat" and len(op.shape) == 1:
@@ -156,7 +163,7 @@ class NativeRequest:
         import numpy as np
 
         w = self._work(len(feeds), lane)
-        lib = self.host.lib
+        lib, lay = self.host.lib, self.layout.lib
         for k, feed in enumerate(feeds):
             for name, shape in self.inputs.items():
                 v = np.asarray(feed[name])
@@ -169,12 +176,12 @@ class NativeRequest:
             if lib.fnpu_to_f16(w.input_ptr["inputImg"][k], w.img16_p, self.views * 128 * 128):
                 raise ValueError("image exceeds FP16 storage")
             for c in range(self.views):  # 9 planes per view, each call zeroes the next plane
-                lib.fnpu_stem_columns(w.img16_p + c * 2 * 128 * 128, w.cols_p + c * 2 * 9 * 4096)
-            lib.fnpu_grid_pack(*w.stem_pack[k])
+                lay.fnpu_stem_columns(w.img16_p + c * 2 * 128 * 128, w.cols_p + c * 2 * 9 * 4096)
+            lay.fnpu_grid_pack(*w.stem_pack[k])
         if lib.fnpu_hint(*w.hint_args):
             raise ValueError("hint exceeds FP16 storage")
         for args in w.hint_pack:
-            lib.fnpu_grid_pack(*args)
+            lay.fnpu_grid_pack(*args)
         return w
 
     def stage(self, mem, w):
@@ -187,7 +194,7 @@ class NativeRequest:
     # ------------------------------------------------------------------ outputs
     def read(self, w, get, k):
         """Unpack and check crop k's device outputs into the workspace; False if invalid."""
-        lib = self.host.lib
+        lib = self.layout.lib
         where = self.mplan.crop(k).where
         for name in w.read_names:
             raw = w.raw[name]
@@ -213,7 +220,10 @@ class NativeRequest:
             else:
                 getattr(lib, fn)(*args)
         return [
-            {name: w.outputs[name][k].reshape(self.out_shapes[name]).copy() for name in self.outputs}
+            {
+                name: w.outputs[name][k].reshape(self.out_shapes[name]).copy()
+                for name in self.outputs
+            }
             for k in range(w.nb)
         ]
 
@@ -251,9 +261,17 @@ class _Work:
         if (n_in, n_out) != (42 * nr.views, 8192):
             raise ValueError("unexpected hint weight shape")
         self.hint_args = (
-            ptr(nr.hint_w), ptr(nr.hint_b), ptr(self.inputs["lastKeypoints"]),
-            ptr(self.inputs["useLastKeypoints"]), nb, n_out, n_in, int(nr.hint_relu6),
-            ptr(self.hint_acc), ptr(self.hint_tmp), ptr(self.hint16),
+            ptr(nr.hint_w),
+            ptr(nr.hint_b),
+            ptr(self.inputs["lastKeypoints"]),
+            ptr(self.inputs["useLastKeypoints"]),
+            nb,
+            n_out,
+            n_in,
+            int(nr.hint_relu6),
+            ptr(self.hint_acc),
+            ptr(self.hint_tmp),
+            ptr(self.hint16),
         )
         c, idx, nwords, _ = nr.grids[L.HINT]
         self.hint_grid = np.zeros((nb, c * nwords), u16)
@@ -262,8 +280,10 @@ class _Work:
             for k in range(nb)
         ]
         self.staged = [
-            ((L.STEM_COLS, memoryview(self.stem[k]).cast("B")),
-             (L.HINT, memoryview(self.hint_grid[k]).cast("B")))
+            (
+                (L.STEM_COLS, memoryview(self.stem[k]).cast("B")),
+                (L.HINT, memoryview(self.hint_grid[k]).cast("B")),
+            )
             for k in range(nb)
         ]
 
@@ -276,8 +296,15 @@ class _Work:
             self.raw_bytes[name] = memoryview(self.raw[name]).cast("B")
             self.maps[name] = np.zeros((nb, c, g.h, g.w), f32)
             self.unpack[name] = [
-                (ptr(self.raw[name]), c, idx.size, ptr(idx), nwords, ptr(self.maps[name][k]),
-                 ptr(self.stats))
+                (
+                    ptr(self.raw[name]),
+                    c,
+                    idx.size,
+                    ptr(idx),
+                    nwords,
+                    ptr(self.maps[name][k]),
+                    ptr(self.stats),
+                )
                 for k in range(nb)
             ]
 
@@ -287,9 +314,14 @@ class _Work:
             t["heatmap_xy"] = self.maps[L.HEATMAP][:, :21]
         for name in nr.inputs.keys() - mercury.INPUTS.keys():  # host-only inputs (geom)
             t[name] = self.inputs[name]
-        scratch = np.zeros(max([nb * op.shape[0] for _, op, _ in nr.tail]
-                               + [int(np.prod(op.shape[1:])) for k, op, _ in nr.tail if k == "conv1x1_f16"]
-                               + [1]), np.float64)
+        scratch = np.zeros(
+            max(
+                [nb * op.shape[0] for _, op, _ in nr.tail]
+                + [int(np.prod(op.shape[1:])) for k, op, _ in nr.tail if k == "conv1x1_f16"]
+                + [1]
+            ),
+            np.float64,
+        )
         self._keep = [scratch]
         self.tail_calls = []
         for kind, op, extra in nr.tail:
@@ -301,7 +333,10 @@ class _Work:
             self._keep.append(y)
             if kind == "concat":
                 parts = [t[i] for i in op.inputs]
-                if any(q.ndim != 2 or q.shape[0] != nb for q in parts) or sum(q.shape[1] for q in parts) != op.shape[0]:
+                if (
+                    any(q.ndim != 2 or q.shape[0] != nb for q in parts)
+                    or sum(q.shape[1] for q in parts) != op.shape[0]
+                ):
                     raise ValueError(f"{op.name}: unexpected shapes")
                 at = 0
                 for q in parts:
@@ -315,13 +350,29 @@ class _Work:
                 hw = int(np.prod(x.shape[2:]))
                 for k in range(nb):
                     self.tail_calls.append(
-                        ("fnpu_conv1x1_f16", (ptr(wt), ptr(b), ptr(x[k]), cout, cin, hw, int(relu), ptr(scratch), ptr(y[k])))
+                        (
+                            "fnpu_conv1x1_f16",
+                            (
+                                ptr(wt),
+                                ptr(b),
+                                ptr(x[k]),
+                                cout,
+                                cin,
+                                hw,
+                                int(relu),
+                                ptr(scratch),
+                                ptr(y[k]),
+                            ),
+                        )
                     )
             elif kind == "avgpool":
                 (kh, kw), (c, h, wd) = extra, x.shape[1:]
                 for k in range(nb):
                     self.tail_calls.append(
-                        ("fnpu_avgpool", (ptr(x[k]), c, h, wd, kh, kw, op.shape[1], op.shape[2], ptr(y[k])))
+                        (
+                            "fnpu_avgpool",
+                            (ptr(x[k]), c, h, wd, kh, kw, op.shape[1], op.shape[2], ptr(y[k])),
+                        )
                     )
             else:
                 wt, b, relu = extra
@@ -330,7 +381,10 @@ class _Work:
                     raise ValueError(f"{op.name}: unexpected shapes")
                 fn = "fnpu_dense" if kind == "dense" else "fnpu_conv1x1"
                 self.tail_calls.append(
-                    (fn, (ptr(wt), ptr(b), ptr(x), nb, n_out, n_in, int(relu), ptr(scratch), ptr(y)))
+                    (
+                        fn,
+                        (ptr(wt), ptr(b), ptr(x), nb, n_out, n_in, int(relu), ptr(scratch), ptr(y)),
+                    )
                 )
             t[op.output] = y
         self.outputs = {name: t[name] for name in nr.outputs}
@@ -349,10 +403,12 @@ class NativeDetector:
 
     DENSE = ("Gemm_164", "Gemm_169", "Gemm_174")
 
-    def __init__(self, host, model, mplan, outputs=None):
+    def __init__(self, host, layout, model, mplan, outputs=None):
         import numpy as np
 
-        self.host = host
+        if layout is None:
+            raise ValueError("the layout kernels are not available")
+        self.host, self.layout = host, layout
         if not getattr(model, "detector", False) or dict(model.inputs) != mercury.DET_INPUTS:
             raise ValueError("not the Mercury hand detector")
         self.inputs = dict(model.inputs)
@@ -363,7 +419,9 @@ class NativeDetector:
         size = mercury.DET_SIZE
         mp = mplan.crop(0)
         if list(mp.external + mp.host_parts) != [L.STEM_COLS] or mplan.final != L.DET_OUTPUT:
-            raise ValueError("native detector staging covers the stem columns of a whole device part")
+            raise ValueError(
+                "native detector staging covers the stem columns of a whole device part"
+            )
         names = [op.name for op in model.ops]
         tail = model.ops[names.index(L.DET_LAST) + 1 :]
         kinds = [(op.kind, op.name) for op in tail]
@@ -377,10 +435,19 @@ class NativeDetector:
         self.dense, x = [], flat.output
         for op in dense:
             p = op.params
-            if op.inputs != (x,) or p["act"] not in (None, "relu6") or p["weight"].dtype != np.float32:
+            if (
+                op.inputs != (x,)
+                or p["act"] not in (None, "relu6")
+                or p["weight"].dtype != np.float32
+            ):
                 raise ValueError(f"{op.name}: unexpected dense layer")
-            self.dense.append((np.ascontiguousarray(p["weight"].T, np.float32),
-                               np.ascontiguousarray(p["bias"], np.float32), p["act"] == "relu6"))
+            self.dense.append(
+                (
+                    np.ascontiguousarray(p["weight"].T, np.float32),
+                    np.ascontiguousarray(p["bias"], np.float32),
+                    p["act"] == "relu6",
+                )
+            )
             x = op.output
         self.logits = x
         self.heads = []  # (output name, start, end, sigmoid)
@@ -467,7 +534,7 @@ class NativeDetector:
         """Unpack and check crop k's final map into the workspace; False if invalid."""
         at = self.mplan.crop(k).where[L.DET_OUTPUT]
         w.raw_bytes[:] = get(at, w.raw.nbytes)
-        self.host.lib.fnpu_grid_unpack(*w.unpack[k])
+        self.layout.lib.fnpu_grid_unpack(*w.unpack[k])
         return not (w.stats[0] or w.stats[1])
 
     def load_maps(self, w, maps_list):
@@ -528,7 +595,9 @@ class _DetWork:
                 raise ValueError("unexpected detector dense shapes")
             y = np.zeros((nb, n_out), np.float32)
             acc = np.zeros(nb * n_out, np.float64)
-            self.dense_calls.append((ptr(wt), ptr(b), ptr(x), nb, n_out, n_in, int(relu), ptr(acc), ptr(y)))
+            self.dense_calls.append(
+                (ptr(wt), ptr(b), ptr(x), nb, n_out, n_in, int(relu), ptr(acc), ptr(y))
+            )
             self._keep += [acc, y]
             x = y
         self.logits = x

@@ -17,6 +17,7 @@ from . import _native
 from ._mercury_host import NativeDetector, NativeRequest
 from .device import Device
 from .errors import InvalidModel, RecoveryRequired
+from framenpu_cdsp import _layout_native
 from framenpu_cdsp.resident import arena_lease as _lease
 from framenpu_cdsp.mercury_device import (  # noqa: F401  (re-exported: the device half's names)
     ADMIN_MAGIC,
@@ -135,7 +136,8 @@ class MercurySession:
     ):
         """native: None uses the bundled host kernels when this platform and image allow
         (else NumPy), False always uses NumPy, True requires the kernels, and a
-        _native.Host instance uses that library (tests). resident: None keeps the
+        (_native.Host, _layout_native.LayoutHost) pair uses those libraries (tests; a lone
+        Host takes the bundled layout library). resident: None keeps the
         parameter images in the FeatureNN blob region when the image supports it, True
         requires that, False copies them for every crop (legacy plan, same image)."""
         # require_pin=False accepts retrained weights for the same graph: lower() still validates
@@ -219,17 +221,24 @@ class MercurySession:
                         raise InvalidModel("Mercury plan exceeds native bounds")
             self.models.append(_Model(m, plan, slot, _outputs(m)))
         if native is not False:
-            host = native if isinstance(native, _native.Host) else _native.bundled()
-            if host is None:
+            # the model kernels (framenpu) and the layout kernels (the device backend's)
+            if isinstance(native, tuple):
+                host, layout = native
+            else:
+                host = native if isinstance(native, _native.Host) else _native.bundled()
+                layout = _layout_native.bundled()
+            if host is None or layout is None:
                 if native is True:
                     raise InvalidModel("the native host kernels are not available here")
             else:
                 for sl in self.models:
                     try:
                         sl.native = (
-                            NativeDetector(host, sl.model, sl.plan, sl.outputs)
+                            NativeDetector(host, layout, sl.model, sl.plan, sl.outputs)
                             if sl.model.detector
-                            else NativeRequest(host, sl.model, sl.plan, self.heads, sl.outputs)
+                            else NativeRequest(
+                                host, layout, sl.model, sl.plan, self.heads, sl.outputs
+                            )
                         )
                     except ValueError as exc:
                         # an explicit request covers the primary model; extra models (other

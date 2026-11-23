@@ -30,22 +30,29 @@ BINARY_FILES = {
     "src/framenpu_cdsp/data/dispatch.bin",
     "src/framenpu_cdsp/data/dispatch_patch.bin",
     "src/framenpu/data/host_aarch64.so",
+    "src/framenpu_cdsp/data/layout_aarch64.so",
     "examples/vector_add.fjob",
     "examples/xor.fnpu",
 }
 
 
-def verify_host_native(package):
-    """The bundled host library matches its manifest, and the manifest its source."""
-    record = json.loads((package / "data/host_aarch64.json").read_text())
-    lib = (package / "data/host_aarch64.so").read_bytes()
+HOST_SOURCES = {"host": "host/fnpu_host.c", "layout": "host/fnpu_layout.c"}
+
+
+def verify_host_native(package, name="host"):
+    """A bundled host library (host: framenpu's model kernels, layout: framenpu_cdsp's layout
+    kernels) matches its manifest, and the manifest its sources."""
+    record = json.loads((package / f"data/{name}_aarch64.json").read_text())
+    lib = (package / f"data/{name}_aarch64.so").read_bytes()
     if record.get("bytes") != len(lib) or record.get("sha256") != hashlib.sha256(lib).hexdigest():
-        raise ValueError("bundled host library does not match host_aarch64.json")
-    for name, digest in record.get("source_sha256", {}).items():
-        if hashlib.sha256((package / name).read_bytes()).hexdigest() != digest:
-            raise ValueError(f"{name} changed; run python tools/build_host_native.py")
-    if list(record.get("source_sha256", {})) != ["host/fnpu_host.c"]:
-        raise ValueError("host library manifest lists unexpected sources")
+        raise ValueError(f"bundled {name} library does not match {name}_aarch64.json")
+    for source, digest in record.get("source_sha256", {}).items():
+        if hashlib.sha256((package / source).read_bytes()).hexdigest() != digest:
+            raise ValueError(
+                f"{source} changed; run python tools/build_host_native.py --lib {name}"
+            )
+    if list(record.get("source_sha256", {})) != [HOST_SOURCES[name], "host/fnpu_common.h"]:
+        raise ValueError(f"{name} library manifest lists unexpected sources")
 
 
 def public_files(root=ROOT):
@@ -125,6 +132,7 @@ def check(root=ROOT):
         raise ValueError("untrusted PR code must not run in a privileged workflow")
     verify_kernel(root / "src/framenpu_cdsp")
     verify_host_native(root / "src/framenpu")
+    verify_host_native(root / "src/framenpu_cdsp", "layout")
     Job.load(root / "examples/vector_add.fjob")
     Model.load(root / "examples/xor.fnpu").plan(4)
     print(

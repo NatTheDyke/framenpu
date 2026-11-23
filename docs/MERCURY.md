@@ -696,20 +696,27 @@ On the device, against the current image on 96 real tracking crops
 
 ## Native host path
 
-With the heads image, the CPU side of a request runs in a small C library
-(`src/framenpu/host/fnpu_host.c`, through ctypes). It covers input checks,
-FP16 conversion, the stem columns, the hint layer (`Gemm_58` → scale →
-FP16), grid staging and readback with the padding checks, and the pooled
-vector heads.
+With the heads image, the CPU side of a request runs in two small C
+libraries, loaded through ctypes:
 
-- **Bundled build:** `data/host_aarch64.so`, built by
-  `tools/build_host_native.py` and recorded in `data/host_aarch64.json`
-  (bytes, SHA-256, source hash, flags, toolchain). It is freestanding (no
+- `src/framenpu/host/fnpu_host.c` holds the model kernels: input checks,
+  FP16 conversion, the hint layer (`Gemm_58` → scale → FP16) and the pooled
+  vector heads.
+- `src/framenpu_cdsp/host/fnpu_layout.c` holds the kernel-layout kernels of
+  the device backend: the stem columns, grid staging and readback with the
+  padding checks, and the window reads of the power verify path.
+
+Both include an identical copy of `host/fnpu_common.h` (FP16 helpers).
+
+- **Bundled build:** `framenpu/data/host_aarch64.so` and
+  `framenpu_cdsp/data/layout_aarch64.so`, built by
+  `tools/build_host_native.py` and recorded in the matching `.json` files
+  (bytes, SHA-256, source hashes, flags, toolchain). It is freestanding (no
   libc, no Python API) and rebuilds byte-identical.
-- **Loading:** only on aarch64, and only after its hash matches the
-  manifest. `MercurySession(native=...)` picks the path: `None` (default)
+- **Loading:** only on aarch64, and only after each library's hash matches
+  its manifest. `MercurySession(native=...)` picks the path: `None` (default)
   uses the library when available, `False` always uses NumPy, and `True`
-  requires the library.
+  requires both libraries.
 - **Numerics:**
   - FP32 → FP16 rounding matches NumPy on all 2³² inputs.
   - Staged bytes are identical to the NumPy path.

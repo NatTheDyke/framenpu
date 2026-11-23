@@ -1,0 +1,44 @@
+{
+  "format": "framenpu-cdsp-layout-native",
+  "abi": 1,
+  "target": "aarch64-linux-gnu",
+  "bytes": 4216,
+  "sha256": "55ae89e9090bac594312b3c30e2c98ebd4cb0941bee2082f8b4c92f1c02e1053",
+  "source_sha256": {
+    "host/fnpu_layout.c": "288bf530fb447557368fad8c959a038d99685cbbd02c1943789c9cac032dee40",
+    "host/fnpu_common.h": "5ed19538c95c799232469549507ce87f54b848006c660f659e60debdf6ebd0f8"
+  },
+  "compiler_flags": [
+    "-O2",
+    "-std=c11",
+    "-fPIC",
+    "-shared",
+    "-nostdlib",
+    "-ffreestanding",
+    "-ffp-contract=off",
+    "-fno-stack-protector",
+    "-fno-unwind-tables",
+    "-fno-asynchronous-unwind-tables",
+    "-fvisibility=hidden",
+    "-Wall",
+    "-Werror",
+    "-fuse-ld=lld",
+    "-Wl,--build-id=none",
+    "-Wl,-z,now",
+    "-Wl,-z,relro",
+    "-Wl,-z,noexecstack",
+    "-Wl,--no-undefined",
+    "-Wl,-soname,libfnpu_layout.so"
+  ],
+  "exports": [
+    "fnpu_layout_abi",
+    "fnpu_read32",
+    "fnpu_stem_columns",
+    "fnpu_grid_pack",
+    "fnpu_grid_unpack"
+  ],
+  "toolchain": {
+    "clang": "clang version 23.1.5",
+    "linker": "LLD 23.1.5 (compatible with GNU linkers)"
+  }
+}

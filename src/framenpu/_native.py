@@ -1,4 +1,7 @@
-"""ctypes bindings for the FrameNPU host kernels (host/fnpu_host.c).
+"""ctypes bindings for the FrameNPU host model kernels (host/fnpu_host.c).
+
+The kernel-layout half (window reads, stem columns, grid pack and unpack) is the device
+backend's library: framenpu_cdsp._layout_native.
 
 The bundled library (data/host_aarch64.so) is loaded only on aarch64, and only after
 its size and SHA-256 match data/host_aarch64.json; anything else returns None and
@@ -16,18 +19,14 @@ import platform
 from pathlib import Path
 
 DATA = Path(__file__).with_name("data")
-ABI = 4
+ABI = 5
 
 _i32, _f32, _p = ctypes.c_int32, ctypes.c_float, ctypes.c_void_p
 _SIGNATURES = {
     "fnpu_abi": (_i32, ()),
-    "fnpu_read32": (None, (_p, _p, _i32, _p)),
     "fnpu_nonfinite32": (_i32, (_p, _i32)),
     "fnpu_to_f16": (_i32, (_p, _p, _i32)),
     "fnpu_from_f16": (None, (_p, _p, _i32)),
-    "fnpu_stem_columns": (None, (_p, _p)),
-    "fnpu_grid_pack": (None, (_p, _i32, _i32, _p, _i32, _p)),
-    "fnpu_grid_unpack": (None, (_p, _i32, _i32, _p, _i32, _p, _p)),
     "fnpu_dense": (None, (_p, _p, _p, _i32, _i32, _i32, _i32, _p, _p)),
     "fnpu_conv1x1": (None, (_p, _p, _p, _i32, _i32, _i32, _i32, _p, _p)),
     "fnpu_avgpool": (None, (_p, _i32, _i32, _i32, _i32, _i32, _i32, _i32, _p)),
@@ -81,34 +80,6 @@ class Host:
     def from_f16(self, x, out):
         self.lib.fnpu_from_f16(_arr(x, "u2"), _arr(out, "f4", x.size, True), x.size)
 
-    # -------------------------------------------------------------- layout
-    def stem_columns(self, img16, out):
-        self.lib.fnpu_stem_columns(_arr(img16, "u2", 128 * 128), _arr(out, "u2", 10 * 4096, True))
-
-    def grid_pack(self, t16, channels, idx, nwords, out):
-        hw = idx.size
-        if channels % 2 or t16.size != channels * hw:
-            raise ValueError("grid pack needs an even channel count and full planes")
-        if idx.size and (int(idx.min()) < 0 or int(idx.max()) >= nwords):
-            raise ValueError("grid index outside the tensor")
-        self.lib.fnpu_grid_pack(
-            _arr(t16, "u2"), channels, hw, _arr(idx, "i4"), nwords,
-            _arr(out, "u2", channels * nwords, True),
-        )
-
-    def grid_unpack(self, raw16, channels, idx, nwords, out, stats):
-        """out (float32 channels x hw); returns (stray nonzero halves, non-finite values)."""
-        hw = idx.size
-        if channels % 2:
-            raise ValueError("grid unpack needs an even channel count")
-        if idx.size and (int(idx.min()) < 0 or int(idx.max()) >= nwords):
-            raise ValueError("grid index outside the tensor")
-        self.lib.fnpu_grid_unpack(
-            _arr(raw16, "u2", channels * nwords), channels, hw, _arr(idx, "i4"), nwords,
-            _arr(out, "f4", channels * hw, True), _arr(stats, "i4", 2, True),
-        )
-        return int(stats[0]), int(stats[1])
-
     # -------------------------------------------------------------- arithmetic
     @staticmethod
     def _batch(x, n_in):
@@ -123,8 +94,14 @@ class Host:
         n_in, n_out = wt32.shape
         nb = self._batch(x, n_in)
         self.lib.fnpu_dense(
-            _arr(wt32, "f4"), _arr(b, "f4", n_out), _arr(x, "f4"), nb, n_out, n_in,
-            int(bool(relu6)), _arr(acc, "f8", nb * n_out, True),
+            _arr(wt32, "f4"),
+            _arr(b, "f4", n_out),
+            _arr(x, "f4"),
+            nb,
+            n_out,
+            n_in,
+            int(bool(relu6)),
+            _arr(acc, "f8", nb * n_out, True),
             _arr(out, "f4", nb * n_out, True),
         )
 
@@ -133,8 +110,14 @@ class Host:
         n_in, n_out = wt32.shape
         nb = self._batch(x, n_in)
         self.lib.fnpu_conv1x1(
-            _arr(wt32, "f4"), _arr(b, "f4", n_out), _arr(x, "f4"), nb, n_out, n_in,
-            int(bool(relu6)), _arr(acc, "f8", nb * n_out, True),
+            _arr(wt32, "f4"),
+            _arr(b, "f4", n_out),
+            _arr(x, "f4"),
+            nb,
+            n_out,
+            n_in,
+            int(bool(relu6)),
+            _arr(acc, "f8", nb * n_out, True),
             _arr(out, "f4", nb * n_out, True),
         )
 
@@ -152,9 +135,17 @@ class Host:
         n_in, n_out = wt32.shape
         nb = self._batch(kp, n_in)
         return self.lib.fnpu_hint(
-            _arr(wt32, "f4"), _arr(b, "f4", n_out), _arr(kp, "f4"), _arr(flags, "f4", nb), nb,
-            n_out, n_in, int(bool(relu6)), _arr(acc, "f8", nb * n_out, True),
-            _arr(tmp, "f4", nb * n_out, True), _arr(out, "u2", nb * n_out, True),
+            _arr(wt32, "f4"),
+            _arr(b, "f4", n_out),
+            _arr(kp, "f4"),
+            _arr(flags, "f4", nb),
+            nb,
+            n_out,
+            n_in,
+            int(bool(relu6)),
+            _arr(acc, "f8", nb * n_out, True),
+            _arr(tmp, "f4", nb * n_out, True),
+            _arr(out, "u2", nb * n_out, True),
         )
 
 

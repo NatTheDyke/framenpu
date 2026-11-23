@@ -13,7 +13,11 @@
   work and scheduling. Image features now come from the link record instead of
   membership tests on the pinned hashes. The shipping DSP kernel sources moved
   from `tests/` to `kernels/`. All six pinned 20 KiB images and their loader
-  rebuild byte for byte.
+  rebuild byte for byte. The host C library is split the same way:
+  `framenpu/host/fnpu_host.c` (model kernels, ABI 5) and
+  `framenpu_cdsp/host/fnpu_layout.c` (window reads, stem columns, grid pack and
+  unpack; `framenpu_cdsp._layout_native`), so the device backend no longer
+  imports `framenpu`.
 
 - The library split has started: [CONTRACTS.md](docs/CONTRACTS.md) specifies
   the four interfaces between framehands, framenpu and the framenpu-cdsp device

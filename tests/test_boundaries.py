@@ -33,6 +33,7 @@ LAYERS = {
         "errors",
         "job",
         "mercury_device",
+        "_layout_native",
         "power",
         "profile",
         "provenance",
@@ -63,8 +64,6 @@ KNOWN = {
     # the early Dense/ReLU model packs matrices with device helpers
     ("model", "device"),
     ("model", "profile"),
-    # power's read-only verify path uses the native host library
-    ("power", "_native"),
 }
 
 
@@ -168,7 +167,7 @@ class BoundaryTests(unittest.TestCase):
 
     def test_device_modules_never_reach_up(self):
         up = {(s, d) for s, d in crossings() if layer_of(s) == "device"}
-        self.assertEqual(up, {("power", "_native")})
+        self.assertEqual(up, set())
 
 
 if __name__ == "__main__":

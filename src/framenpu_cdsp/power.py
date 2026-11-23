@@ -35,6 +35,8 @@ def _rate(mhz):
     if mhz not in HMX_RATES:
         raise ValueError("HMX rate must be one of %s MHz" % sorted(HMX_RATES))
     return mhz
+
+
 _HELD = (
     ("p", (0, 4, 0x10, 0x14, 0x18)),
     ("c", (0x180, 0x184, 0x1A0, 0x200)),
@@ -68,8 +70,12 @@ class _NativeVerify:
             words = np.array([o // 4 for o in offs], np.int32)
             self._words.append(words)
             self.calls.append(
-                (self._views[key].ctypes.data, words.ctypes.data, len(offs),
-                 self.out[at:].ctypes.data)
+                (
+                    self._views[key].ctypes.data,
+                    words.ctypes.data,
+                    len(offs),
+                    self.out[at:].ctypes.data,
+                )
             )
             at += len(offs)
         self.expected = np.array([v for part in held for v in part], np.uint32).tobytes()
@@ -87,8 +93,10 @@ class _NativeVerify:
 
 
 class HmxPower:
-    def __init__(self, profile=PROFILE, mmio_factory=None, *, native=None, ro_factory=None, mhz=None):
-        """native: a _native.Host for the read-only verify path (default: the bundled
+    def __init__(
+        self, profile=PROFILE, mmio_factory=None, *, native=None, ro_factory=None, mhz=None
+    ):
+        """native: a _layout_native.LayoutHost for the read-only verify path (default: the bundled
         library when this maps /dev/mem itself; False: always Python). ro_factory(address)
         gives read-only page buffers instead of /dev/mem (tests). mhz: an HMX_RATES entry
         (default: FNPU_HMX_MHZ, else 192), checked here before any register is touched."""
@@ -228,9 +236,9 @@ class HmxPower:
         if host is None:
             if self._factory is not None:
                 return None  # simulated registers: keep the Python path
-            from framenpu import _native
+            from . import _layout_native
 
-            host = _native.bundled()
+            host = _layout_native.bundled()
             if host is None:
                 return None
         try:
@@ -241,7 +249,10 @@ class HmxPower:
                 pages = {}
                 for key, address in _PAGES.items():
                     mm = mmap.mmap(
-                        self._ro_fd, 4096, flags=mmap.MAP_SHARED, prot=mmap.PROT_READ,
+                        self._ro_fd,
+                        4096,
+                        flags=mmap.MAP_SHARED,
+                        prot=mmap.PROT_READ,
                         offset=address,
                     )
                     self._ro_maps.append(mm)
