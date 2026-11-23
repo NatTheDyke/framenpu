@@ -46,7 +46,7 @@ class SimPluginTests(unittest.TestCase):
                     "lastKeypoints": rng.uniform(0, 1, (1, 42)).astype(np.float32),
                     "useLastKeypoints": np.array([float(k % 2)], np.float32),
                 }
-                for k in range(3)
+                for k in range(4)  # the bundled image's most crops per request
             ]
             det = [{"inputImg": rng.uniform(-1, 2, (1, 1, 160, 160)).astype(np.float32)}]
             got_kp = s.infer("mercury-keypoint-jan18", kp)

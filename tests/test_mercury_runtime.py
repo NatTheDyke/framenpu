@@ -235,6 +235,7 @@ class _Device:
         self.claim(1)
         hook, hook_error = kwargs.get("_while_waiting"), None
         saved = None  # the job arena span, put back after the job as Device._submit does
+        longest = 0  # the longest segment's last tick
         try:
             _prepare(self._transport)
             words, workers = ReplayCompletionTests.result()
@@ -347,6 +348,7 @@ class _Device:
                     self._transport.memory[C.WIN_LO : hi] = window
                     words, workers = ReplayCompletionTests.result(count, len(p.table) // 128)
                     words[12] = status
+                    longest = max(longest, max(words[96:]))
                     if strm:
                         words[13] = nonce  # published after the segment's outputs
                     outs.append(struct.pack("<256I", *words))
@@ -359,8 +361,10 @@ class _Device:
                 out = b"".join(outs).ljust(output_size, b"\0")
                 if self.fail or late:
                     workers[0] = tuple(list(workers[0][:2]) + [1] + list(workers[0][3:]))
-            # the wrapper's time spans every segment of the job
-            ticks = 2000 * (len(out) // C.META_BYTES if opcode != D.ADMIN_OPCODE else 1)
+            # the wrapper's time spans every segment of the job (and covers the longest: a 4-crop
+            # segment of the bundled image ends past 2000 ticks)
+            segs = len(out) // C.META_BYTES if opcode != D.ADMIN_OPCODE else 1
+            ticks = max(2000, longest) * segs
             result = SimpleNamespace(output=out, workers=workers, kernel_reference_ticks=ticks)
             _completion_validator(result)
             if hook_error is not None:
