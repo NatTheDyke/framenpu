@@ -290,12 +290,12 @@ class JobTests(unittest.TestCase):
 
 class PowerTests(unittest.TestCase):
     @staticmethod
-    def make_power(*, broken_identity=False, fail_trigger=False):
+    def make_power(*, broken_identity=False, fail_trigger=False, mhz=None):
         class Simulated(HmxPower):
             def __init__(self):
                 self.views = {}
                 self.fail_trigger = fail_trigger
-                super().__init__(mmio_factory=self.make_view)
+                super().__init__(mmio_factory=self.make_view, mhz=mhz)
 
             def _program(self):
                 return tuple(range(76))
@@ -351,6 +351,35 @@ class PowerTests(unittest.TestCase):
         self.assertEqual(struct.unpack_from("<I", pll, 0x10)[0], 0)
         rsc = power.views[0x323C0000]
         self.assertEqual(bytes(rsc[0x550:0x680]), bytes(304))
+
+    def test_rate_selects_the_firmware_pll_and_root_words(self):
+        for mhz, (pll_l, cfg) in ((None, (20, 0x203)), (192, (20, 0x203)), ("499.2", (26, 0x201))):
+            power = self.make_power(mhz=mhz)
+            power.start()
+            self.assertEqual(power._r(power.p, 0x10), pll_l)
+            self.assertEqual(power._r(power.c, 0x184), cfg)
+            power.close()
+            self.assertEqual(struct.unpack_from("<I", power.views[0x32341000], 0x10)[0], 0)
+
+    def test_unlisted_rate_is_refused_before_any_mapping(self):
+        for mhz in (979.2, 364.8, "fast", 0):
+            with self.assertRaises(ValueError):
+                self.make_power(mhz=mhz)
+
+    def test_environment_selects_the_rate(self):
+        import os
+        old = os.environ.get("FNPU_HMX_MHZ")
+        try:
+            os.environ["FNPU_HMX_MHZ"] = "499.2"
+            self.assertEqual(self.make_power().mhz, 499.2)
+            os.environ["FNPU_HMX_MHZ"] = "672"
+            with self.assertRaises(ValueError):
+                self.make_power()
+        finally:
+            if old is None:
+                os.environ.pop("FNPU_HMX_MHZ", None)
+            else:
+                os.environ["FNPU_HMX_MHZ"] = old
 
     def test_unknown_identity_never_writes_program(self):
         from framenpu import UnsupportedFirmware

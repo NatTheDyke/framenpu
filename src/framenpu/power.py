@@ -13,6 +13,28 @@ from .profile import PROFILE
 # read order. Pages: PLL, clock controller, RSC power sequencer (its status words, then the
 # uploaded 76-word program).
 _PAGES = {"p": 0x32341000, "c": 0x32348000, "s": 0x323C0000}
+
+# HMX operating points from the verified firmware's own tables (domain f023dc68's frequency
+# records at f023db78, PLL records at f01f10f0): MHz -> (PLL L at 19.2 MHz, alpha 0; root CFG =
+# source 2 << 8 | divider-in-half-units - 1). Each record also names a rail level (192: 52,
+# 499.2: 64 = SVS); the DSP core at 1843 MHz already runs above the core table's top level,
+# which is assumed, not verified, to cover HMX. Only these two entries are offered: 192 is the
+# bring-up default; 499.2 is experimental (FNPU_HMX_MHZ=499.2) until a paired device check
+# shows bit-identical outputs.
+HMX_RATES = {192.0: (20, 0x203), 499.2: (26, 0x201)}
+DEFAULT_HMX_MHZ = 192.0
+
+
+def _rate(mhz):
+    if mhz is None:
+        mhz = os.environ.get("FNPU_HMX_MHZ", DEFAULT_HMX_MHZ)
+    try:
+        mhz = float(mhz)
+    except (TypeError, ValueError):
+        raise ValueError("HMX rate must be one of %s MHz" % sorted(HMX_RATES)) from None
+    if mhz not in HMX_RATES:
+        raise ValueError("HMX rate must be one of %s MHz" % sorted(HMX_RATES))
+    return mhz
 _HELD = (
     ("p", (0, 4, 0x10, 0x14, 0x18)),
     ("c", (0x180, 0x184, 0x1A0, 0x200)),
@@ -65,10 +87,12 @@ class _NativeVerify:
 
 
 class HmxPower:
-    def __init__(self, profile=PROFILE, mmio_factory=None, *, native=None, ro_factory=None):
+    def __init__(self, profile=PROFILE, mmio_factory=None, *, native=None, ro_factory=None, mhz=None):
         """native: a _native.Host for the read-only verify path (default: the bundled
         library when this maps /dev/mem itself; False: always Python). ro_factory(address)
-        gives read-only page buffers instead of /dev/mem (tests)."""
+        gives read-only page buffers instead of /dev/mem (tests). mhz: an HMX_RATES entry
+        (default: FNPU_HMX_MHZ, else 192), checked here before any register is touched."""
+        self.mhz = _rate(mhz)
         self.profile = profile
         self._factory = mmio_factory
         self._native, self._ro_factory = native, ro_factory
@@ -167,14 +191,15 @@ class HmxPower:
                     raise RuntimeError("HMX program upload failed")
             self._w(self.s, 0x4BC, 4)
             self._w(self.s, 0x4C0, 40)
-            self._w(self.p, 0x10, 20)
+            pll_l, root_cfg = HMX_RATES[self.mhz]
+            self._w(self.p, 0x10, pll_l)
             self._w(self.p, 0x14, 0)
             self._w(self.p, 4, 1)
             self._w(self.p, 0, self.bp[0] | 4)
             if not self._poll(self.p, 0, 1 << 31, 1 << 31):
                 raise RuntimeError("HMX PLL did not lock")
             self._w(self.p, 0, self._r(self.p, 0) | 1)
-            self._w(self.c, 0x184, 0x203)
+            self._w(self.c, 0x184, root_cfg)
             self._w(self.c, 0x180, self._r(self.c, 0x180) | 1)
             if not self._poll(self.c, 0x180, 1, 0):
                 raise RuntimeError("HMX clock root update did not complete")

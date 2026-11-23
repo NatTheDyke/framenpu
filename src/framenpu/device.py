@@ -9,6 +9,7 @@ import time
 from .errors import JobFailed, RecoveryRequired
 from .job import Job, JobResult
 from .power import HmxPower
+from .axi import AxiClock, rate_from_env
 from .profile import PROFILE, JOB_MAGIC, JOB_ABI, HMX, DIRECT
 from .transport import Transport
 from .dispatch import DirectDispatcher
@@ -45,6 +46,7 @@ class Device:
         dispatch="benchmark",
         _transport=None,
         _power_factory=HmxPower,
+        _axi=None,
     ):
         if dispatch not in ("benchmark", "direct"):
             raise ValueError("dispatch must be 'benchmark' or 'direct'")
@@ -62,6 +64,11 @@ class Device:
         self._direct = None
         self._transport = _transport
         self._power_factory = _power_factory
+        # EXPERIMENTAL job-scoped AXI raise (axi.py): opt-in with FNPU_AXI_MHZ; off by default
+        if _axi is None:
+            mhz = rate_from_env()
+            _axi = AxiClock(mhz) if mhz is not None else False
+        self._axi = _axi or None
         self._lock = threading.RLock()
         self._sequence = time.monotonic_ns() & 0xFFFFFFFF or 1
         self._closed = False
@@ -94,6 +101,8 @@ class Device:
                     else:
                         self._direct.abandon()
             finally:
+                if self._axi is not None and not self._axi.raised:
+                    self._axi.close()
                 if self._transport:
                     self._transport.close()
                 self._closed = True
@@ -237,6 +246,9 @@ class Device:
                         power = self._power_factory()
                         power.start()
                 mark("power_start_ms")
+                if self._axi is not None:
+                    self._axi.raise_()
+                    mark("axi_raise_ms")
                 started = time.monotonic()
                 # Mark before publishing: an interrupted send may already have woken the DSP.
                 published = True
@@ -269,6 +281,9 @@ class Device:
                     _completion_validator(result)
                 mark("read_validate_ms")
                 t.put(p.callback, 0)
+                if self._axi is not None:
+                    self._axi.restore()
+                    mark("axi_restore_ms")
                 if power is not None:
                     power.close()
                     power = None
@@ -289,6 +304,8 @@ class Device:
             except BaseException as exc:
                 if (published and not returned) or isinstance(exc, RecoveryRequired):
                     t.poisoned = True
+                    if self._axi is not None and self._axi.raised:
+                        self._axi.abandon()
                     if power is not None:
                         power.abandon()
                     if _held_power is not None:
@@ -296,6 +313,12 @@ class Device:
                     raise RecoveryRequired(
                         "DSP state requires recovery; payload and clocks were retained, but the stock operation gate may expire"
                     ) from exc
+                if self._axi is not None and self._axi.raised:
+                    try:
+                        self._axi.restore()
+                    except BaseException as cleanup:
+                        t.poisoned = True
+                        raise RecoveryRequired("AXI restore failed; operation gate retained") from cleanup
                 if power is not None:
                     try:
                         power.close()
