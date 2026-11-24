@@ -12,8 +12,8 @@ anything above it. Four interfaces carry all the coupling; each is versioned on 
 | Device plugin ABI | framenpu -> framenpu-cdsp | `abi` = 1 | `framenpu.contracts.DevicePlugin` |
 | Service wire protocol | service client <-> `framenpu serve` | `version` = 4 | the service module |
 
-`tests/test_boundaries.py` enforces the import direction. Its known-violation list is today's
-coupling; it may only shrink.
+Each repository's `tests/test_boundaries.py` enforces the import direction: framenpu imports no
+backend, and framenpu-cdsp imports only `framenpu.contracts` and `framenpu.errors`.
 
 ## Session API
 
@@ -120,8 +120,9 @@ backend; the boundary test (`tests/test_boundaries.py`) holds that.
 
 The backend keeps a pinned table of image hashes it accepts, as now, but code branches on
 capability fields, not on which hash matched. That retires the `*_IMAGE_SHA256` membership
-tests in `mercury_runtime.py`. The backend owns its error types, including `RecoveryRequired`;
-framenpu re-exports them.
+tests in `mercury_runtime.py`. The error types, including `RecoveryRequired`, are
+`framenpu.errors`: framenpu catches them without a backend installed, and framenpu-cdsp raises
+the same classes (`framenpu_cdsp.errors` re-exports them).
 
 ## Service wire protocol
 

@@ -1,7 +1,33 @@
-"""Moved to framenpu_cdsp.errors; this name stays an alias during the library split."""
+"""Error types of framenpu and its device backends (framenpu_cdsp.errors re-exports them)."""
 
-import sys
 
-from framenpu_cdsp import errors as _module
+class FrameNPUError(RuntimeError):
+    pass
 
-sys.modules[__name__] = _module
+
+class UnsupportedFirmware(FrameNPUError):
+    pass
+
+
+class DeviceBusy(FrameNPUError):
+    pass
+
+
+class RecoveryRequired(FrameNPUError):
+    """The DSP may still execute: leave its payload and clocks intact; the stock gate may expire."""
+
+
+class JobFailed(FrameNPUError):
+    pass
+
+
+class InvalidModel(ValueError):
+    pass
+
+
+class UnsupportedOperator(InvalidModel):
+    pass
+
+
+class CompilerError(FrameNPUError):
+    pass

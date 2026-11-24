@@ -1,8 +1,2 @@
 * text=auto eol=lf
-*.bin binary
-*.fjob binary
-*.fnpu binary
-
-# Patch context lines intentionally contain a single space.
-integrations/*.patch -whitespace
 *.so binary

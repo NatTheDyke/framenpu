@@ -1,6 +1,5 @@
-"""Experimental custom Hexagon jobs and HMX inference for Steam Frame."""
+"""Hand-tracking models on the CPU, the Steam Frame's CDSP or its NPU service."""
 
-from .device import Device
 from .errors import (
     CompilerError,
     DeviceBusy,
@@ -11,10 +10,8 @@ from .errors import (
     UnsupportedFirmware,
     UnsupportedOperator,
 )
-from .job import Job, JobResult
-from .model import Clip, Dense, Model, ReLU
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 
 def open(manifests, backend="auto", **options):  # noqa: A001  (framenpu.open is the session API)
@@ -25,13 +22,6 @@ def open(manifests, backend="auto", **options):  # noqa: A001  (framenpu.open is
 
 
 __all__ = [
-    "Device",
-    "Job",
-    "JobResult",
-    "Model",
-    "Dense",
-    "ReLU",
-    "Clip",
     "FrameNPUError",
     "CompilerError",
     "DeviceBusy",

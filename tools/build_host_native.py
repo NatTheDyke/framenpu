@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
-"""Build the FrameNPU host kernels as freestanding shared libraries for ctypes.
+"""Build the FrameNPU host kernels as a freestanding shared library for ctypes.
 
-Two libraries, one per package:
   host    src/framenpu/host/fnpu_host.c         FP16 conversion and the host model layers
-  layout  src/framenpu_cdsp/host/fnpu_layout.c  window reads, stem columns, grid pack/unpack
 
-    python tools/build_host_native.py [--lib host|layout|all]     # bundled aarch64 + manifests
-    python tools/build_host_native.py --lib layout --target x86_64 --output DIR   # local test build
+    python tools/build_host_native.py                                # bundled aarch64 + manifest
+    python tools/build_host_native.py --target x86_64 --output DIR   # local test build
 
-The bundled build writes <package>/data/<lib>_aarch64.so and <lib>_aarch64.json (bytes,
-sha256, source sha256, flags, toolchain). The libraries have no libc or Python dependency, so
+The bundled build writes src/framenpu/data/host_aarch64.so and host_aarch64.json (bytes,
+sha256, source sha256, flags, toolchain). The library has no libc or Python dependency, so
 one build serves every Python on the Frame. Needs clang and ld.lld.
 """
 
@@ -22,7 +20,6 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-PKG = ROOT / "src/framenpu"  # the model library's package (kept for callers)
 BASE_FLAGS = (
     "-O2",
     "-std=c11",
@@ -63,24 +60,8 @@ LIBS = {
             "fnpu_conv1x1_f16",
         ),
     },
-    "layout": {
-        "package": ROOT / "src/framenpu_cdsp",
-        "source": "host/fnpu_layout.c",
-        "format": "framenpu-cdsp-layout-native",
-        "abi_symbol": "fnpu_layout_abi",
-        "soname": "libfnpu_layout.so",
-        "exports": (
-            "fnpu_layout_abi",
-            "fnpu_read32",
-            "fnpu_stem_columns",
-            "fnpu_grid_pack",
-            "fnpu_grid_unpack",
-        ),
-    },
 }
 COMMON = "host/fnpu_common.h"
-FLAGS = BASE_FLAGS + ("-Wl,-soname,libfnpu_host.so",)  # the model library's (kept for callers)
-EXPORTS = LIBS["host"]["exports"]
 
 
 def flags(lib):
@@ -127,14 +108,13 @@ def build(target, out, lib="host"):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("--lib", default="all", choices=("host", "layout", "all"))
     ap.add_argument("--target", default="aarch64", choices=("aarch64", "x86_64"))
     ap.add_argument("--output", help="directory for a local (non-bundled) build")
     a = ap.parse_args()
-    for lib in ("host", "layout") if a.lib == "all" else (a.lib,):
+    for lib in LIBS:
         if a.output is None:
             if a.target != "aarch64":
-                raise SystemExit("only the aarch64 libraries are bundled; pass --output")
+                raise SystemExit("only the aarch64 library is bundled; pass --output")
             data = LIBS[lib]["package"] / "data"
         else:
             data = Path(a.output)

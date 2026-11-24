@@ -39,13 +39,9 @@ jobs:
           python tools/check_distribution.py --dist dist
 
   models:
-    # The whole suite with the real weights present (fetched by hash, tools/fetch_models.py), so
-    # the model-gated tests run the bundled image on the lane simulator, both host paths. No device.
+    # The whole suite with the real weights present (fetched by hash, tools/fetch_models.py), on the
+    # CPU. framenpu-cdsp's CI runs the device path on its lane simulator.
     runs-on: ubuntu-24.04
-    env:
-      FNPU_MERCURY_JOBS: ${{ github.workspace }}/src/framenpu_cdsp/data/mercury
-      FNPU_MERCURY_HEADS_JOBS: ${{ github.workspace }}/src/framenpu_cdsp/data/mercury
-      FNPU_MERCURY_DET_JOBS: ${{ github.workspace }}/src/framenpu_cdsp/data/mercury
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:

@@ -28,8 +28,7 @@ evidence/raw/
 
 # Local continuation notes and device-specific recovery helpers.
 /HANDOFF.md
-/handoff-tools/*
-!/handoff-tools/build_mw.py
+/handoff-tools/
 
 # model weights are never committed
 *.onnx

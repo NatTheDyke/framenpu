@@ -10,63 +10,34 @@ import tomllib
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
-from framenpu import Job, Model, __version__
-from framenpu.provenance import verify_kernel
+from framenpu import __version__
+from framenpu.contracts import load_manifest
 
 PUBLIC_DIRS = (
     "src",
     "docs",
     "tools",
     "tests",
-    "examples",
-    "evidence",
     ".github",
-    "handoff-tools",
-    "integrations",
 )
 IGNORED_PARTS = {"__pycache__", ".ruff_cache", ".pytest_cache", "build", "dist"}
-BINARY_FILES = {
-    "src/framenpu_cdsp/data/runtime.bin",
-    "src/framenpu_cdsp/data/dispatch.bin",
-    "src/framenpu_cdsp/data/dispatch_patch.bin",
-    "src/framenpu/data/host_aarch64.so",
-    "src/framenpu_cdsp/data/layout_aarch64.so",
-    "src/framenpu_cdsp/data/mercury/teacher_link.bin",
-    "src/framenpu_cdsp/data/mercury/teacher_link_loader.fjob",
-    "examples/vector_add.fjob",
-    "examples/xor.fnpu",
-}
+BINARY_FILES = {"src/framenpu/data/host_aarch64.so"}
 
 
-HOST_SOURCES = {"host": "host/fnpu_host.c", "layout": "host/fnpu_layout.c"}
+HOST_SOURCES = {"host": "host/fnpu_host.c"}
 
 
 def verify_host_native(package, name="host"):
-    """A bundled host library (host: framenpu's model kernels, layout: framenpu_cdsp's layout
-    kernels) matches its manifest, and the manifest its sources."""
+    """The bundled host library matches its manifest, and the manifest its sources."""
     record = json.loads((package / f"data/{name}_aarch64.json").read_text())
     lib = (package / f"data/{name}_aarch64.so").read_bytes()
     if record.get("bytes") != len(lib) or record.get("sha256") != hashlib.sha256(lib).hexdigest():
         raise ValueError(f"bundled {name} library does not match {name}_aarch64.json")
     for source, digest in record.get("source_sha256", {}).items():
         if hashlib.sha256((package / source).read_bytes()).hexdigest() != digest:
-            raise ValueError(
-                f"{source} changed; run python tools/build_host_native.py --lib {name}"
-            )
+            raise ValueError(f"{source} changed; run python tools/build_host_native.py")
     if list(record.get("source_sha256", {})) != [HOST_SOURCES[name], "host/fnpu_common.h"]:
         raise ValueError(f"{name} library manifest lists unexpected sources")
-
-
-def verify_bundled_image(package):
-    """The bundled Mercury image matches its link record (the record pins the loader kernel)."""
-    folder = package / "data/mercury"
-    record = json.loads((folder / "link.json").read_text())
-    image = (folder / "teacher_link.bin").read_bytes()
-    linked = record.get("linked", {})
-    if linked.get("sha256") != hashlib.sha256(image).hexdigest() or linked.get(
-        "bytes", len(image)
-    ) != len(image):
-        raise ValueError("bundled Mercury image does not match data/mercury/link.json")
 
 
 def public_files(root=ROOT):
@@ -115,9 +86,7 @@ def check(root=ROOT):
     files = public_files(root)
     for path in files:
         name = path.relative_to(root).as_posix()
-        if name == "HANDOFF.md" or (
-            name.startswith("handoff-tools/") and name != "handoff-tools/build_mw.py"
-        ):
+        if name == "HANDOFF.md" or name.startswith("handoff-tools/"):
             raise ValueError(f"local handoff/recovery helper must not be published: {name}")
         if path.suffix in (".mbn", ".dtb", ".img", ".elf", ".o", ".pcap", ".pcapng"):
             raise ValueError(f"research/firmware artifact must not be published: {name}")
@@ -144,15 +113,12 @@ def check(root=ROOT):
             raise ValueError(f"CI action must use a verified full revision: {action}")
     if "pull_request_target" in ci:
         raise ValueError("untrusted PR code must not run in a privileged workflow")
-    verify_kernel(root / "src/framenpu_cdsp")
     verify_host_native(root / "src/framenpu")
-    verify_host_native(root / "src/framenpu_cdsp", "layout")
-    verify_bundled_image(root / "src/framenpu_cdsp")
-    Job.load(root / "examples/vector_add.fjob")
-    Model.load(root / "examples/xor.fnpu").plan(4)
+    for path in (root / "src/framenpu/manifests").glob("*.json"):
+        load_manifest(path)
     print(
         f"Repository checks passed: {len(files)} public files, MIT metadata, local links, "
-        "payload source hashes and example containers"
+        "host library source hashes and model manifests"
     )
 
 

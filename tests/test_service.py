@@ -2,7 +2,6 @@
 stand-in session (no DSP needed)."""
 
 from pathlib import Path
-import json
 import os
 import socket
 import struct
@@ -405,23 +404,7 @@ class InferManyTests(Stereo3DServiceTests):
         c.close()
 
 
-class BundledTests(unittest.TestCase):
-    def test_the_bundled_image_is_the_qualified_four_crop_build(self):
-        import hashlib
-
-        from framenpu_cdsp import mercury_device as D
-
-        d = D.BUNDLED_JOBS
-        self.assertEqual(
-            hashlib.sha256((d / "teacher_link.bin").read_bytes()).hexdigest(), D.CROPS4_IMAGE_SHA256
-        )
-        rec = json.loads((d / "link.json").read_text())
-        self.assertEqual(rec["linked"]["sha256"], D.CROPS4_IMAGE_SHA256)
-        self.assertEqual(rec["loader"]["sha256"], D.LOADER_SHA256)
-        self.assertEqual(ns._image_crops(str(d)), 4)
-        srv = ns.Server("model", None, "unused", os.getuid(), session_factory=lambda: None)
-        self.assertEqual((srv.jobs, srv.crops), (None, 4))  # the plugin's bundled image
-
+class ManifestInfoTests(unittest.TestCase):
     def test_manifest_info_names_weights_by_hash(self):
         import hashlib
         from unittest.mock import patch

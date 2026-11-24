@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.0
+
+- The device backend moved to its own repository and package, framenpu-cdsp
+  (<https://github.com/NatTheDyke/framenpu-cdsp>), with the kernels, the DSP payloads, the
+  lane simulator, the device documents and evidence, and the early job and matrix API:
+  `framenpu.Device`, `Job`, `JobResult`, `Model`, `Dense`, `ReLU` and `Clip` are now
+  `framenpu_cdsp.Device` and so on, `framenpu.landmark` and the other experiments are
+  `framenpu_cdsp.research.*`, and the CLI's `info`, `build-job`, `run-model` and planner commands
+  are `framenpu-cdsp`'s. The old alias modules (`framenpu.transport`, ...) are gone.
+- framenpu installs and runs alone on the CPU; `pip install framenpu-cdsp` adds the device
+  (`framenpu.devices` finds it). The plugin ABI (1) and the wire protocol (4) are unchanged.
+- `framenpu.errors` owns the error types; `framenpu_cdsp.errors` re-exports the same classes.
+
 ## 0.3.0
 
 - The device backend is now a plugin: `framenpu_cdsp` registers `CDSPPlugin` under the
@@ -124,25 +137,25 @@
   fell from 1.24 to 1.17 ms for 2-crop requests and 1.16 to 1.04 ms for
   3-crop requests.
 
-- Added a [native host path](docs/MERCURY.md#native-host-path) for Mercury
+- Added a [native host path](https://github.com/NatTheDyke/framenpu-cdsp/blob/main/docs/MERCURY.md#native-host-path) for Mercury
   requests: a freestanding C library (bundled for aarch64, hash-pinned,
   reproducible) for input checks, staging, readback and the host heads. It
   matches the NumPy path (staging byte-identical, one FP32-BLAS layer within
   2.4e-7), and session CPU per crop on the Frame fell by about 0.2 ms
   (1.76 → 1.56 ms for 1-crop requests, 1.40 → 1.17 ms for 3-crop requests).
 
-- Moved the [Mercury heatmap head onto the DSP](docs/MERCURY.md#step-2c-heatmap-head-on-the-dsp)
+- Moved the [Mercury heatmap head onto the DSP](https://github.com/NatTheDyke/framenpu-cdsp/blob/main/docs/MERCURY.md#step-2c-heatmap-head-on-the-dsp)
   (`--mheads` image `582d79ce…`): two new descriptor kinds, regrid and 3x3 on
   HMX. On 96 real crops the outputs match the current image to FP16 rounding.
   Host CPU per crop fell from 4.5 to 2.3 ms, and session wall time from 10.6
   to 8.0 ms, with DSP body time 4.64 ms. `MercurySession` accepts either image.
 
-- The tracker fork now [defaults to cores 5–6](docs/MERCURY_LIVE.md#heat-and-cpu-placement).
+- The tracker fork now [defaults to cores 5–6](https://github.com/NatTheDyke/framenpu-cdsp/blob/main/docs/MERCURY_LIVE.md#heat-and-cpu-placement).
   A follow-up session showed the frequency cap adds little on those cores
   (about 0.2 W saved, 2–3 ms slower), and a 5-minute run stayed steady.
   Compositor frame timing under the new placement is not measured yet.
 
-- Traced live thermal peaks to [shared CPU cores](docs/MERCURY_LIVE.md#heat-and-cpu-placement):
+- Traced live thermal peaks to [shared CPU cores](https://github.com/NatTheDyke/framenpu-cdsp/blob/main/docs/MERCURY_LIVE.md#heat-and-cpu-placement):
   Valve's XRService, vrserver and compositor run on the same cores 0–4 as the
   tracker and keep that cluster at 3.15 GHz. The tracker gained an opt-in
   `--uclamp-max` frequency cap; in short alternating trials, cores 5–6 with
@@ -151,7 +164,7 @@
   The live comparison tool now records rail power (MAX34417), per-zone
   temperatures and fan speed per run, and accepts a per-run frequency cap.
 
-- Added [fresh-frame scheduling and camera-idle power release](docs/MERCURY_LIVE.md#fresh-frame-scheduling-and-idle-release)
+- Added [fresh-frame scheduling and camera-idle power release](https://github.com/NatTheDyke/framenpu-cdsp/blob/main/docs/MERCURY_LIVE.md#fresh-frame-scheduling-and-idle-release)
   to the tracker integration. Each capture is submitted at most once, held
   HMX power is released after 0.2 s of blocked admission (camera stall, no
   tracked hand, thermal pause, unplaceable crop), and `--merc-fresh` submits
@@ -162,7 +175,7 @@
   tools gained scheduler variants, start-temperature cooldown and a run
   deadline.
 
-- Ran a [live stereo-camera comparison](docs/MERCURY_LIVE.md) of the integrated
+- Ran a [live stereo-camera comparison](https://github.com/NatTheDyke/framenpu-cdsp/blob/main/docs/MERCURY_LIVE.md) of the integrated
   tracker. Two-crop processing wall time falls 34.09 → 31.23 ms (8.4%), and
   Mercury worker thread CPU time falls 29.66 → 17.76 ms (40.1%). Single-crop
   requests are slightly slower; the short CPU/NPU/NPU/CPU trials do not show a
@@ -171,7 +184,7 @@
   for local pose tracking with `--no-bridge`. CPU remains the default.
 
 - Added an installable `framenpu.mercury_runtime.MercurySession` and a
-  [tracker integration](docs/MERCURY_INTEGRATION.md) for spyjacob's
+  [tracker integration](https://github.com/NatTheDyke/framenpu-cdsp/blob/main/docs/MERCURY_INTEGRATION.md) for spyjacob's
   steam-frame-hand-tracking. Mercury inference is pluggable with CPU as the
   default and fallback. Available crops submit immediately in groups of 1–3,
   without padding or waiting for more observations. The session holds HMX
@@ -180,7 +193,7 @@
   on the Frame, with feature tensors bit-identical to replay qualification
   and the arena, power and service restored.
 
-- Added [1–3 crop replay requests](docs/MERCURY.md#one-to-three-crops-per-request)
+- Added [1–3 crop replay requests](https://github.com/NatTheDyke/framenpu-cdsp/blob/main/docs/MERCURY.md#one-to-three-crops-per-request)
   (`build_teacher_link.py --replay`, frozen image; earlier images unchanged).
   One 55-descriptor table runs the actual crop count, at most 3, without
   padding. The harness mixes counts across rounds, validates per-crop end
@@ -189,14 +202,14 @@
   to qualification and all 16 final hashes unchanged. Four crops, misaligned
   stride and out-of-window stride are rejected; all restoration checks pass.
 
-- Added a [grouped 1x1](docs/MERCURY.md#grouped-1x1)
+- Added a [grouped 1x1](https://github.com/NatTheDyke/framenpu-cdsp/blob/main/docs/MERCURY.md#grouped-1x1)
   (`build_teacher_link.py --pw-group 8`, new image; existing images
   byte-identical). It runs the HMX tiles of 8 column blocks before posting
   them. The unexplained 1x1 post-loop wait turned out to be HMX execution
   (about 0.21 µs per tile load), now paid once per group. Mercury 1x1 drops
   from 3.55 to 3.18 ms and the request from 5.30 to 4.92 ms per crop,
   bit-identical on all 16 cases.
-- Added a [fast depthwise](docs/MERCURY.md#fast-depthwise)
+- Added a [fast depthwise](https://github.com/NatTheDyke/framenpu-cdsp/blob/main/docs/MERCURY.md#fast-depthwise)
   (`build_teacher_link.py --dw-fast`, new image; existing images
   byte-identical and frozen in tests). It unrolls the 3x3 taps, inlines the
   post, keeps the overflow flags in a register per op, and keeps the FP16
@@ -204,21 +217,21 @@
   to 0.98 ms and the whole request from 6.02 to 5.30 ms, bit-identical on
   all 16 cases. Also documents the negative results: copy overlap, flag-slot
   placement, and store-drain probes.
-- [Host time](docs/MERCURY.md#host-time-held-hmx-power-and-2-crop-batches):
+- [Host time](https://github.com/NatTheDyke/framenpu-cdsp/blob/main/docs/MERCURY.md#host-time-held-hmx-power-and-2-crop-batches):
   the Mercury harness records host phases per frame. `--held-power` keeps HMX
   powered for the session through the existing held-power owner, instead of
   a power cycle per request (about 5.9 ms). `--batch 2` runs two crops per
   request, sharing the parameter images (`build_plan(..., batch=2)`). Per-crop
   host wall falls from 14.1 to 7.8 ms against 6.0 ms on the DSP. Final
   tensors are bit-identical on all 16 cases.
-- Added a [fast 1x1 post](docs/MERCURY.md#fast-1x1-post)
+- Added a [fast 1x1 post](https://github.com/NatTheDyke/framenpu-cdsp/blob/main/docs/MERCURY.md#fast-1x1-post)
   (`build_teacher_link.py --pw-fast`, new image; existing images byte-identical
   and frozen in tests). It keeps the overflow flags in a register instead of
   a read-modify-write per output vector next to the HMX output page, which a
   new phase profiler (`--pw-profile`) showed to be the main 1x1 cost. Mercury
   1x1 layers drop from 8.77 to 3.64 ms, and the whole request from 11.15 to
   6.03 ms. Final tensors are bit-identical on all 16 cases.
-- Added a [direct stride-2 depthwise](docs/MERCURY.md#direct-stride-2-depthwise)
+- Added a [direct stride-2 depthwise](https://github.com/NatTheDyke/framenpu-cdsp/blob/main/docs/MERCURY.md#direct-stride-2-depthwise)
   (`build_teacher_link.py --s2-direct`, new image; existing images
   byte-identical). It computes only the kept outputs, dealing input rows into
   even and odd columns, instead of a full stride-1 pass plus scalar
@@ -226,7 +239,7 @@
   (`Conv_14` 8.3x) and the whole request from 15.14 to 11.15 ms. Final tensors
   are bit-identical to the previous image on all 16 cases, with every check
   and control passing.
-- Ran the [whole Mercury convolution network on the DSP](docs/MERCURY.md#step-2b-the-whole-convolution-network-on-the-dsp)
+- Ran the [whole Mercury convolution network on the DSP](https://github.com/NatTheDyke/framenpu-cdsp/blob/main/docs/MERCURY.md#step-2b-the-whole-convolution-network-on-the-dsp)
   (step 2b): `Conv_0 .. Conv_139` as one 55-descriptor request on the same
   image. The stem runs as an HMX pointwise over host im2col columns, and the
   64x64 expansion is banded by channel groups instead of rows. 15.14 ms DSP
@@ -236,7 +249,7 @@
   first pilot stopped on a depthwise bound failure (1.26). The cause is the
   kernel's qf16 accumulation flushing sub-2^-14 products, and the depthwise
   bound now carries that absolute term (18·2^-14).
-- Ran the [Mercury keypoint backbone on the DSP](docs/MERCURY.md#step-2a-backbone-on-the-dsp)
+- Ran the [Mercury keypoint backbone on the DSP](https://github.com/NatTheDyke/framenpu-cdsp/blob/main/docs/MERCURY.md#step-2a-backbone-on-the-dsp)
   (step 2a): `Conv_19 .. Conv_139` (36 ops, 32x32 to 160x8x8) as one
   resident request through the linked image, with an even-phase stride-2
   build option (`--s2-even`, new image only; teacher images unchanged) and a
@@ -245,49 +258,49 @@
   frames are bit-identical to per-op qualification; keypoints with host heads
   drift 0.147 px median / 0.491 px max from FP32, with no `is_hand` flips.
   All 677 restoration audits pass. The 64x64 prefix still runs on the host.
-- Started the [Mercury keypoint](docs/MERCURY.md) port (offline step 1): a
+- Started the [Mercury keypoint](https://github.com/NatTheDyke/framenpu-cdsp/blob/main/docs/MERCURY.md) port (offline step 1): a
   dependency-free ONNX reader, a validated lowering of Monado's pinned
   `grayscale_keypoint_jan18.onnx` (FP32 matches ONNX Runtime within 7.6e-6),
   an FP16 HMX/HVX contract model (keypoint p95 0.46 px of a 128 px crop, no
   `is_hand` acceptance flips) and a teacher-calibrated DSP forecast (about
   19 ms per crop with heads on the host). No weights are redistributed; no
   DSP code or device run.
-- Evaluated [128/160/192 crop inputs](docs/TEACHER_RESOLUTION.md) against the
+- Evaluated [128/160/192 crop inputs](https://github.com/NatTheDyke/framenpu-cdsp/blob/main/docs/TEACHER_RESOLUTION.md) against the
   unchanged strict FP32 224 teacher. On the only presence-positive crop,
   128 input lowers presence from 0.999938 to 0.255875 and shifts landmarks
   by 28.50 px mean. Added a CPU-only reproducible runner, resampling control,
   statistics and tests. These are output-drift measurements without labeled
   ground truth; the DSP implementation and default input resolution are unchanged.
-- Added optional [single-plane 224x224 grayscale input](docs/TEACHER_GRAYSCALE.md)
+- Added optional [single-plane 224x224 grayscale input](https://github.com/NatTheDyke/framenpu-cdsp/blob/main/docs/TEACHER_GRAYSCALE.md)
   via `--stem-gray`. Input transfer falls from 301,056 to 100,352 bytes with
   byte-identical prefix outputs and heads. Paired DSP prefix time falls from
   10.574 to 10.419 ms; host-wall medians remain effectively unchanged at
   41.81 ms. All 677 restoration audits pass. Original weights and RGB vector
   machine code remain unchanged; filter-folding limits are documented.
 - Vectorized the banded prefix's max-pool and stride-2 output stitching
-  behind `--stem-vector` ([results](docs/TEACHER_STEM_VECTOR.md)). Their combined
+  behind `--stem-vector` ([results](https://github.com/NatTheDyke/framenpu-cdsp/blob/main/docs/TEACHER_STEM_VECTOR.md)). Their combined
   time falls from 5.215 to 0.056 ms. Paired full-frame prefix time falls from
   15.676 to 10.559 ms, and host wall from 47.942 to 42.201 ms. Outputs remain
   byte-identical; all 992 restoration audits pass. The scalar image remains
   byte-identical, and the vector image fits the same 10,800-byte footprint.
-- Added an optional [DSP prefix profiler](docs/TEACHER_STEM_PROFILE.md) with
+- Added an optional [DSP prefix profiler](https://github.com/NatTheDyke/framenpu-cdsp/blob/main/docs/TEACHER_STEM_PROFILE.md) with
   per-operator, HMX/fence, depthwise, halo and movement measurements. Scalar
   pooling/stitching and decimation consume 5.21 ms; the two depthwise
   operators consume 2.06 ms. Baseline machine code and all profiled outputs
   remain unchanged; 800 restoration audits pass.
-- Added a paired [RGB-to-head prefix comparison](docs/TEACHER_PREFIX_COMPARISON.md).
+- Added a paired [RGB-to-head prefix comparison](https://github.com/NatTheDyke/framenpu-cdsp/blob/main/docs/TEACHER_PREFIX_COMPARISON.md).
   A native ncnn FP32 CPU prefix plus DSP tail measures 29.02 ms host wall versus
   47.51 ms for the two-request DSP path on the same pinned host core. Both
   pass the existing four-crop accuracy ceilings; the CPU FP16 hybrid fails
   one crop's RMS ceiling. Kernel code is unchanged.
-- Added a qualified [banded RGB prefix](docs/TEACHER_STEM.md), including the
+- Added a qualified [banded RGB prefix](https://github.com/NatTheDyke/framenpu-cdsp/blob/main/docs/TEACHER_STEM.md), including the
   max-pool skip branch, feeding the resident tail and heads in two requests.
   Prefix depthwise reductions and original biases use QFloat32 arithmetic
   with FP16 tensor storage. Median DSP time is 15.71 + 16.73 ms; complete
   normalized-RGB-to-head host wall is 56.75 ms. All frozen accuracy ceilings,
   384 restoration audits and 276 offline tests pass.
 - Added optional resident global-average pooling and four FP32 heads
-  ([TEACHER_HEADS.md](docs/TEACHER_HEADS.md)). The qualified tail stays in one
+  ([TEACHER_HEADS.md](https://github.com/NatTheDyke/framenpu-cdsp/blob/main/docs/TEACHER_HEADS.md)). The qualified tail stays in one
   request and returns 512 bytes; DSP time is 16.74 ms. Host wall through all
   outputs is 29.26 ms versus 37.91 ms for the current Python host-head path.
   All frozen accuracy ceilings and 238 restoration audits pass. The 112x112
@@ -296,13 +309,13 @@
   Python matrix, and the layer-chain check skips when it is absent locally.
   Applied the repository's formatting rules and fixed two lint failures.
 - Restored selectable four-block coefficient sharing in the linked teacher
-  depthwise loop ([TEACHER_DW4.md](docs/TEACHER_DW4.md)). Hardware outputs remain
+  depthwise loop ([TEACHER_DW4.md](https://github.com/NatTheDyke/framenpu-cdsp/blob/main/docs/TEACHER_DW4.md)). Hardware outputs remain
   bit-identical, but the median tail is 15.85 ms versus 15.77 ms for two blocks
   on the same boot, so two blocks remains the default. Both variants pass all
   controls and 719 restoration audits in total. Added the static operation
   count and addressing assessment for sampled-only stride-2 row tiles.
 - Added an optional resident stride-2 teacher-tail path
-  ([TEACHER_STRIDE2.md](docs/TEACHER_STRIDE2.md)), qualified on hardware. It keeps
+  ([TEACHER_STRIDE2.md](https://github.com/NatTheDyke/framenpu-cdsp/blob/main/docs/TEACHER_STRIDE2.md)), qualified on hardware. It keeps
   all 42 compute ops in one 45-descriptor linked request, with an explicit
   two-request split option. The three stride-2 outputs stay in VTCM; the
   qualified per-layer kernels and default linked image remain byte-identical.
@@ -310,14 +323,14 @@
   is 15.80 ms in-DSP and 26.69 ms host wall (previous linked run: 18.80 ms
   and 76.85 ms). All controls and 359 restoration audits pass. The two-request
   option remains checked offline only.
-- Teacher tail through a linked operator image ([TEACHER_LINK.md](docs/TEACHER_LINK.md)).
+- Teacher tail through a linked operator image ([TEACHER_LINK.md](https://github.com/NatTheDyke/framenpu-cdsp/blob/main/docs/TEACHER_LINK.md)).
   The resident and stride-2 kernels are linked unchanged into one image,
   sealed in the owned 16 KiB reservation at 0x1ff0000. A 1,960-byte slot
   loader enters it without per-request publication. Per frame, in-DSP time
   drops from 30.0 ms to 18.8 ms, and per-job overhead from 1.6 ms to
   0.03-0.06 ms. Linked frames are bit-identical to qualification on all four
   corpus crops. Existing loader and kernel builds are byte-identical.
-- Resident teacher tail ([TEACHER_RESIDENT.md](docs/TEACHER_RESIDENT.md)).
+- Resident teacher tail ([TEACHER_RESIDENT.md](https://github.com/NatTheDyke/framenpu-cdsp/blob/main/docs/TEACHER_RESIDENT.md)).
   One opcode-111 kernel runs whole sequences of 1x1 (HMX) and stride-1
   depthwise (HVX) layers, with tensors kept in VTCM, from a natively validated
   op table. The stride-2 layers stay as opcode-110 jobs. Per frame this is 7
@@ -326,7 +339,7 @@
   bit-identical to the per-layer qualification run on all four corpus crops,
   and accuracy is unchanged.
 - Ran the unchanged teacher in FP16 on the DSP from the 56x56 stage to the
-  heads ([TEACHER_TAIL_FP16.md](docs/TEACHER_TAIL_FP16.md)): 42 jobs per crop
+  heads ([TEACHER_TAIL_FP16.md](https://github.com/NatTheDyke/framenpu-cdsp/blob/main/docs/TEACHER_TAIL_FP16.md)): 42 jobs per crop
   (HMX 1x1 with fused bias, clip and residual; HVX QFloat16 depthwise, stride
   1 and 2) on the four corpus crops. Every check passed. Each layer stayed
   within its FP16 bound (worst ratio 0.49). The heads stayed within the frozen
@@ -334,7 +347,7 @@
   tensors exceed the FP32-calibrated per-layer tolerances. Compute is 10.1 ms
   per crop; activation copies and the 42 job wrappers dominate the rest.
 - Re-forecast the unchanged public teacher on HMX + HVX
-  ([TEACHER_HMX_HVX.md](docs/TEACHER_HMX_HVX.md)). Measured single-thread HVX
+  ([TEACHER_HMX_HVX.md](https://github.com/NatTheDyke/framenpu-cdsp/blob/main/docs/TEACHER_HMX_HVX.md)). Measured single-thread HVX
   issue rates (1.84 GHz core; about 2 cycles per load, `valign` or QFloat16
   multiply+add) and two FP16 depthwise probes over all 12 stride-1 teacher
   depthwise layers. v2 (guard-column rows, pre-splatted coefficients, four
@@ -343,7 +356,7 @@
   about 7-10 ms with no retraining. Activation traffic in the 112x112 stage,
   job count, stride-2 depthwise and FP16 accuracy remain to be proven.
 - Added the v3 layer-chain executor prototype
-  ([HMX_SPATIAL_BLOCK.md](docs/HMX_SPATIAL_BLOCK.md#v3-layer-chain-executor)).
+  ([HMX_SPATIAL_BLOCK.md](https://github.com/NatTheDyke/framenpu-cdsp/blob/main/docs/HMX_SPATIAL_BLOCK.md#v3-layer-chain-executor)).
   It runs whole fused 3x3+1x1 layers from runtime descriptors, with weights,
   tables and activations in a window of the persistent DDR arena. Each layer
   writes the next layer's input on the device. The five-layer 14x14 chain
@@ -360,7 +373,7 @@
   stride-2 and stem layers. HMX operands need more than 128 B alignment, so
   v2 aligns them to 4 KiB.
 - Mapped VTCM ownership from the firmware and a read-only all-VTCM survey
-  ([VTCM_MAP.md](docs/VTCM_MAP.md)). FeatureNN worker-0/1 scratch
+  ([VTCM_MAP.md](https://github.com/NatTheDyke/framenpu-cdsp/blob/main/docs/VTCM_MAP.md)). FeatureNN worker-0/1 scratch
   `0x31002000`-`0x311e0000` (1,912 KiB) is per-request scratch, serialized
   with direct jobs. An approved write canary passed: fill and verify, host
   pattern check, persistence across two sessions, and no change elsewhere

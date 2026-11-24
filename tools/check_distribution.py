@@ -2,7 +2,6 @@
 
 import argparse
 from email.parser import BytesParser
-import json
 import os
 from pathlib import Path
 import subprocess
@@ -56,32 +55,16 @@ def main(argv=None):
         if metadata.get("License-Expression") != "MIT":
             raise ValueError("wheel license metadata is missing")
         for suffix in (
-            "sdk/entry.S",
-            "sdk/hmx.S",
-            "sdk/runtime.c",
-            "sdk/link.ld",
-            "sdk/include/framenpu.h",
-            "sdk/include/fnpu_readback.h",
-            "sdk/dispatch.S",
-            "sdk/dispatch.ld",
-            "sdk/dispatch_patch.c",
-            "data/dispatch.bin",
-            "data/dispatch_patch.bin",
-            "data/runtime.bin",
-            "data/runtime.json",
-            "resident.py",
-            "resident_gemm.py",
-            "convolution.py",
-            "landmark.py",
-            "resident_landmark.py",
+            "host/fnpu_host.c",
+            "host/fnpu_common.h",
+            "data/host_aarch64.so",
+            "data/host_aarch64.json",
+            "manifests/mercury-ft7.json",
         ):
-            package = (
-                "framenpu_cdsp"
-                if suffix.startswith(("sdk/", "data/")) or suffix == "resident.py"
-                else "framenpu"
-            )
-            if f"{package}/{suffix}" not in names:
-                raise ValueError(f"wheel is missing SDK/payload resource: {suffix}")
+            if f"framenpu/{suffix}" not in names:
+                raise ValueError(f"wheel is missing package resource: {suffix}")
+        if any(n.startswith("framenpu_cdsp") for n in names):
+            raise ValueError("the device backend ships in framenpu-cdsp, not here")
     env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTHONNOUSERSITE="1")
     env.pop("PYTHONPATH", None)
     with tempfile.TemporaryDirectory(prefix="framenpu-release-") as temporary:
@@ -110,50 +93,20 @@ def main(argv=None):
         work.mkdir()
         run([python, "-m", "pip", "install", "--no-index", "--no-deps", rebuilt], cwd=work, env=env)
         version = run([cli, "--version"], cwd=work, env=env).strip()
+        # importable alone: no backend and no third-party package
         run(
             [
                 python,
                 "-c",
-                "import framenpu.convolution, framenpu.landmark, framenpu.resident_landmark; from framenpu.mercury_runtime import MercurySession; from framenpu.provenance import verify_kernel; verify_kernel(); import sys; assert not any(n in sys.modules for n in ('mercury_layout', 'teacher_resident_layout', 'teacher_tail_layout', 'hmx_block_layout'))",
+                "import framenpu.errors, framenpu.devices as d; from framenpu import contracts; "
+                "from framenpu.onnx_graph import InvalidModel; assert d.available() == []",
             ],
             cwd=work,
             env=env,
         )
-        created = work / "generated.fnpu"
-        run([python, source / "examples/make_xor.py", created], cwd=work, env=env)
-        plan = json.loads(
-            run([cli, "inspect-model", created, "--batch-size", "4"], cwd=work, env=env)
-        )
-        if plan["name"] != "xor" or len(plan["plan"]) != 2:
-            raise ValueError("installed-wheel model example failed")
-        inventory = json.loads(
-            run([cli, "inspect-ncnn", source / "examples/dense.param"], cwd=work, env=env)
-        )
-        if inventory["layers"] != 2 or inventory["native_ncnn_loading"] is not False:
-            raise ValueError("installed-wheel ncnn inspection failed")
-        resident = json.loads(
-            run(
-                [cli, "plan-resident", source / "examples/resident_residual.json"],
-                cwd=work,
-                env=env,
-            )
-        )
-        if resident["execution_supported"] is not False or resident["required_bytes"] != 187392:
-            raise ValueError("installed-wheel resident storage planning failed")
-        run(
-            [
-                python,
-                "-c",
-                "from framenpu.resident_gemm import proof_layout; assert proof_layout()['required_bytes'] == 32768",
-            ],
-            cwd=work,
-            env=env,
-        )
-        for example in ("run_custom.py", "run_xor.py"):
-            run([python, source / "examples" / example, "--help"], cwd=work, env=env)
         print(
             f"Distribution checks passed: {version}; sdist rebuild, isolated wheel installation, "
-            "CLI, model, resident planner, SDK resources and examples from an unrelated directory"
+            "CLI and imports without a backend from an unrelated directory"
         )
 
 
