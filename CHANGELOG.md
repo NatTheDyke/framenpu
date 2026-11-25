@@ -1,10 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.4.2
 
 - A client the service turns away always gets the reason ("busy: another tracker owns the NPU").
   The service closes right after saying it, so a client that had not sent its request yet reported
   a broken pipe instead.
+- A client that connects while the previous one's session is still closing waits for it (up to
+  1.5 s) instead of being told busy, which latched a quickly restarted tracker to the CPU. A
+  second client beside a connected one is still turned away at once.
 
 ## 0.4.1
 

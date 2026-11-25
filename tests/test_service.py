@@ -97,7 +97,7 @@ def det_crop(v):
     return {"inputImg": np.full((1, 1, 160, 160), v, np.float32)}
 
 
-class ServiceTests(unittest.TestCase):
+class ServiceTestBase(unittest.TestCase):
     s3d = det = None
 
     def setUp(self):
@@ -126,34 +126,13 @@ class ServiceTests(unittest.TestCase):
         self.t.join(5)
         os.rmdir(self.dir)
 
-    def client(self):
-        """Client(), waiting out the moment in which the service still closes the previous one's
-        session (it answers busy until then)."""
-        for _ in range(200):
-            try:
-                return ns.Client(self.path)
-            except RuntimeError as exc:
-                if "busy" not in str(exc):
-                    raise
-            time.sleep(0.01)
-        self.fail("the service stayed busy")
-
     def reply(self, send):
-        """What the service answers to a raw request on a fresh connection, b"" if it drops it;
-        retried while it is still closing the previous client (busy)."""
-        for _ in range(200):
-            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
-                s.settimeout(2)
-                s.connect(self.path)
-                try:
-                    send(s)
-                    got = s.recv(256)
-                except (BrokenPipeError, ConnectionResetError):  # turned away before the request
-                    got = b"busy"
-            if b"busy" not in got:
-                return got
-            time.sleep(0.01)
-        self.fail("the service stayed busy")
+        """What the service answers to a raw request on a fresh connection, b"" if it drops it."""
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+            s.settimeout(2)
+            s.connect(self.path)
+            send(s)
+            return s.recv(256)
 
     def wait_closed(self, n):
         for _ in range(200):
@@ -161,6 +140,8 @@ class ServiceTests(unittest.TestCase):
                 return
             time.sleep(0.01)
 
+
+class ServiceTests(ServiceTestBase):
     def test_ping_reports_each_models_manifest(self):
         c = ns.Client(self.path)
         want = {0: {"name": None, "weights_sha256": None, "max_crops": self.srv.crops}}
@@ -276,7 +257,7 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(self.reply(lambda s: ns.send_msg(s, {"op": "infer", "n": 5})), b"")
         # absurd header length: dropped
         self.assertEqual(self.reply(lambda s: s.sendall(struct.pack("<I", 1 << 30))), b"")
-        c = self.client()  # the service is still fine
+        c = ns.Client(self.path)  # the service is still fine
         self.assertEqual(len(c.infer([feed(2)])), 1)
         c.close()
 
@@ -371,7 +352,7 @@ class DetectorServiceTests(ServiceTests):
         ):
             msg = {"op": "infer_frame", "reqs": reqs}
             self.assertEqual(self.reply(lambda s, msg=msg: ns.send_msg(s, msg)), b"", reqs)
-        c = self.client()
+        c = ns.Client(self.path)
         self.assertEqual(len(c.infer_frame([(2, [det_crop(1)])])[0]), 1)
         c.close()
 
@@ -420,9 +401,111 @@ class InferManyTests(Stereo3DServiceTests):
         ):
             msg = {"op": "infer_many", "reqs": reqs}
             self.assertEqual(self.reply(lambda s, msg=msg: ns.send_msg(s, msg)), b"", reqs)
-        c = self.client()
+        c = ns.Client(self.path)
         self.assertEqual(len(c.infer_many([(1, [pair(1)])])[0]), 1)
         c.close()
+
+
+class ReconnectTests(ServiceTestBase):
+    """a client that connects while the previous one's session is still closing"""
+
+    def setUp(self):
+        super().setUp()
+        self.closing, self.may_close = threading.Event(), threading.Event()
+        self.may_close.set()  # only leave() holds a session in its close
+        self.events = events = []
+
+        def close(session):
+            events.append("closing")
+            self.closing.set()
+            self.may_close.wait(5)
+            FakeSession.closed += 1
+            events.append("closed")
+
+        init = FakeSession.__init__
+
+        def opened(session, *a, **k):
+            events.append("opened")
+            init(session, *a, **k)
+
+        for name, f in (("close", close), ("__init__", opened)):
+            p = patch.object(FakeSession, name, f)
+            p.start()
+            self.addCleanup(p.stop)
+
+    def tearDown(self):
+        self.may_close.set()
+        super().tearDown()
+
+    def leave(self):
+        """a client that used its session hangs up; the service is now closing that session"""
+        c = ns.Client(self.path)
+        c.infer([feed(1)])
+        self.may_close.clear()
+        self.closing.clear()
+        c.close()
+        self.assertTrue(self.closing.wait(2))
+
+    def test_it_waits_and_gets_its_own_session(self):
+        self.leave()
+        threading.Timer(0.5, self.may_close.set).start()
+        t0 = time.monotonic()
+        c = ns.Client(self.path)
+        self.assertGreater(time.monotonic() - t0, 0.3)
+        self.assertEqual(len(c.infer([feed(2)])), 1)
+        self.assertEqual(self.events, ["opened", "closing", "closed", "opened"])
+        c.close()
+
+    def test_it_is_told_busy_before_its_ping_times_out(self):
+        self.leave()
+        with self.assertRaisesRegex(RuntimeError, "busy: the previous session"):
+            ns.Client(self.path)
+        self.assertEqual(self.events, ["opened", "closing"])  # nothing opened meanwhile
+
+    def test_only_one_waits(self):
+        self.leave()
+        got = []
+        t = threading.Thread(target=lambda: got.append(ns.Client(self.path)))
+        t.start()
+        time.sleep(0.4)
+        with self.assertRaisesRegex(RuntimeError, "busy: another tracker"):
+            ns.Client(self.path)
+        self.may_close.set()
+        t.join(5)
+        self.assertEqual(len(got[0].infer([feed(2)])), 1)
+        got[0].close()
+
+    def test_one_that_gave_up_frees_the_place(self):
+        self.leave()
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+            s.connect(self.path)
+            time.sleep(0.4)
+        threading.Timer(0.5, self.may_close.set).start()
+        c = ns.Client(self.path)
+        self.assertEqual(len(c.infer([feed(2)])), 1)
+        c.close()
+
+    def test_a_connected_client_is_not_waited_for(self):
+        c = ns.Client(self.path)
+        c.infer([feed(1)])
+        t0 = time.monotonic()
+        with self.assertRaisesRegex(RuntimeError, "busy: another tracker"):
+            ns.Client(self.path)
+        self.assertLess(time.monotonic() - t0, 1.0)
+        c.close()
+
+    def test_another_user_does_not_wait(self):
+        self.leave()
+        with patch.object(self.srv, "_peer_ok", lambda conn: (False, (0, 12345))):
+            with self.assertRaisesRegex(RuntimeError, "busy: another tracker"):
+                ns.Client(self.path)
+
+    def test_stopping_turns_the_waiting_client_away(self):
+        self.leave()
+        threading.Timer(0.4, lambda: setattr(self.srv, "stop", True)).start()
+        threading.Timer(0.8, self.may_close.set).start()
+        with self.assertRaisesRegex(RuntimeError, "stopping"):
+            ns.Client(self.path)
 
 
 class ClientExchangeTests(unittest.TestCase):

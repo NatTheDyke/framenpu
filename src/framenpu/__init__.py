@@ -11,7 +11,7 @@ from .errors import (
     UnsupportedOperator,
 )
 
-__version__ = "0.4.1"
+__version__ = "0.4.2"
 
 
 def open(manifests, backend="auto", **options):  # noqa: A001  (framenpu.open is the session API)

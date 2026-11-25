@@ -22,7 +22,8 @@ Design rules
 - The model and job image are the service's own (root-owned, hash-verified by FrameNPU);
   a client cannot choose them.
 - One client at a time (the DSP has a single owner). A second client is told "busy" and
-  closed, and falls back to CPU. The session opens on the client's first request and closes
+  closed, and falls back to CPU. One that arrives while the previous client is gone but its
+  session is still closing waits for that (up to CLOSE_WAIT) instead. The session opens on the client's first request and closes
   when it disconnects, so a stopped tracker leaves the DSP exactly as before.
 - Any FrameNPU error closes the session and is reported; the client latches to CPU.
 
@@ -56,9 +57,11 @@ import json
 import logging
 import os
 import pwd
+import select
 import signal
 import socket
 import struct
+import time
 
 # One BLAS thread: the host heads are small matmuls, and OpenBLAS worker threads spin between them.
 # Measured on the Frame (2026-11-20): 11.8 -> 4.4 ms of service CPU per crop.
@@ -93,6 +96,7 @@ KP_CROPS = 3  # keypoint crops per request unless the service reports more ("cro
 MAX_FRAME = 2  # requests per infer_frame (FrameNPU MULTI_SEGMENTS)
 MAX_SEQ = 4  # requests per infer_many (two hands: ft7 3 + 1 crops, the 3D pairs)
 MAX_HEADER = 1 << 16
+CLOSE_WAIT = 1.5  # s a new client waits for the previous one's session to close (its ping: 2 s)
 LOG = logging.getLogger("npuservice")
 
 
@@ -532,17 +536,24 @@ class Server:
                     resp, data = {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)}, b""
                 send_msg(conn, resp, data)
         finally:
+            try:
+                conn.shutdown(socket.SHUT_RDWR)  # seen by the client and by _serve_one's duplicate
+            except OSError:
+                pass
             conn.close()
             self._close_session("client disconnected")
 
     def run(self):
         self.listen()
+        waiting = None
         try:
             while not self.stop:
-                try:
-                    conn, _ = self.lsock.accept()
-                except socket.timeout:
-                    continue
+                conn, waiting = waiting, None
+                if conn is None:
+                    try:
+                        conn, _ = self.lsock.accept()
+                    except socket.timeout:
+                        continue
                 ok, peer = self._peer_ok(conn)
                 if not ok:
                     LOG.warning("refused client pid %d uid %d", *peer)
@@ -550,9 +561,11 @@ class Server:
                     continue
                 LOG.info("client pid %d connected", peer[0])
                 self.lsock.settimeout(0.0)  # while serving, turn away a second client at once
-                self._serve_one(conn)
+                waiting = self._serve_one(conn)
                 self.lsock.settimeout(1.0)
         finally:
+            if waiting is not None:
+                self._turn_away(waiting, "the service is stopping")
             self._close_session("service stopping")
             self.lsock.close()
             try:
@@ -560,28 +573,48 @@ class Server:
             except OSError:
                 pass
 
+    def _turn_away(self, conn, why):
+        try:
+            send_msg(conn, {"ok": False, "error": why})
+        except OSError:
+            pass
+        conn.close()
+
+    @staticmethod
+    def _hung_up(conn):
+        p = select.poll()
+        p.register(conn, 0)  # POLLHUP and POLLERR are always reported
+        return bool(p.poll(0))
+
     def _serve_one(self, conn):
+        """Serve conn to its end; the client that came while its session was closing, or None."""
         import threading
 
+        mine = conn.dup()  # the serving thread closes conn, whose number may then be reused
         t = threading.Thread(target=self.serve_client, args=(conn,), daemon=True)
         t.start()
+        waiting, until = None, 0.0
         while t.is_alive() and not self.stop:
+            if waiting is not None and (time.monotonic() >= until or self._hung_up(waiting)):
+                self._turn_away(waiting, "busy: the previous session is still closing")
+                waiting = None
             try:
                 extra, _ = self.lsock.accept()
             except (BlockingIOError, socket.timeout):
                 t.join(0.2)
                 continue
-            try:
-                send_msg(extra, {"ok": False, "error": "busy: another tracker owns the NPU"})
-            except OSError:
-                pass
-            extra.close()
+            if waiting is None and self._hung_up(mine) and self._peer_ok(extra)[0]:
+                waiting, until = extra, time.monotonic() + CLOSE_WAIT
+            else:
+                self._turn_away(extra, "busy: another tracker owns the NPU")
         if t.is_alive():  # stopping: unblock the client thread
             try:
-                conn.shutdown(socket.SHUT_RDWR)
+                mine.shutdown(socket.SHUT_RDWR)
             except OSError:
                 pass
             t.join(5.0)
+        mine.close()
+        return waiting
 
 
 def main(argv=None):
