@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- A client the service turns away always gets the reason ("busy: another tracker owns the NPU").
+  The service closes right after saying it, so a client that had not sent its request yet reported
+  a broken pipe instead.
+
 ## 0.4.1
 
 - NumPy (>=1.26) is a declared dependency. The service, the device host path and the CPU backend

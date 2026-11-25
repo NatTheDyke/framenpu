@@ -10,6 +10,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 
@@ -131,8 +132,6 @@ class ServiceTests(unittest.TestCase):
         for _ in range(200):
             try:
                 return ns.Client(self.path)
-            except ConnectionError:  # turned away before the ping
-                pass
             except RuntimeError as exc:
                 if "busy" not in str(exc):
                     raise
@@ -194,7 +193,6 @@ class ServiceTests(unittest.TestCase):
 
     def test_image_crops_come_from_the_plugins_capabilities(self):
         from types import SimpleNamespace
-        from unittest.mock import patch
 
         from framenpu import devices
 
@@ -245,9 +243,23 @@ class ServiceTests(unittest.TestCase):
 
     def test_second_client_is_turned_away_and_falls_back_to_cpu(self):
         c1 = ns.Client(self.path)
-        # told busy, or (the service closes right after saying so) cut off while sending the ping
-        with self.assertRaises((RuntimeError, ConnectionError)):
+        with self.assertRaisesRegex(RuntimeError, "busy"):
             ns.Client(self.path)
+        c1.close()
+
+    def test_a_client_cut_off_before_its_request_is_still_told_busy(self):
+        c1 = ns.Client(self.path)
+        send = ns.send_msg
+
+        def late(sock, header, payload=b""):
+            if "op" in header:
+                time.sleep(0.5)  # the service has answered and closed by now
+            send(sock, header, payload)
+
+        with patch.object(ns, "send_msg", late):
+            with self.assertRaisesRegex(RuntimeError, "busy") as caught:
+                ns.Client(self.path)
+        self.assertIsInstance(caught.exception.__cause__, BrokenPipeError)
         c1.close()
 
     def test_device_error_closes_session_and_reports(self):
@@ -413,10 +425,55 @@ class InferManyTests(Stereo3DServiceTests):
         c.close()
 
 
+class ClientExchangeTests(unittest.TestCase):
+    """the client's side of a connection the service closed"""
+
+    def exchange(self, before_close):
+        client = ns.Client.__new__(ns.Client)
+        client.sock, peer = socket.socketpair()
+        client.sock.settimeout(2)
+        before_close(peer)
+        peer.close()
+        try:
+            return client._call({"op": "ping"}, b"")
+        finally:
+            client.close()
+
+    def test_the_reason_survives_a_service_that_never_read_the_request(self):
+        client = ns.Client.__new__(ns.Client)
+        client.sock, peer = socket.socketpair()
+        client.sock.settimeout(2)
+
+        def hang_up(*a):
+            ns.send_msg(peer, {"ok": False, "error": "busy: test"})
+            peer.close()  # with the request unread: the client's next read could be a reset
+            return recv(*a)
+
+        recv = ns.recv_msg
+        with patch.object(ns, "recv_msg", hang_up), self.assertRaisesRegex(RuntimeError, "busy"):
+            client._call({"op": "ping"}, b"")
+        client.close()
+
+    def test_a_connection_closed_in_silence_stays_a_connection_error(self):
+        with self.assertRaises(BrokenPipeError):
+            self.exchange(lambda peer: None)
+
+    def test_a_cut_off_reply_reports_the_failed_send(self):
+        with self.assertRaises(BrokenPipeError):
+            self.exchange(lambda peer: peer.sendall(struct.pack("<I", 40) + b'{"ok":fal'))
+
+    def test_an_unreadable_reply_reports_the_failed_send(self):
+        with self.assertRaises(BrokenPipeError):
+            self.exchange(lambda peer: peer.sendall(struct.pack("<I", 2) + b"{x"))
+
+    def test_a_success_reply_never_answers_a_request_that_was_not_sent(self):
+        with self.assertRaises(BrokenPipeError):
+            self.exchange(lambda peer: ns.send_msg(peer, {"ok": True}))
+
+
 class ManifestInfoTests(unittest.TestCase):
     def test_manifest_info_names_weights_by_hash(self):
         import hashlib
-        from unittest.mock import patch
 
         from framenpu import session
         from framenpu.contracts import load_manifest

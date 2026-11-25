@@ -227,12 +227,28 @@ class Client:
         return {int(k): v for k, v in self.info.get("manifests", {}).items()}
 
     def _call(self, header, payload=b"", out_count=0, out_spec=OUTPUTS):
-        send_msg(self.sock, header, payload)
-        resp, data = recv_msg(
-            self.sock, lambda h: out_count * _nbytes(out_spec) if h.get("ok") else 0
-        )
+        return self._exchange(header, payload, out_count * _nbytes(out_spec))
+
+    def _exchange(self, header, payload, out_bytes):
+        """one request and its reply, which carries out_bytes of payload unless it is an error"""
+        unsent = None
+        try:
+            send_msg(self.sock, header, payload)
+        except ConnectionError as exc:
+            # the service hung up first; it may have said why (busy), and that is still readable
+            unsent = exc
+        try:
+            resp, data = recv_msg(
+                self.sock, lambda h: out_bytes if h.get("ok") and not unsent else 0
+            )
+        except (OSError, ValueError):
+            if unsent:
+                raise unsent from None
+            raise
         if not resp.get("ok"):
-            raise RuntimeError("NPU service: %s" % resp.get("error", "failed"))
+            raise RuntimeError("NPU service: %s" % resp.get("error", "failed")) from unsent
+        if unsent:  # not an answer to a request that did not get through
+            raise unsent
         return resp, data
 
     @property
@@ -279,10 +295,7 @@ class Client:
             payload.append(pack_arrays(feeds, ins))
             out_n += len(feeds) * _nbytes(outs)
         self.sock.settimeout(self.timeout if self.opened else self.open_timeout)
-        send_msg(self.sock, {"op": op, "reqs": reqs}, b"".join(payload))
-        resp, data = recv_msg(self.sock, lambda h: out_n if h.get("ok") else 0)
-        if not resp.get("ok"):
-            raise RuntimeError("NPU service: %s" % resp.get("error"))
+        resp, data = self._exchange({"op": op, "reqs": reqs}, b"".join(payload), out_n)
         self.opened = True
         self.sock.settimeout(self.timeout)
         self.last_timing = resp.get("timing")
