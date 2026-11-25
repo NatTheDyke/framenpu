@@ -125,6 +125,37 @@ class ServiceTests(unittest.TestCase):
         self.t.join(5)
         os.rmdir(self.dir)
 
+    def client(self):
+        """Client(), waiting out the moment in which the service still closes the previous one's
+        session (it answers busy until then)."""
+        for _ in range(200):
+            try:
+                return ns.Client(self.path)
+            except ConnectionError:  # turned away before the ping
+                pass
+            except RuntimeError as exc:
+                if "busy" not in str(exc):
+                    raise
+            time.sleep(0.01)
+        self.fail("the service stayed busy")
+
+    def reply(self, send):
+        """What the service answers to a raw request on a fresh connection, b"" if it drops it;
+        retried while it is still closing the previous client (busy)."""
+        for _ in range(200):
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+                s.settimeout(2)
+                s.connect(self.path)
+                try:
+                    send(s)
+                    got = s.recv(256)
+                except (BrokenPipeError, ConnectionResetError):  # turned away before the request
+                    got = b"busy"
+            if b"busy" not in got:
+                return got
+            time.sleep(0.01)
+        self.fail("the service stayed busy")
+
     def wait_closed(self, n):
         for _ in range(200):
             if FakeSession.closed >= n:
@@ -235,19 +266,11 @@ class ServiceTests(unittest.TestCase):
         c.close()
 
     def test_malformed_requests_are_refused(self):
-        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        s.settimeout(2)
-        s.connect(self.path)
-        ns.send_msg(s, {"op": "infer", "n": 5})  # more than four crops: dropped
-        self.assertEqual(s.recv(16), b"")
-        s.close()
-        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        s.settimeout(2)
-        s.connect(self.path)
-        s.sendall(struct.pack("<I", 1 << 30))  # absurd header length: dropped
-        self.assertEqual(s.recv(16), b"")
-        s.close()
-        c = ns.Client(self.path)  # the service is still fine
+        # more than four crops: dropped
+        self.assertEqual(self.reply(lambda s: ns.send_msg(s, {"op": "infer", "n": 5})), b"")
+        # absurd header length: dropped
+        self.assertEqual(self.reply(lambda s: s.sendall(struct.pack("<I", 1 << 30))), b"")
+        c = self.client()  # the service is still fine
         self.assertEqual(len(c.infer([feed(2)])), 1)
         c.close()
 
@@ -340,13 +363,9 @@ class DetectorServiceTests(ServiceTests):
             [{"model": 2, "n": 3}],
             [{"model": 0, "n": 1}, {"model": 2, "n": 1}, {"model": 1, "n": 1}],
         ):
-            s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            s.settimeout(2)
-            s.connect(self.path)
-            ns.send_msg(s, {"op": "infer_frame", "reqs": reqs})
-            self.assertEqual(s.recv(16), b"", reqs)
-            s.close()
-        c = ns.Client(self.path)
+            msg = {"op": "infer_frame", "reqs": reqs}
+            self.assertEqual(self.reply(lambda s, msg=msg: ns.send_msg(s, msg)), b"", reqs)
+        c = self.client()
         self.assertEqual(len(c.infer_frame([(2, [det_crop(1)])])[0]), 1)
         c.close()
 
@@ -393,13 +412,9 @@ class InferManyTests(Stereo3DServiceTests):
             "x",
             [{"model": 0, "n": 1}] * (ns.MAX_SEQ + 1),
         ):
-            s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            s.settimeout(2)
-            s.connect(self.path)
-            ns.send_msg(s, {"op": "infer_many", "reqs": reqs})
-            self.assertEqual(s.recv(16), b"", reqs)
-            s.close()
-        c = ns.Client(self.path)
+            msg = {"op": "infer_many", "reqs": reqs}
+            self.assertEqual(self.reply(lambda s, msg=msg: ns.send_msg(s, msg)), b"", reqs)
+        c = self.client()
         self.assertEqual(len(c.infer_many([(1, [pair(1)])])[0]), 1)
         c.close()
 
