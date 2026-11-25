@@ -40,7 +40,7 @@ and the service protocol.
 ## Tests
 
 ~~~sh
-python -m pip install -e ".[dev]" "numpy>=1.26"
+python -m pip install -e ".[dev]"
 python -m unittest discover -s tests -p 'test_*.py'
 ruff check . && ruff format --check .
 python tools/check_repository.py

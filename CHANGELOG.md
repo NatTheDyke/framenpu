@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.1
+
+- NumPy (>=1.26) is a declared dependency. The service, the device host path and the CPU backend
+  imported it, but a plain install did not bring it: `framenpu serve` failed to start.
+
 ## 0.4.0
 
 - The device backend moved to its own repository and package, framenpu-cdsp

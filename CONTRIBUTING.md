@@ -5,15 +5,15 @@ Development works on an ordinary workstation without a headset.
 ~~~sh
 python3 -m venv .venv
 . .venv/bin/activate
-python -m pip install -e ".[dev,cpu]" "numpy>=1.26"
+python -m pip install -e ".[dev,cpu]"
 python -m unittest discover -s tests -p 'test_*.py' -v
 ruff check .
 ruff format --check .
 python tools/check_repository.py
 ~~~
 
-Python 3.11-3.14 are in the CI matrix. Without NumPy the numerical tests skip; the model-gated
-tests need the weights (`tools/fetch_models.py DIR --env`).
+Python 3.11-3.14 are in the CI matrix. The model-gated tests need the weights
+ (`tools/fetch_models.py DIR --env`).
 
 Add tests for behavior, invalid inputs and meaningful failure paths. framenpu must import and run
 with no device backend installed; device code belongs in
