@@ -225,17 +225,10 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(c.models, (0,))
         with self.assertRaises(RuntimeError):
             c.infer([pair(1)], model=1)
-        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)  # a raw model-1 request: error reply
-        s.settimeout(2)
-        s.connect(self.path)
         c.close()
-        self.wait_closed(0)
-        ns.send_msg(
-            s, {"op": "infer", "n": 1, "model": 1}, ns.pack_arrays([pair(1)], ns.S3D_INPUTS)
-        )
-        resp, _ = ns.recv_msg(s, lambda h: 0)
-        self.assertFalse(resp["ok"])
-        s.close()
+        msg, data = {"op": "infer", "n": 1, "model": 1}, ns.pack_arrays([pair(1)], ns.S3D_INPUTS)
+        got = self.reply(lambda s: ns.send_msg(s, msg, data))  # a raw model-1 request: error reply
+        self.assertIn(b'"ok":false', got)
 
     def test_socket_is_private(self):
         self.assertEqual(os.stat(self.path).st_mode & 0o777, 0o600)
@@ -252,7 +245,8 @@ class ServiceTests(unittest.TestCase):
 
     def test_second_client_is_turned_away_and_falls_back_to_cpu(self):
         c1 = ns.Client(self.path)
-        with self.assertRaises(RuntimeError):
+        # told busy, or (the service closes right after saying so) cut off while sending the ping
+        with self.assertRaises((RuntimeError, ConnectionError)):
             ns.Client(self.path)
         c1.close()
 
