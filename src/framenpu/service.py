@@ -8,7 +8,8 @@ the FrameNPU MercurySession and answers inference requests over a Unix socket th
 tracking user (and root) may use. The tracker's `--merc-inference service` backend
 (framenpu.backends ServiceBackend) is the only client; any failure there falls back to CPU.
 
-Server (root, normally via systemd: the tracker's headset/install_npu_service.sh):
+Server (root, normally via systemd: the tracker's headset/setup.sh installs it, headset/install.sh
+updates it):
     framenpu serve --model M.onnx [--jobs DIR] --user steamos [--socket PATH]
     (without --jobs: the image shipped with the device backend)
                             [--s3d-model S3D.onnx]   (a --res-slots image: the 3D stereo student too)
